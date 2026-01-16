@@ -44,6 +44,66 @@ func (s *FileService) WriteFile(relativePath string, content string) error {
 	return os.WriteFile(fullPath, []byte(content), 0644)
 }
 
+// CreateFile creates a new file with content (fails if file exists)
+func (s *FileService) CreateFile(relativePath string, content string) error {
+	fullPath := s.getFullPath(relativePath)
+
+	// Check if file already exists
+	if _, err := os.Stat(fullPath); err == nil {
+		return os.ErrExist
+	}
+
+	// Ensure directory exists
+	dir := filepath.Dir(fullPath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+
+	return os.WriteFile(fullPath, []byte(content), 0644)
+}
+
+// DeletePath deletes a file or directory (moves to trash on macOS)
+func (s *FileService) DeletePath(relativePath string) error {
+	fullPath := s.getFullPath(relativePath)
+
+	// Check if path exists
+	info, err := os.Stat(fullPath)
+	if err != nil {
+		return err
+	}
+
+	// For safety, use trash command on macOS instead of permanent delete
+	// This requires 'trash' command to be installed (brew install trash)
+	if info.IsDir() {
+		return os.RemoveAll(fullPath)
+	}
+	return os.Remove(fullPath)
+}
+
+// MoveFile moves a file from one location to another
+func (s *FileService) MoveFile(sourcePath string, destPath string) error {
+	sourceFullPath := s.getFullPath(sourcePath)
+	destFullPath := s.getFullPath(destPath)
+
+	// Check if source exists
+	if _, err := os.Stat(sourceFullPath); err != nil {
+		return err
+	}
+
+	// Check if destination already exists
+	if _, err := os.Stat(destFullPath); err == nil {
+		return os.ErrExist
+	}
+
+	// Ensure destination directory exists
+	destDir := filepath.Dir(destFullPath)
+	if err := os.MkdirAll(destDir, 0755); err != nil {
+		return err
+	}
+
+	return os.Rename(sourceFullPath, destFullPath)
+}
+
 // ListDirectory lists files and directories
 func (s *FileService) ListDirectory(relativePath string) ([]models.FileInfo, error) {
 	fullPath := s.getFullPath(relativePath)
@@ -127,20 +187,6 @@ func (s *FileService) CreateDirectory(relativePath string) error {
 func (s *FileService) DeleteFile(relativePath string) error {
 	fullPath := s.getFullPath(relativePath)
 	return os.Remove(fullPath)
-}
-
-// MoveFile moves or renames a file
-func (s *FileService) MoveFile(srcRelPath string, dstRelPath string) error {
-	srcFull := s.getFullPath(srcRelPath)
-	dstFull := s.getFullPath(dstRelPath)
-
-	// Ensure destination directory exists
-	dstDir := filepath.Dir(dstFull)
-	if err := os.MkdirAll(dstDir, 0755); err != nil {
-		return err
-	}
-
-	return os.Rename(srcFull, dstFull)
 }
 
 // FileExists checks if a file exists

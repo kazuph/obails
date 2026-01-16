@@ -32,7 +32,11 @@
 
 ## Screenshots
 
-<!-- TODO: Add screenshots -->
+<p align="center">
+  <img src="docs/screenshots/main-light.png" alt="Obails - GitHub Light Theme" width="800">
+</p>
+
+*GitHub Light theme with Mermaid diagram support*
 
 ## Installation
 
@@ -131,9 +135,7 @@ wails3 task darwin:package
 
 - [ ] Full-text search
 - [ ] Graph view
-- [ ] Plugin system
-- [ ] Windows/Linux support
-- [ ] Mobile companion app
+- [ ] Timeline view (Twitter-like memo stream)
 
 ## License
 

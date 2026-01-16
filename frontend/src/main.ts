@@ -15,6 +15,9 @@ const LIGHT_THEMES = ["github-light", "solarized-light", "one-light", "catppucci
 // State
 let currentNote: Note | null = null;
 let showThino = false;
+let contextMenuTargetPath: string = "";
+let contextMenuTargetIsDir: boolean = false;
+let draggedFilePath: string | null = null;
 
 // DOM Elements
 const fileTree = document.getElementById("file-tree")!;
@@ -33,6 +36,17 @@ async function init() {
         const config = await ConfigService.GetConfig();
         if (config?.Vault?.Path) {
             await loadFileTree();
+
+            // Open last file if exists
+            const lastFile = localStorage.getItem("obails-last-file");
+            if (lastFile) {
+                try {
+                    await openNote(lastFile);
+                } catch {
+                    // File might have been deleted, clear the storage
+                    localStorage.removeItem("obails-last-file");
+                }
+            }
         }
     } catch (err) {
         console.warn("Running in browser mode - backend services unavailable");
@@ -44,24 +58,71 @@ async function init() {
 // Event Listeners
 function setupEventListeners() {
     document.getElementById("settings-btn")!.addEventListener("click", openSettings);
+    document.getElementById("new-note-btn")!.addEventListener("click", showNewNoteForm);
     document.getElementById("daily-note-btn")!.addEventListener("click", openTodayNote);
     document.getElementById("thino-btn")!.addEventListener("click", toggleThino);
     document.getElementById("refresh-btn")!.addEventListener("click", refresh);
     document.getElementById("thino-submit")!.addEventListener("click", submitThino);
 
+    // New note form events
+    document.getElementById("new-note-create")!.addEventListener("click", createNewNote);
+    document.getElementById("new-note-cancel")!.addEventListener("click", hideNewNoteForm);
+    document.getElementById("new-note-input")!.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+            e.preventDefault();
+            createNewNote();
+        } else if (e.key === "Escape") {
+            hideNewNoteForm();
+        }
+    });
+
     editor.addEventListener("input", debounce(saveCurrentNote, 500));
     editor.addEventListener("input", updatePreview);
 
-    // Cmd+, to open settings
+    // Keyboard shortcuts
     document.addEventListener("keydown", (e) => {
         if ((e.metaKey || e.ctrlKey) && e.key === ",") {
             e.preventDefault();
             openSettings();
         }
+        if ((e.metaKey || e.ctrlKey) && e.key === "n") {
+            e.preventDefault();
+            showNewNoteForm();
+        }
     });
 
     setupResizeHandles();
     setupThemeSelector();
+    setupContextMenu();
+    setupFileTreeDropTarget();
+}
+
+// Setup file-tree as drop target for moving files to root
+function setupFileTreeDropTarget() {
+    // Allow drop on file-tree itself (root directory)
+    fileTree.addEventListener("dragover", (e) => {
+        // Only highlight if dropping on file-tree directly, not on child elements
+        if (e.target === fileTree && draggedFilePath) {
+            e.preventDefault();
+            fileTree.classList.add("drag-over-root");
+        }
+    });
+
+    fileTree.addEventListener("dragleave", (e) => {
+        if (e.target === fileTree) {
+            fileTree.classList.remove("drag-over-root");
+        }
+    });
+
+    fileTree.addEventListener("drop", async (e) => {
+        // Only handle drop on file-tree directly (root), not on folders
+        if (e.target === fileTree && draggedFilePath) {
+            e.preventDefault();
+            fileTree.classList.remove("drag-over-root");
+            // Move to root (empty string as target)
+            await moveFileToFolder(draggedFilePath, "");
+        }
+    });
 }
 
 // Settings
@@ -71,6 +132,179 @@ async function openSettings() {
     } catch (err) {
         console.error("Failed to open settings:", err);
     }
+}
+
+// New Note Creation
+function showNewNoteForm() {
+    const form = document.getElementById("new-note-form")!;
+    const input = document.getElementById("new-note-input") as HTMLInputElement;
+    form.style.display = "block";
+    input.value = "";
+    input.focus();
+}
+
+function hideNewNoteForm() {
+    const form = document.getElementById("new-note-form")!;
+    form.style.display = "none";
+}
+
+async function createNewNote() {
+    const input = document.getElementById("new-note-input") as HTMLInputElement;
+    const filename = input.value.trim();
+
+    if (!filename) {
+        input.focus();
+        return;
+    }
+
+    // Sanitize filename (remove invalid characters)
+    const sanitized = filename.replace(/[<>:"/\\|?*]/g, "").trim();
+    if (!sanitized) {
+        input.focus();
+        return;
+    }
+
+    // Get target folder from input data attribute (if coming from folder context menu)
+    const targetFolder = input.dataset.targetFolder || "";
+    const relativePath = targetFolder ? `${targetFolder}/${sanitized}.md` : `${sanitized}.md`;
+    const initialContent = `# ${sanitized}\n\n`;
+
+    try {
+        await FileService.CreateFile(relativePath, initialContent);
+        hideNewNoteForm();
+        // Reset input state
+        delete input.dataset.targetFolder;
+        input.placeholder = "Enter filename (without .md)";
+        await loadFileTree();
+        await openNote(relativePath);
+    } catch (err) {
+        console.error("Failed to create note:", err);
+        alert(`Failed to create note: ${err}`);
+    }
+}
+
+// Context Menu
+function setupContextMenu() {
+    const contextMenu = document.getElementById("context-menu")!;
+    const ctxNewFile = document.getElementById("ctx-new-file")!;
+    const ctxDelete = document.getElementById("ctx-delete")!;
+
+    // Hide context menu on click elsewhere
+    document.addEventListener("click", () => {
+        hideContextMenu();
+    });
+
+    // Handle "New File" click
+    ctxNewFile.addEventListener("click", () => {
+        // Save path before hiding (hideContextMenu clears these)
+        const targetPath = contextMenuTargetPath;
+        const isDir = contextMenuTargetIsDir;
+        hideContextMenu();
+        if (isDir) {
+            showNewNoteFormInFolder(targetPath);
+        } else {
+            showNewNoteForm();
+        }
+    });
+
+    // Handle "Delete" click
+    ctxDelete.addEventListener("click", async () => {
+        // Save path before hiding (hideContextMenu clears these)
+        const targetPath = contextMenuTargetPath;
+        const isDir = contextMenuTargetIsDir;
+        hideContextMenu();
+        await deleteTargetPathWithArgs(targetPath, isDir);
+    });
+}
+
+function showContextMenu(x: number, y: number, path: string, isDir: boolean) {
+    const contextMenu = document.getElementById("context-menu")!;
+    const ctxNewFile = document.getElementById("ctx-new-file")!;
+
+    contextMenuTargetPath = path;
+    contextMenuTargetIsDir = isDir;
+
+    // Show/hide "New File" based on whether it's a directory
+    ctxNewFile.style.display = isDir ? "flex" : "none";
+
+    contextMenu.style.display = "block";
+    contextMenu.style.left = x + "px";
+    contextMenu.style.top = y + "px";
+
+    // Ensure menu doesn't go off screen
+    const rect = contextMenu.getBoundingClientRect();
+    if (rect.right > window.innerWidth) {
+        contextMenu.style.left = (window.innerWidth - rect.width - 10) + "px";
+    }
+    if (rect.bottom > window.innerHeight) {
+        contextMenu.style.top = (window.innerHeight - rect.height - 10) + "px";
+    }
+}
+
+function hideContextMenu() {
+    const contextMenu = document.getElementById("context-menu")!;
+    contextMenu.style.display = "none";
+    contextMenuTargetPath = "";
+    contextMenuTargetIsDir = false;
+}
+
+async function moveFileToFolder(sourcePath: string, targetFolder: string) {
+    const fileName = sourcePath.split("/").pop();
+    const newPath = targetFolder ? `${targetFolder}/${fileName}` : fileName;
+
+    if (sourcePath === newPath) return;
+
+    try {
+        await FileService.MoveFile(sourcePath, newPath!);
+        await loadFileTree();
+
+        // Update current note path if the moved file was open
+        if (currentNote && currentNote.path === sourcePath) {
+            currentNote.path = newPath!;
+            localStorage.setItem("obails-last-file", newPath!);
+        }
+    } catch (err) {
+        console.error("Failed to move file:", err);
+        alert(`Failed to move file: ${err}`);
+    }
+}
+
+async function deleteTargetPathWithArgs(targetPath: string, isDir: boolean) {
+    if (!targetPath) return;
+
+    const itemType = isDir ? "folder" : "file";
+    const confirmed = confirm(`Are you sure you want to delete this ${itemType}?\n\n${targetPath}`);
+
+    if (!confirmed) return;
+
+    try {
+        await FileService.DeletePath(targetPath);
+        await loadFileTree();
+
+        // If deleted file was currently open, clear editor
+        if (currentNote && currentNote.path === targetPath) {
+            currentNote = null;
+            editor.value = "";
+            updatePreview();
+            clearBacklinks();
+            localStorage.removeItem("obails-last-file");
+        }
+    } catch (err) {
+        console.error("Failed to delete:", err);
+        alert(`Failed to delete: ${err}`);
+    }
+}
+
+function showNewNoteFormInFolder(folderPath: string) {
+    const form = document.getElementById("new-note-form")!;
+    const input = document.getElementById("new-note-input") as HTMLInputElement;
+
+    // Store target folder path for creation
+    input.dataset.targetFolder = folderPath;
+    form.style.display = "block";
+    input.value = "";
+    input.placeholder = `New file in ${folderPath || "root"}`;
+    input.focus();
 }
 
 // Theme
@@ -129,9 +363,23 @@ function createFileElement(file: FileInfo): HTMLElement {
     const el = document.createElement("div");
     el.className = `file-item ${file.isDir ? "folder" : "file"}`;
 
-    const icon = file.isDir ? "📁" : "📄";
-    const arrow = file.isDir && file.children && file.children.length > 0 ? "▶" : "";
-    el.innerHTML = `<span class="folder-arrow">${arrow}</span><span>${icon}</span><span>${file.name}</span>`;
+    const icon = file.isDir ? (file.children && file.children.length > 0 ? "📁" : "📂") : "📄";
+    el.innerHTML = `<span class="folder-icon">${icon}</span><span>${file.name}</span>`;
+
+    // Make files draggable (not folders for now)
+    if (!file.isDir && file.name.endsWith(".md")) {
+        el.draggable = true;
+        el.addEventListener("dragstart", (e) => {
+            draggedFilePath = file.path;
+            el.classList.add("dragging");
+            e.dataTransfer?.setData("text/plain", file.path);
+        });
+        el.addEventListener("dragend", () => {
+            el.classList.remove("dragging");
+            draggedFilePath = null;
+            document.querySelectorAll(".drag-over").forEach(el => el.classList.remove("drag-over"));
+        });
+    }
 
     wrapper.appendChild(el);
 
@@ -151,16 +399,52 @@ function createFileElement(file: FileInfo): HTMLElement {
         el.addEventListener("click", (e) => {
             e.stopPropagation();
             el.classList.toggle("expanded");
-            const arrowSpan = el.querySelector(".folder-arrow");
-            if (arrowSpan) {
-                arrowSpan.textContent = el.classList.contains("expanded") ? "▼" : "▶";
+            const iconSpan = el.querySelector(".folder-icon");
+            if (iconSpan) {
+                // 📂 = open folder, 📁 = closed folder
+                iconSpan.textContent = el.classList.contains("expanded") ? "📂" : "📁";
             }
             if (childrenEl) {
                 childrenEl.style.display = childrenEl.style.display === "none" ? "block" : "none";
             }
         });
+
+        // Right-click context menu for folders
+        el.addEventListener("contextmenu", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            showContextMenu(e.clientX, e.clientY, file.path, true);
+        });
+
+        // Drop target for drag & drop
+        el.addEventListener("dragover", (e) => {
+            e.preventDefault();
+            if (draggedFilePath) {
+                el.classList.add("drag-over");
+            }
+        });
+        el.addEventListener("dragleave", () => {
+            el.classList.remove("drag-over");
+        });
+        el.addEventListener("drop", async (e) => {
+            e.preventDefault();
+            el.classList.remove("drag-over");
+            if (draggedFilePath && draggedFilePath !== file.path) {
+                await moveFileToFolder(draggedFilePath, file.path);
+            }
+        });
     } else if (file.name.endsWith(".md")) {
-        el.addEventListener("click", () => openNote(file.path));
+        el.addEventListener("click", (e) => {
+            e.stopPropagation();
+            openNote(file.path);
+        });
+
+        // Right-click context menu for files
+        el.addEventListener("contextmenu", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            showContextMenu(e.clientX, e.clientY, file.path, false);
+        });
     }
 
     return wrapper;
@@ -174,6 +458,9 @@ async function openNote(path: string) {
             editor.value = currentNote.content;
             updatePreview();
             await loadBacklinks(path);
+
+            // Save last opened file to localStorage
+            localStorage.setItem("obails-last-file", path);
         }
 
         // Hide thino, show editor
@@ -353,6 +640,10 @@ async function loadBacklinks(path: string) {
     }
 }
 
+function clearBacklinks() {
+    backlinksList.innerHTML = '<div class="empty">No backlinks</div>';
+}
+
 function renderBacklinks(backlinks: Backlink[]) {
     backlinksList.innerHTML = "";
 
@@ -363,7 +654,10 @@ function renderBacklinks(backlinks: Backlink[]) {
             <div class="backlink-title">${bl.sourceTitle}</div>
             <div class="backlink-context">${bl.context}</div>
         `;
-        el.addEventListener("click", () => openNote(bl.sourcePath));
+        el.addEventListener("click", (e) => {
+            e.stopPropagation();
+            openNote(bl.sourcePath);
+        });
         backlinksList.appendChild(el);
     }
 

@@ -21,6 +21,7 @@
 
         <div class="main-content">
             <div class="toolbar">
+                <button id="new-note-btn" title="New Note (⌘N)">New</button>
                 <button id="daily-note-btn">Today's Note</button>
                 <button id="thino-btn">Thino</button>
                 <button id="refresh-btn">Refresh</button>
@@ -45,6 +46,17 @@
                             <option value="tokyonight">Tokyo Night</option>
                         </optgroup>
                     </select>
+                </div>
+            </div>
+
+            <!-- New Note Input Form -->
+            <div class="new-note-form" id="new-note-form" style="display: none;">
+                <div class="new-note-input-container">
+                    <span class="new-note-icon">📄</span>
+                    <input type="text" id="new-note-input" placeholder="Enter filename (without .md)" autocomplete="off">
+                    <span class="new-note-extension">.md</span>
+                    <button id="new-note-create" class="new-note-btn create">Create</button>
+                    <button id="new-note-cancel" class="new-note-btn cancel">Cancel</button>
                 </div>
             </div>
 
@@ -108,6 +120,12 @@
         </div>
     </div>
     <div class="mermaid-error-toast" id="mermaid-error-toast"></div>
+
+    <!-- Context Menu -->
+    <div class="context-menu" id="context-menu" style="display: none;">
+        <div class="context-menu-item" id="ctx-new-file">📄 New File</div>
+        <div class="context-menu-item danger" id="ctx-delete">🗑️ Delete</div>
+    </div>
 
     <script type="module" src="/src/main.ts"></script>
 </body>

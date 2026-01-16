@@ -299,10 +299,7 @@ body {
     flex-direction: column;
 }
 
-.folder-arrow {
-    width: 1rem;
-    font-size: 0.7rem;
-    color: var(--text-muted);
+.folder-icon {
     flex-shrink: 0;
 }
 
@@ -592,11 +589,11 @@ body {
 }
 
 .outline-item.h1 { padding-left: 0.5rem; font-weight: 600; }
-.outline-item.h2 { padding-left: 1rem; }
-.outline-item.h3 { padding-left: 1.5rem; font-size: 0.8rem; }
-.outline-item.h4 { padding-left: 2rem; font-size: 0.8rem; color: var(--text-secondary); }
-.outline-item.h5 { padding-left: 2.5rem; font-size: 0.75rem; color: var(--text-muted); }
-.outline-item.h6 { padding-left: 3rem; font-size: 0.75rem; color: var(--text-muted); }
+.outline-item.h2 { padding-left: 1.5rem; }
+.outline-item.h3 { padding-left: 2.5rem; font-size: 0.8rem; }
+.outline-item.h4 { padding-left: 3.5rem; font-size: 0.8rem; color: var(--text-secondary); }
+.outline-item.h5 { padding-left: 4.5rem; font-size: 0.75rem; color: var(--text-muted); }
+.outline-item.h6 { padding-left: 5.5rem; font-size: 0.75rem; color: var(--text-muted); }
 
 /* Right Sidebar Resize Handle */
 .right-sidebar .resize-handle.horizontal {
@@ -854,4 +851,126 @@ body {
 
 .mermaid-error-toast.visible {
     opacity: 1;
+}
+
+/* New Note Form */
+.new-note-form {
+    padding: 0.75rem 1rem;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+}
+
+.new-note-input-container {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    max-width: 600px;
+}
+
+.new-note-icon {
+    font-size: 1.2rem;
+}
+
+.new-note-form input {
+    flex: 1;
+    padding: 0.6rem 0.8rem;
+    background: var(--bg-primary);
+    border: 2px solid var(--accent);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 0.95rem;
+    outline: none;
+}
+
+.new-note-form input:focus {
+    border-color: var(--accent-hover);
+}
+
+.new-note-extension {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+.new-note-btn {
+    padding: 0.6rem 1rem;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    font-weight: 500;
+}
+
+.new-note-btn.create {
+    background: var(--accent);
+    color: var(--bg-primary);
+}
+
+.new-note-btn.create:hover {
+    background: var(--accent-hover);
+}
+
+.new-note-btn.cancel {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.new-note-btn.cancel:hover {
+    background: var(--border);
+}
+
+/* Context Menu */
+.context-menu {
+    position: fixed;
+    z-index: 2000;
+    min-width: 150px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    padding: 4px 0;
+}
+
+.context-menu-item {
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.context-menu-item:hover {
+    background: var(--bg-tertiary);
+}
+
+.context-menu-item.danger {
+    color: #dc3545;
+}
+
+.context-menu-item.danger:hover {
+    background: rgba(220, 53, 69, 0.1);
+}
+
+/* Drag & Drop */
+.file-item.dragging {
+    opacity: 0.5;
+}
+
+.file-item.drag-over {
+    background: var(--accent);
+    color: var(--bg-primary);
+}
+
+#file-tree.drag-over-root {
+    background: var(--bg-tertiary);
+    border: 2px dashed var(--accent);
+    border-radius: 4px;
+}
+
+.file-item[draggable="true"] {
+    cursor: grab;
+}
+
+.file-item[draggable="true"]:active {
+    cursor: grabbing;
 }
