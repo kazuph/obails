@@ -1,59 +1,151 @@
-# Welcome to Your New Wails3 Project!
+<p align="center">
+  <img src="build/appicon.png" alt="Obails Icon" width="128" height="128">
+</p>
 
-Congratulations on generating your Wails3 application! This README will guide you through the next steps to get your project up and running.
+<h1 align="center">Obails</h1>
 
-## Getting Started
+<p align="center">
+  <strong>Lightweight Obsidian Alternative</strong><br>
+  A fast, native markdown editor built with Wails v3 + Go + TypeScript
+</p>
 
-1. Navigate to your project directory in the terminal.
+<p align="center">
+  <img src="https://img.shields.io/badge/platform-macOS-blue" alt="Platform">
+  <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
+  <img src="https://img.shields.io/badge/wails-v3.0.0--alpha.60-orange" alt="Wails">
+</p>
 
-2. To run your application in development mode, use the following command:
+---
 
-   ```
-   wails3 dev
-   ```
+## Features
 
-   This will start your application and enable hot-reloading for both frontend and backend changes.
+- **Markdown Editor** - Live preview with syntax highlighting
+- **12 Themes** - 5 light + 7 dark themes (GitHub Light, Catppuccin, Dracula, Nord, etc.)
+- **Mermaid Diagrams** - Full support with fullscreen view, pan & zoom
+- **File Tree Sidebar** - Navigate your vault with ease
+- **Outline Panel** - Jump to any heading instantly
+- **Backlinks** - See which notes link to the current note
+- **Daily Notes** - Quick access to today's note
+- **Thino Support** - Quick memos with timestamp (`HH:mm content`)
+- **Code Highlighting** - Syntax highlighting for code blocks
+- **Native Performance** - Built with Go backend, runs as native app
 
-3. To build your application for production, use:
+## Screenshots
 
-   ```
-   wails3 build
-   ```
+<!-- TODO: Add screenshots -->
 
-   This will create a production-ready executable in the `build` directory.
+## Installation
 
-## Exploring Wails3 Features
+### Option 1: Download Pre-built Binary (macOS)
 
-Now that you have your project set up, it's time to explore the features that Wails3 offers:
+1. Download the latest release from [GitHub Releases](https://github.com/kazuph/obails/releases)
+2. Unzip `obails-macos.zip`
+3. Move `obails.app` to `/Applications`
+4. **First launch**: Right-click → "Open" (required for unsigned apps)
 
-1. **Check out the examples**: The best way to learn is by example. Visit the `examples` directory in the `v3/examples` directory to see various sample applications.
+> **Note**: This app is not signed with an Apple Developer certificate. macOS will show a security warning on first launch.
 
-2. **Run an example**: To run any of the examples, navigate to the example's directory and use:
+### Option 2: Build from Source
 
-   ```
-   go run .
-   ```
+**Requirements:**
+- Go 1.21+
+- Node.js 18+
+- pnpm
+- [Wails v3](https://v3.wails.io/)
 
-   Note: Some examples may be under development during the alpha phase.
+```bash
+# Install Wails v3
+go install github.com/wailsapp/wails/v3/cmd/wails3@latest
 
-3. **Explore the documentation**: Visit the [Wails3 documentation](https://v3.wails.io/) for in-depth guides and API references.
+# Clone the repository
+git clone https://github.com/kazuph/obails.git
+cd obails
 
-4. **Join the community**: Have questions or want to share your progress? Join the [Wails Discord](https://discord.gg/JDdSxwjhGf) or visit the [Wails discussions on GitHub](https://github.com/wailsapp/wails/discussions).
+# Build the app
+wails3 task darwin:package
 
-## Project Structure
+# Run the app
+open bin/obails.app
+```
 
-Take a moment to familiarize yourself with your project structure:
+## Usage
 
-- `frontend/`: Contains your frontend code (HTML, CSS, JavaScript/TypeScript)
-- `main.go`: The entry point of your Go backend
-- `app.go`: Define your application structure and methods here
-- `wails.json`: Configuration file for your Wails project
+### Configuration
 
-## Next Steps
+Obails stores its configuration at `~/.config/obails/config.toml`:
 
-1. Modify the frontend in the `frontend/` directory to create your desired UI.
-2. Add backend functionality in `main.go`.
-3. Use `wails3 dev` to see your changes in real-time.
-4. When ready, build your application with `wails3 build`.
+```toml
+[vault]
+  path = "/path/to/your/obsidian/vault"
 
-Happy coding with Wails3! If you encounter any issues or have questions, don't hesitate to consult the documentation or reach out to the Wails community.
+[daily_notes]
+  folder = "02_dailynotes"
+  format = "2006-01-02"
+
+[thino]
+  section = "## Memos"
+  time_format = "15:04"
+
+[editor]
+  font_size = 14
+  font_family = "SF Mono"
+```
+
+### Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `Cmd + ,` | Open settings (config.toml) |
+| `Cmd + S` | Save current file |
+
+### Themes
+
+Switch themes from the dropdown in the toolbar. Your selection is saved automatically.
+
+**Light Themes:** GitHub Light, Solarized Light, One Light, Catppuccin Latte, Rosé Pine Dawn
+
+**Dark Themes:** Catppuccin Mocha, Dracula, Nord, Solarized Dark, One Dark, Gruvbox, Tokyo Night
+
+## Development
+
+```bash
+# Run in development mode (hot reload)
+wails3 dev
+
+# Run E2E tests
+pnpm test
+
+# Build for production
+wails3 task darwin:package
+```
+
+## Tech Stack
+
+- **Backend**: Go + [Wails v3](https://v3.wails.io/)
+- **Frontend**: TypeScript + Vite
+- **Markdown**: [@mizchi/markdown](https://github.com/nicedoc/markdown)
+- **Diagrams**: [Mermaid.js](https://mermaid.js.org/)
+- **Syntax Highlighting**: [highlight.js](https://highlightjs.org/)
+
+## Roadmap
+
+- [ ] Full-text search
+- [ ] Graph view
+- [ ] Plugin system
+- [ ] Windows/Linux support
+- [ ] Mobile companion app
+
+## License
+
+MIT License - see [LICENSE](LICENSE) for details.
+
+## Credits
+
+- Icon generated with Gemini AI
+- Inspired by [Obsidian](https://obsidian.md/)
+
+---
+
+<p align="center">
+  Made with love by <a href="https://github.com/kazuph">@kazuph</a>
+</p>
