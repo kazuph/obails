@@ -1,0 +1,15 @@
+{
+  "name": "obails",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
+    "test:headed": "playwright test --headed",
+    "test:report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.57.0"
+  }
+}

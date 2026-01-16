@@ -1,0 +1,21 @@
+{
+  "name": "obails-frontend",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build:dev": "vite build --minify false --mode development",
+    "build": "vite build --mode production",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@mizchi/markdown": "^0.4.1",
+    "@wailsio/runtime": "latest",
+    "mermaid": "^11.12.2"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "vite": "^5.0.0"
+  }
+}

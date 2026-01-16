@@ -1,0 +1,23 @@
+# Task runner
+.task
+
+# Build outputs
+bin
+obails
+
+# Frontend
+frontend/dist
+frontend/node_modules
+node_modules/
+.pnpm-store/
+
+# Build artifacts
+build/linux/appimage/build
+build/windows/nsis/MicrosoftEdgeWebview2Setup.exe
+
+# Test artifacts
+playwright-report/
+test-results/
+
+# Local test data (Obsidian vault folders)
+02_dailynotes/

@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Obails</title>
+    <link rel="stylesheet" href="/src/styles/main.css"/>
+</head>
+<body>
+    <div id="app">
+        <div class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <h2>Obails</h2>
+                <button id="settings-btn" title="Settings (⌘,)">⚙</button>
+            </div>
+            <div class="file-tree" id="file-tree">
+                <!-- File tree will be rendered here -->
+            </div>
+        </div>
+        <div class="resize-handle" id="sidebar-resize"></div>
+
+        <div class="main-content">
+            <div class="toolbar">
+                <button id="daily-note-btn">Today's Note</button>
+                <button id="thino-btn">Thino</button>
+                <button id="refresh-btn">Refresh</button>
+                <div class="toolbar-spacer"></div>
+                <div class="theme-selector">
+                    <label>Theme:</label>
+                    <select id="theme-select">
+                        <optgroup label="Light">
+                            <option value="github-light">GitHub Light</option>
+                            <option value="solarized-light">Solarized Light</option>
+                            <option value="one-light">One Light</option>
+                            <option value="catppuccin-latte">Catppuccin Latte</option>
+                            <option value="rosepine-dawn">Rosé Pine Dawn</option>
+                        </optgroup>
+                        <optgroup label="Dark">
+                            <option value="catppuccin">Catppuccin Mocha</option>
+                            <option value="dracula">Dracula</option>
+                            <option value="nord">Nord</option>
+                            <option value="solarized">Solarized Dark</option>
+                            <option value="onedark">One Dark</option>
+                            <option value="gruvbox">Gruvbox</option>
+                            <option value="tokyonight">Tokyo Night</option>
+                        </optgroup>
+                    </select>
+                </div>
+            </div>
+
+            <div class="editor-container">
+                <div class="editor-pane" id="editor-pane">
+                    <textarea id="editor" placeholder="Select a note..."></textarea>
+                </div>
+                <div class="resize-handle vertical" id="editor-resize"></div>
+                <div class="preview-pane" id="preview-pane">
+                    <div id="preview"></div>
+                </div>
+            </div>
+
+            <div class="thino-panel" id="thino-panel" style="display: none;">
+                <div class="thino-input">
+                    <textarea id="thino-input" placeholder="What's on your mind?"></textarea>
+                    <button id="thino-submit">Post</button>
+                </div>
+                <div class="thino-timeline" id="thino-timeline">
+                    <!-- Thino entries will be rendered here -->
+                </div>
+            </div>
+        </div>
+
+        <div class="right-sidebar" id="right-sidebar">
+            <div class="outline-panel" id="outline-panel">
+                <h3>Outline</h3>
+                <div id="outline-list">
+                    <!-- Outline will be rendered here -->
+                </div>
+            </div>
+            <div class="resize-handle horizontal" id="right-sidebar-resize"></div>
+            <div class="backlinks-panel" id="backlinks-panel">
+                <h3>Backlinks</h3>
+                <div id="backlinks-list">
+                    <!-- Backlinks will be rendered here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mermaid Fullscreen Overlay -->
+    <div class="mermaid-fullscreen" id="mermaid-fullscreen">
+        <div class="mermaid-fs-header">
+            <h3>Mermaid Diagram</h3>
+            <div class="mermaid-fs-controls">
+                <button id="mermaid-zoom-out" title="Zoom Out">−</button>
+                <span class="mermaid-zoom-info" id="mermaid-zoom-info">100%</span>
+                <button id="mermaid-zoom-in" title="Zoom In">+</button>
+                <button id="mermaid-reset" title="Reset View">Reset</button>
+                <button id="mermaid-maximize-window" title="Maximize Window">⬜ Window</button>
+                <button id="mermaid-close" title="Close (ESC)">✕ Close</button>
+            </div>
+        </div>
+        <div class="mermaid-fs-content" id="mermaid-fs-content">
+            <div class="mermaid-fs-wrapper" id="mermaid-fs-wrapper"></div>
+        </div>
+        <div class="mermaid-minimap" id="mermaid-minimap">
+            <div class="mermaid-minimap-content" id="mermaid-minimap-content"></div>
+            <div class="mermaid-minimap-viewport" id="mermaid-minimap-viewport"></div>
+        </div>
+    </div>
+    <div class="mermaid-error-toast" id="mermaid-error-toast"></div>
+
+    <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
