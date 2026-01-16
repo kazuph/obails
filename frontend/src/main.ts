@@ -3,10 +3,12 @@ import * as FileService from "../bindings/github.com/kazuph/obails/services/file
 import * as NoteService from "../bindings/github.com/kazuph/obails/services/noteservice.js";
 import * as LinkService from "../bindings/github.com/kazuph/obails/services/linkservice.js";
 import * as WindowService from "../bindings/github.com/kazuph/obails/services/windowservice.js";
-import { FileInfo, Note, Thino, Backlink, Config } from "../bindings/github.com/kazuph/obails/models/models.js";
+import * as GraphService from "../bindings/github.com/kazuph/obails/services/graphservice.js";
+import { FileInfo, Note, Thino, Backlink, Config, Graph } from "../bindings/github.com/kazuph/obails/models/models.js";
 import mermaid from "mermaid";
 import hljs from "highlight.js";
 import "highlight.js/styles/github-dark.css";
+import ForceGraph from "force-graph";
 import { debounce } from "./lib/utils";
 import { LIGHT_THEMES, isDarkTheme } from "./lib/theme";
 import { parseMarkdown } from "./lib/markdown";
@@ -22,9 +24,11 @@ import {
 // State
 let currentNote: Note | null = null;
 let showThino = false;
+let showGraph = true; // Start with graph view
 let contextMenuTargetPath: string = "";
 let contextMenuTargetIsDir: boolean = false;
 let draggedFilePath: string | null = null;
+let graphInstance: ReturnType<typeof ForceGraph> | null = null;
 
 // DOM Elements
 const fileTree = document.getElementById("file-tree")!;
@@ -44,14 +48,22 @@ async function init() {
         if (config?.Vault?.Path) {
             await loadFileTree();
 
-            // Open last file if exists
-            const lastFile = localStorage.getItem("obails-last-file");
-            if (lastFile) {
-                try {
-                    await openNote(lastFile);
-                } catch {
-                    // File might have been deleted, clear the storage
-                    localStorage.removeItem("obails-last-file");
+            // Check if we should show graph view on startup
+            const showGraphOnStartup = localStorage.getItem("obails-show-graph") !== "false";
+            if (showGraphOnStartup) {
+                showGraph = true;
+                await showGraphView();
+            } else {
+                showGraph = false;
+                // Open last file if exists
+                const lastFile = localStorage.getItem("obails-last-file");
+                if (lastFile) {
+                    try {
+                        await openNote(lastFile);
+                    } catch {
+                        // File might have been deleted, clear the storage
+                        localStorage.removeItem("obails-last-file");
+                    }
                 }
             }
         }
@@ -68,8 +80,12 @@ function setupEventListeners() {
     document.getElementById("new-note-btn")!.addEventListener("click", showNewNoteForm);
     document.getElementById("daily-note-btn")!.addEventListener("click", openTodayNote);
     document.getElementById("thino-btn")!.addEventListener("click", toggleThino);
+    document.getElementById("graph-btn")!.addEventListener("click", toggleGraphView);
     document.getElementById("refresh-btn")!.addEventListener("click", refresh);
     document.getElementById("thino-submit")!.addEventListener("click", submitThino);
+
+    // Graph overlay close button
+    document.getElementById("graph-close")!.addEventListener("click", hideGraphView);
 
     // New note form events
     document.getElementById("new-note-create")!.addEventListener("click", createNewNote);
@@ -95,6 +111,14 @@ function setupEventListeners() {
         if ((e.metaKey || e.ctrlKey) && e.key === "n") {
             e.preventDefault();
             showNewNoteForm();
+        }
+        if ((e.metaKey || e.ctrlKey) && e.key === "g") {
+            e.preventDefault();
+            toggleGraphView();
+        }
+        // ESC to close graph view
+        if (e.key === "Escape" && showGraph) {
+            hideGraphView();
         }
     });
 
@@ -724,6 +748,179 @@ async function refresh() {
     await LinkService.RebuildIndex();
 }
 
+
+// Graph View
+async function toggleGraphView() {
+    if (showGraph) {
+        hideGraphView();
+    } else {
+        await showGraphView();
+    }
+}
+
+async function showGraphView() {
+    showGraph = true;
+    localStorage.setItem("obails-show-graph", "true");
+
+    // Hide other views
+    thinoPanel.style.display = "none";
+    editorContainer.style.display = "none";
+
+    const graphOverlay = document.getElementById("graph-overlay")!;
+    graphOverlay.classList.add("visible");
+
+    // Load and render graph
+    await loadGraphData();
+}
+
+function hideGraphView() {
+    showGraph = false;
+    localStorage.setItem("obails-show-graph", "false");
+
+    const graphOverlay = document.getElementById("graph-overlay")!;
+    graphOverlay.classList.remove("visible");
+
+    // Show editor view
+    editorContainer.style.display = "flex";
+
+    // Clean up graph instance
+    if (graphInstance) {
+        graphInstance._destructor();
+        graphInstance = null;
+    }
+}
+
+async function loadGraphData() {
+    const graphContainer = document.getElementById("graph-container")!;
+    const graphStats = document.getElementById("graph-stats")!;
+
+    try {
+        const graph = await GraphService.GetFullGraph();
+        const stats = await GraphService.GetGraphStats();
+
+        // Update stats display
+        graphStats.textContent = `${stats.nodeCount || 0} notes, ${stats.edgeCount || 0} links`;
+
+        // Render the graph
+        renderGraph(graph, graphContainer);
+    } catch (err) {
+        console.error("Failed to load graph:", err);
+        graphStats.textContent = "Failed to load graph";
+        graphContainer.innerHTML = '<div class="graph-error">Failed to load graph data</div>';
+    }
+}
+
+interface GraphNodeData {
+    id: string;
+    label: string;
+    linkCount: number;
+    x?: number;
+    y?: number;
+}
+
+interface GraphEdgeData {
+    source: string | GraphNodeData;
+    target: string | GraphNodeData;
+}
+
+function renderGraph(graph: Graph, container: HTMLElement) {
+    // Clean up existing instance
+    if (graphInstance) {
+        graphInstance._destructor();
+    }
+
+    container.innerHTML = "";
+
+    // Prepare data for force-graph
+    const nodes: GraphNodeData[] = graph.nodes.map(n => ({
+        id: n.id,
+        label: n.label,
+        linkCount: n.linkCount
+    }));
+
+    const links: GraphEdgeData[] = graph.edges.map(e => ({
+        source: e.source,
+        target: e.target
+    }));
+
+    const width = container.clientWidth;
+    const height = container.clientHeight;
+
+    // Space/cosmic color scheme
+    const savedTheme = localStorage.getItem("obails-theme") || "github-light";
+    const isDark = !LIGHT_THEMES.includes(savedTheme);
+
+    const nodeColor = isDark ? "#9d8cff" : "#6366f1"; // Purple/indigo
+    const linkColor = isDark ? "rgba(147, 197, 253, 0.3)" : "rgba(99, 102, 241, 0.4)";
+    const textColor = isDark ? "#e2e8f0" : "#1e293b";
+    const highlightColor = "#f472b6"; // Pink for highlight
+
+    // Create the force graph
+    graphInstance = ForceGraph()(container)
+        .width(width)
+        .height(height)
+        .graphData({ nodes, links })
+        .nodeId("id")
+        .nodeLabel("label")
+        .nodeColor(() => nodeColor)
+        .nodeVal((node: GraphNodeData) => Math.max(3, node.linkCount + 2))
+        .linkSource("source")
+        .linkTarget("target")
+        .linkColor(() => linkColor)
+        .linkWidth(1.5)
+        .linkDirectionalParticles(2)
+        .linkDirectionalParticleWidth(2)
+        .linkDirectionalParticleColor(() => highlightColor)
+        .backgroundColor("transparent")
+        .onNodeClick((node: GraphNodeData) => {
+            // Close graph view and open the note
+            hideGraphView();
+            openNote(node.id);
+        })
+        .onNodeHover((node: GraphNodeData | null) => {
+            container.style.cursor = node ? "pointer" : "grab";
+        })
+        .nodeCanvasObject((node: GraphNodeData, ctx: CanvasRenderingContext2D, globalScale: number) => {
+            const label = node.label;
+            const size = Math.max(3, node.linkCount + 2);
+            const fontSize = Math.max(10, 12 / globalScale);
+
+            // Draw node (star-like glow effect)
+            ctx.beginPath();
+            ctx.arc(node.x!, node.y!, size, 0, 2 * Math.PI);
+
+            // Glow effect
+            const gradient = ctx.createRadialGradient(
+                node.x!, node.y!, 0,
+                node.x!, node.y!, size * 2
+            );
+            gradient.addColorStop(0, nodeColor);
+            gradient.addColorStop(1, "transparent");
+            ctx.fillStyle = gradient;
+            ctx.fill();
+
+            // Core
+            ctx.beginPath();
+            ctx.arc(node.x!, node.y!, size * 0.6, 0, 2 * Math.PI);
+            ctx.fillStyle = nodeColor;
+            ctx.fill();
+
+            // Draw label
+            ctx.font = `${fontSize}px "SF Pro Text", -apple-system, sans-serif`;
+            ctx.fillStyle = textColor;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "top";
+            ctx.fillText(label, node.x!, node.y! + size + 4);
+        })
+        .cooldownTicks(100)
+        .d3AlphaDecay(0.02)
+        .d3VelocityDecay(0.3);
+
+    // Zoom to fit after data loads
+    setTimeout(() => {
+        graphInstance?.zoomToFit(400, 50);
+    }, 500);
+}
 
 // Mermaid Setup
 function setupMermaid() {

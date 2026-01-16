@@ -974,3 +974,93 @@ body {
 .file-item[draggable="true"]:active {
     cursor: grabbing;
 }
+
+/* ========== GRAPH VIEW ========== */
+
+.graph-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: #0a0a1a;
+    z-index: 2000;
+    display: none;
+    flex-direction: column;
+}
+
+.graph-overlay.visible {
+    display: flex;
+}
+
+.graph-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 20px;
+    background: rgba(20, 20, 40, 0.95);
+    border-bottom: 1px solid rgba(100, 100, 255, 0.2);
+    -webkit-app-region: drag;
+}
+
+.graph-header h3 {
+    margin: 0;
+    color: #e0e0ff;
+    font-size: 16px;
+    font-weight: 500;
+}
+
+.graph-stats {
+    color: rgba(200, 200, 255, 0.7);
+    font-size: 13px;
+}
+
+.graph-header button {
+    -webkit-app-region: no-drag;
+    background: rgba(255, 100, 100, 0.2);
+    border: 1px solid rgba(255, 100, 100, 0.4);
+    color: #ff8888;
+    padding: 6px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.2s;
+}
+
+.graph-header button:hover {
+    background: rgba(255, 100, 100, 0.3);
+    border-color: rgba(255, 100, 100, 0.6);
+}
+
+.graph-container {
+    flex: 1;
+    overflow: hidden;
+    background: radial-gradient(ellipse at center, #0a0a2a 0%, #050510 100%);
+}
+
+/* Stars background effect */
+.graph-container::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-image:
+        radial-gradient(2px 2px at 20px 30px, rgba(255,255,255,0.3), transparent),
+        radial-gradient(2px 2px at 40px 70px, rgba(255,255,255,0.2), transparent),
+        radial-gradient(1px 1px at 90px 40px, rgba(255,255,255,0.4), transparent),
+        radial-gradient(2px 2px at 160px 120px, rgba(255,255,255,0.2), transparent),
+        radial-gradient(1px 1px at 230px 80px, rgba(255,255,255,0.3), transparent),
+        radial-gradient(2px 2px at 300px 150px, rgba(255,255,255,0.2), transparent),
+        radial-gradient(1px 1px at 370px 60px, rgba(255,255,255,0.4), transparent),
+        radial-gradient(2px 2px at 450px 200px, rgba(255,255,255,0.2), transparent);
+    background-repeat: repeat;
+    background-size: 500px 250px;
+    pointer-events: none;
+    opacity: 0.5;
+}
+
+.graph-container canvas {
+    display: block;
+}

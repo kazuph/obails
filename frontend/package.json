@@ -15,6 +15,7 @@
   "dependencies": {
     "@mizchi/markdown": "^0.4.1",
     "@wailsio/runtime": "latest",
+    "force-graph": "^1.51.0",
     "mermaid": "^11.12.2"
   },
   "devDependencies": {

@@ -24,6 +24,7 @@
                 <button id="new-note-btn" title="New Note (⌘N)">New</button>
                 <button id="daily-note-btn">Today's Note</button>
                 <button id="thino-btn">Thino</button>
+                <button id="graph-btn" title="Graph View (⌘G)">Graph</button>
                 <button id="refresh-btn">Refresh</button>
                 <div class="toolbar-spacer"></div>
                 <div class="theme-selector">
@@ -120,6 +121,16 @@
         </div>
     </div>
     <div class="mermaid-error-toast" id="mermaid-error-toast"></div>
+
+    <!-- Graph View Overlay -->
+    <div class="graph-overlay" id="graph-overlay">
+        <div class="graph-header">
+            <h3>Knowledge Graph</h3>
+            <div class="graph-stats" id="graph-stats"></div>
+            <button id="graph-close" title="Close (ESC)">✕ Close</button>
+        </div>
+        <div class="graph-container" id="graph-container"></div>
+    </div>
 
     <!-- Context Menu -->
     <div class="context-menu" id="context-menu" style="display: none;">
