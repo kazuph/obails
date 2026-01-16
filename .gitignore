@@ -14,6 +14,8 @@ node_modules/
 # Build artifacts
 build/linux/appimage/build
 build/windows/nsis/MicrosoftEdgeWebview2Setup.exe
+build/darwin/obails.iconset/
+build/appicon_backup.png
 
 # Test artifacts
 playwright-report/
