@@ -4,13 +4,20 @@ import * as NoteService from "../bindings/github.com/kazuph/obails/services/note
 import * as LinkService from "../bindings/github.com/kazuph/obails/services/linkservice.js";
 import * as WindowService from "../bindings/github.com/kazuph/obails/services/windowservice.js";
 import { FileInfo, Note, Thino, Backlink, Config } from "../bindings/github.com/kazuph/obails/models/models.js";
-import { toHtml } from "@mizchi/markdown";
 import mermaid from "mermaid";
 import hljs from "highlight.js";
 import "highlight.js/styles/github-dark.css";
-
-// Theme constants
-const LIGHT_THEMES = ["github-light", "solarized-light", "one-light", "catppuccin-latte", "rosepine-dawn"];
+import { debounce } from "./lib/utils";
+import { LIGHT_THEMES, isDarkTheme } from "./lib/theme";
+import { parseMarkdown } from "./lib/markdown";
+import { extractHeadings, renderOutlineHTML } from "./lib/headings";
+import {
+  clampZoom,
+  calculateZoomPan,
+  calculateCenteredPosition,
+  calculateFitZoom,
+  calculateMinimapScale,
+} from "./lib/mermaid-calc";
 
 // State
 let currentNote: Note | null = null;
@@ -520,25 +527,8 @@ function updatePreview() {
 
 // Outline
 function updateOutline(content: string) {
-    const headings: { level: number; text: string; line: number }[] = [];
-    const lines = content.split("\n");
-
-    lines.forEach((line, index) => {
-        const match = line.match(/^(#{1,6})\s+(.+)/);
-        if (match) {
-            headings.push({
-                level: match[1].length,
-                text: match[2].trim(),
-                line: index
-            });
-        }
-    });
-
-    outlineList.innerHTML = headings.map(h => `
-        <div class="outline-item h${h.level}" data-line="${h.line}">
-            ${h.text}
-        </div>
-    `).join("");
+    const headings = extractHeadings(content);
+    outlineList.innerHTML = renderOutlineHTML(headings);
 
     // Click to jump to heading
     outlineList.querySelectorAll(".outline-item").forEach(item => {
@@ -562,18 +552,6 @@ function jumpToLine(lineNumber: number) {
     editor.scrollTop = lineNumber * lineHeight - editor.clientHeight / 3;
 }
 
-function parseMarkdown(content: string): string {
-    // Use @mizchi/markdown for parsing
-    let html = toHtml(content);
-
-    // Post-process: Convert wiki links [[link]] or [[link|alias]]
-    html = html.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_, link, alias) => {
-        const displayText = alias || link;
-        return `<span class="wiki-link" data-link="${link}">${displayText}</span>`;
-    });
-
-    return html;
-}
 
 // Thino
 function toggleThino() {
@@ -746,13 +724,6 @@ async function refresh() {
     await LinkService.RebuildIndex();
 }
 
-function debounce<T extends (...args: any[]) => any>(fn: T, delay: number): T {
-    let timeoutId: number;
-    return ((...args: any[]) => {
-        clearTimeout(timeoutId);
-        timeoutId = window.setTimeout(() => fn(...args), delay);
-    }) as T;
-}
 
 // Mermaid Setup
 function setupMermaid() {
@@ -854,9 +825,7 @@ function openMermaidFullscreen(mermaidEl: HTMLElement) {
     mermaidSvgHeight = naturalHeight;
 
     // Calculate minimap scale
-    const minimapMaxWidth = 184;
-    const minimapMaxHeight = 134;
-    mermaidMinimapScale = Math.min(minimapMaxWidth / naturalWidth, minimapMaxHeight / naturalHeight);
+    mermaidMinimapScale = calculateMinimapScale(naturalWidth, naturalHeight);
 
     clonedSvg.style.width = naturalWidth + "px";
     clonedSvg.style.height = naturalHeight + "px";
@@ -865,15 +834,14 @@ function openMermaidFullscreen(mermaidEl: HTMLElement) {
     const viewportHeight = window.innerHeight - 80;
     const viewportWidth = window.innerWidth - 40;
 
-    const fitZoom = Math.min(viewportHeight / naturalHeight, viewportWidth / naturalWidth);
+    const fitZoom = calculateFitZoom(naturalWidth, naturalHeight, viewportWidth, viewportHeight);
     mermaidZoom = fitZoom;
     mermaidInitialZoom = fitZoom;
 
     // Center the SVG
-    const scaledWidth = naturalWidth * mermaidZoom;
-    const scaledHeight = naturalHeight * mermaidZoom;
-    mermaidPanX = (viewportWidth - scaledWidth) / 2 + 20;
-    mermaidPanY = (viewportHeight - scaledHeight) / 2 + 60;
+    const centered = calculateCenteredPosition(naturalWidth, naturalHeight, viewportWidth, viewportHeight, mermaidZoom);
+    mermaidPanX = centered.x;
+    mermaidPanY = centered.y;
 
     fsOverlay.classList.add("visible");
     updateMermaidTransform();
@@ -935,15 +903,16 @@ function updateMermaidMinimap() {
 function mermaidZoomAt(factor: number, clientX: number, clientY: number) {
     const fsContent = document.getElementById("mermaid-fs-content")!;
     const oldZoom = mermaidZoom;
-    mermaidZoom = Math.max(0.1, Math.min(10, mermaidZoom * factor));
+    mermaidZoom = clampZoom(mermaidZoom, factor);
 
     const rect = fsContent.getBoundingClientRect();
     const mouseX = clientX - rect.left;
     const mouseY = clientY - rect.top;
 
     const zoomRatio = mermaidZoom / oldZoom;
-    mermaidPanX = mouseX - (mouseX - mermaidPanX) * zoomRatio;
-    mermaidPanY = mouseY - (mouseY - mermaidPanY) * zoomRatio;
+    const newPan = calculateZoomPan(mouseX, mouseY, mermaidPanX, mermaidPanY, zoomRatio);
+    mermaidPanX = newPan.x;
+    mermaidPanY = newPan.y;
 
     updateMermaidTransform();
 }
@@ -967,10 +936,9 @@ function setupMermaidFullscreenControls() {
         mermaidZoom = mermaidInitialZoom;
         const viewportHeight = window.innerHeight - 80;
         const viewportWidth = window.innerWidth - 40;
-        const scaledWidth = mermaidSvgWidth * mermaidZoom;
-        const scaledHeight = mermaidSvgHeight * mermaidZoom;
-        mermaidPanX = (viewportWidth - scaledWidth) / 2 + 20;
-        mermaidPanY = (viewportHeight - scaledHeight) / 2 + 60;
+        const centered = calculateCenteredPosition(mermaidSvgWidth, mermaidSvgHeight, viewportWidth, viewportHeight, mermaidZoom);
+        mermaidPanX = centered.x;
+        mermaidPanY = centered.y;
         updateMermaidTransform();
     });
 

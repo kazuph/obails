@@ -22,4 +22,4 @@ playwright-report/
 test-results/
 
 # Local test data (Obsidian vault folders)
-02_dailynotes/
+02_dailynotes/frontend/coverage/
