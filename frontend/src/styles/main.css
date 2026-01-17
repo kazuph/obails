@@ -828,7 +828,7 @@ body {
 /* Minimap */
 .mermaid-minimap {
     position: absolute;
-    top: 70px;
+    top: 120px; /* Below the control bar */
     right: 20px;
     width: 200px;
     height: 150px;
