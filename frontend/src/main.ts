@@ -630,8 +630,21 @@ function jumpToLine(lineNumber: number) {
     }
     editor.focus();
     editor.setSelectionRange(pos, pos);
-    // Scroll to position
-    const lineHeight = 20; // approximate
+    // Calculate actual line height from computed styles
+    const computedStyle = getComputedStyle(editor);
+    const fontSize = parseFloat(computedStyle.fontSize);
+    const lineHeightStr = computedStyle.lineHeight;
+    // lineHeight can be "normal", a number, or a pixel value
+    let lineHeight: number;
+    if (lineHeightStr === "normal") {
+        lineHeight = fontSize * 1.2; // default normal line-height
+    } else if (lineHeightStr.endsWith("px")) {
+        lineHeight = parseFloat(lineHeightStr);
+    } else {
+        // It's a multiplier (e.g., "1.6")
+        lineHeight = fontSize * parseFloat(lineHeightStr);
+    }
+    // Scroll to position, centering the target line in view
     editor.scrollTop = lineNumber * lineHeight - editor.clientHeight / 3;
 }
 
