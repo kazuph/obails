@@ -184,6 +184,35 @@
     --error: #f7768e;
 }
 
+/* ========== GRAPH VIEW COSMIC THEME (DARK THEMES ONLY) ========== */
+:is(
+    [data-theme="catppuccin"],
+    [data-theme="dracula"],
+    [data-theme="nord"],
+    [data-theme="solarized"],
+    [data-theme="onedark"],
+    [data-theme="gruvbox"],
+    [data-theme="tokyonight"]
+) {
+    --graph-bg: #0a0a1a;
+    --graph-header-bg: rgba(20, 20, 40, 0.95);
+    --graph-border: rgba(100, 100, 255, 0.2);
+    --graph-container-bg: radial-gradient(ellipse at center, #0a0a2a 0%, #050510 100%);
+    --graph-btn-bg: rgba(255, 100, 100, 0.2);
+    --graph-btn-border: rgba(255, 100, 100, 0.4);
+    --graph-btn-hover: rgba(255, 100, 100, 0.3);
+    --graph-stars:
+        radial-gradient(2px 2px at 20px 30px, rgba(255,255,255,0.3), transparent),
+        radial-gradient(2px 2px at 40px 70px, rgba(255,255,255,0.2), transparent),
+        radial-gradient(1px 1px at 90px 40px, rgba(255,255,255,0.4), transparent),
+        radial-gradient(2px 2px at 160px 120px, rgba(255,255,255,0.2), transparent),
+        radial-gradient(1px 1px at 230px 80px, rgba(255,255,255,0.3), transparent),
+        radial-gradient(2px 2px at 300px 150px, rgba(255,255,255,0.2), transparent),
+        radial-gradient(1px 1px at 370px 60px, rgba(255,255,255,0.4), transparent),
+        radial-gradient(2px 2px at 450px 200px, rgba(255,255,255,0.2), transparent);
+    --graph-stars-opacity: 0.5;
+}
+
 * {
     box-sizing: border-box;
     margin: 0;
@@ -973,4 +1002,85 @@ body {
 
 .file-item[draggable="true"]:active {
     cursor: grabbing;
+}
+
+/* ========== GRAPH VIEW ========== */
+
+.graph-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: var(--graph-bg, var(--bg-secondary));
+    z-index: 2000;
+    display: none;
+    flex-direction: column;
+}
+
+.graph-overlay.visible {
+    display: flex;
+}
+
+.graph-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 20px 12px 80px; /* Left padding for macOS traffic lights */
+    background: var(--graph-header-bg, var(--bg-tertiary));
+    border-bottom: 1px solid var(--graph-border, var(--border));
+    -webkit-app-region: drag;
+}
+
+.graph-header h3 {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 16px;
+    font-weight: 500;
+}
+
+.graph-stats {
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+.graph-header button {
+    -webkit-app-region: no-drag;
+    background: var(--graph-btn-bg, rgba(255, 100, 100, 0.1));
+    border: 1px solid var(--graph-btn-border, var(--error));
+    color: var(--error);
+    padding: 6px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.2s;
+}
+
+.graph-header button:hover {
+    background: var(--graph-btn-hover, rgba(255, 100, 100, 0.2));
+}
+
+.graph-container {
+    flex: 1;
+    overflow: hidden;
+    background: var(--graph-container-bg, var(--bg-primary));
+}
+
+/* Stars background effect - only for dark themes */
+.graph-container::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-image: var(--graph-stars, none);
+    background-repeat: repeat;
+    background-size: 500px 250px;
+    pointer-events: none;
+    opacity: var(--graph-stars-opacity, 0);
+}
+
+.graph-container canvas {
+    display: block;
 }

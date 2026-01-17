@@ -22,6 +22,7 @@ func main() {
 	fileService := services.NewFileService(configService)
 	noteService := services.NewNoteService(fileService, configService)
 	linkService := services.NewLinkService(fileService, configService)
+	graphService := services.NewGraphService(linkService, fileService, configService)
 	windowService := services.NewWindowService()
 
 	// Build link index on startup
@@ -40,6 +41,7 @@ func main() {
 			application.NewService(fileService),
 			application.NewService(noteService),
 			application.NewService(linkService),
+			application.NewService(graphService),
 			application.NewService(windowService),
 		},
 		Assets: application.AssetOptions{

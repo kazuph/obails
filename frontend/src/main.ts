@@ -3,21 +3,40 @@ import * as FileService from "../bindings/github.com/kazuph/obails/services/file
 import * as NoteService from "../bindings/github.com/kazuph/obails/services/noteservice.js";
 import * as LinkService from "../bindings/github.com/kazuph/obails/services/linkservice.js";
 import * as WindowService from "../bindings/github.com/kazuph/obails/services/windowservice.js";
-import { FileInfo, Note, Thino, Backlink, Config } from "../bindings/github.com/kazuph/obails/models/models.js";
-import { toHtml } from "@mizchi/markdown";
+import * as GraphService from "../bindings/github.com/kazuph/obails/services/graphservice.js";
+import { FileInfo, Note, Thino, Backlink, Config, Graph } from "../bindings/github.com/kazuph/obails/models/models.js";
 import mermaid from "mermaid";
 import hljs from "highlight.js";
 import "highlight.js/styles/github-dark.css";
-
-// Theme constants
-const LIGHT_THEMES = ["github-light", "solarized-light", "one-light", "catppuccin-latte", "rosepine-dawn"];
+import ForceGraph from "force-graph";
+import { debounce } from "./lib/utils";
+import { LIGHT_THEMES, isDarkTheme } from "./lib/theme";
+import { parseMarkdown } from "./lib/markdown";
+import { extractHeadings, renderOutlineHTML } from "./lib/headings";
+import {
+  clampZoom,
+  calculateZoomPan,
+  calculateCenteredPosition,
+  calculateFitZoom,
+  calculateMinimapScale,
+} from "./lib/mermaid-calc";
+import {
+  isCacheValid,
+  getCacheAgeText,
+  createCacheEntry,
+  saveCache,
+  loadCache,
+  clearCache,
+} from "./lib/graph-cache";
 
 // State
 let currentNote: Note | null = null;
 let showThino = false;
+let showGraph = false;
 let contextMenuTargetPath: string = "";
 let contextMenuTargetIsDir: boolean = false;
 let draggedFilePath: string | null = null;
+let graphInstance: ReturnType<typeof ForceGraph> | null = null;
 
 // DOM Elements
 const fileTree = document.getElementById("file-tree")!;
@@ -47,6 +66,9 @@ async function init() {
                     localStorage.removeItem("obails-last-file");
                 }
             }
+
+            // Prefetch graph data in background (don't block init)
+            prefetchGraphData().catch(console.error);
         }
     } catch (err) {
         console.warn("Running in browser mode - backend services unavailable");
@@ -55,14 +77,43 @@ async function init() {
     setupEventListeners();
 }
 
+// Prefetch graph data on app startup
+async function prefetchGraphData() {
+    console.log("[Graph] Prefetching graph data...");
+    try {
+        await LinkService.RebuildIndex();
+        const graph = await GraphService.GetFullGraph();
+        const stats = await GraphService.GetGraphStats();
+
+        // Preserve existing positions if any
+        const cached = loadCache(graphCacheStorage);
+        const cachedData = cached?.data as CachedGraphData | undefined;
+
+        const cacheData: CachedGraphData = {
+            graph,
+            stats,
+            nodePositions: cachedData?.nodePositions,
+            viewState: cachedData?.viewState,
+        };
+        saveCache(graphCacheStorage, createCacheEntry(cacheData));
+        console.log("[Graph] Prefetch complete - ready for instant display");
+    } catch (err) {
+        console.error("[Graph] Prefetch failed:", err);
+    }
+}
+
 // Event Listeners
 function setupEventListeners() {
     document.getElementById("settings-btn")!.addEventListener("click", openSettings);
     document.getElementById("new-note-btn")!.addEventListener("click", showNewNoteForm);
     document.getElementById("daily-note-btn")!.addEventListener("click", openTodayNote);
     document.getElementById("thino-btn")!.addEventListener("click", toggleThino);
+    document.getElementById("graph-btn")!.addEventListener("click", toggleGraphView);
     document.getElementById("refresh-btn")!.addEventListener("click", refresh);
     document.getElementById("thino-submit")!.addEventListener("click", submitThino);
+
+    // Graph overlay close button
+    document.getElementById("graph-close")!.addEventListener("click", hideGraphView);
 
     // New note form events
     document.getElementById("new-note-create")!.addEventListener("click", createNewNote);
@@ -88,6 +139,14 @@ function setupEventListeners() {
         if ((e.metaKey || e.ctrlKey) && e.key === "n") {
             e.preventDefault();
             showNewNoteForm();
+        }
+        if ((e.metaKey || e.ctrlKey) && e.key === "g") {
+            e.preventDefault();
+            toggleGraphView();
+        }
+        // ESC to close graph view
+        if (e.key === "Escape" && showGraph) {
+            hideGraphView();
         }
     });
 
@@ -520,25 +579,8 @@ function updatePreview() {
 
 // Outline
 function updateOutline(content: string) {
-    const headings: { level: number; text: string; line: number }[] = [];
-    const lines = content.split("\n");
-
-    lines.forEach((line, index) => {
-        const match = line.match(/^(#{1,6})\s+(.+)/);
-        if (match) {
-            headings.push({
-                level: match[1].length,
-                text: match[2].trim(),
-                line: index
-            });
-        }
-    });
-
-    outlineList.innerHTML = headings.map(h => `
-        <div class="outline-item h${h.level}" data-line="${h.line}">
-            ${h.text}
-        </div>
-    `).join("");
+    const headings = extractHeadings(content);
+    outlineList.innerHTML = renderOutlineHTML(headings);
 
     // Click to jump to heading
     outlineList.querySelectorAll(".outline-item").forEach(item => {
@@ -562,18 +604,6 @@ function jumpToLine(lineNumber: number) {
     editor.scrollTop = lineNumber * lineHeight - editor.clientHeight / 3;
 }
 
-function parseMarkdown(content: string): string {
-    // Use @mizchi/markdown for parsing
-    let html = toHtml(content);
-
-    // Post-process: Convert wiki links [[link]] or [[link|alias]]
-    html = html.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_, link, alias) => {
-        const displayText = alias || link;
-        return `<span class="wiki-link" data-link="${link}">${displayText}</span>`;
-    });
-
-    return html;
-}
 
 // Thino
 function toggleThino() {
@@ -744,14 +774,340 @@ function setupResizeHandles() {
 async function refresh() {
     await loadFileTree();
     await LinkService.RebuildIndex();
+
+    // If graph view is showing, refresh the graph data
+    if (showGraph) {
+        await refreshGraphData();
+    }
 }
 
-function debounce<T extends (...args: any[]) => any>(fn: T, delay: number): T {
-    let timeoutId: number;
-    return ((...args: any[]) => {
-        clearTimeout(timeoutId);
-        timeoutId = window.setTimeout(() => fn(...args), delay);
-    }) as T;
+
+// Graph View
+async function toggleGraphView() {
+    if (showGraph) {
+        hideGraphView();
+    } else {
+        await showGraphView();
+    }
+}
+
+async function showGraphView() {
+    showGraph = true;
+
+    // Hide other views
+    thinoPanel.style.display = "none";
+    editorContainer.style.display = "none";
+
+    const graphOverlay = document.getElementById("graph-overlay")!;
+    graphOverlay.classList.add("visible");
+
+    // Load and render graph
+    await loadGraphData();
+}
+
+function hideGraphView() {
+    showGraph = false;
+
+    // Save node positions before closing
+    saveGraphNodePositions();
+
+    const graphOverlay = document.getElementById("graph-overlay")!;
+    graphOverlay.classList.remove("visible");
+
+    // Show editor view
+    editorContainer.style.display = "flex";
+
+    // Clean up graph instance
+    if (graphInstance) {
+        graphInstance._destructor();
+        graphInstance = null;
+    }
+
+    // Open last file if exists and no note is currently open
+    if (!currentNote) {
+        const lastFile = localStorage.getItem("obails-last-file");
+        if (lastFile) {
+            openNote(lastFile).catch(() => {
+                localStorage.removeItem("obails-last-file");
+            });
+        }
+    }
+}
+
+function saveGraphNodePositions() {
+    if (!graphInstance) return;
+
+    const graphData = graphInstance.graphData();
+    const positions: { [id: string]: { x: number; y: number } } = {};
+
+    for (const node of graphData.nodes as GraphNodeData[]) {
+        if (node.x !== undefined && node.y !== undefined) {
+            positions[node.id] = { x: node.x, y: node.y };
+        }
+    }
+
+    // Save view state (zoom and center)
+    const zoom = graphInstance.zoom();
+    const center = graphInstance.centerAt();
+    const viewState = center ? { zoom, centerX: center.x, centerY: center.y } : undefined;
+
+    // Update cache with positions and view state
+    const cached = loadCache(graphCacheStorage);
+    if (cached && isCacheValid(cached)) {
+        const cachedData = cached.data as CachedGraphData;
+        cachedData.nodePositions = positions;
+        cachedData.viewState = viewState;
+        saveCache(graphCacheStorage, createCacheEntry(cachedData, cached.timestamp));
+    }
+}
+
+// localStorage adapter for graph cache
+const graphCacheStorage = {
+    get: (key: string) => localStorage.getItem(key),
+    set: (key: string, value: string) => localStorage.setItem(key, value),
+    remove: (key: string) => localStorage.removeItem(key),
+};
+
+interface CachedGraphData {
+    graph: Graph;
+    stats: { nodeCount: number; edgeCount: number };
+    nodePositions?: { [id: string]: { x: number; y: number } };
+    viewState?: { zoom: number; centerX: number; centerY: number };
+}
+
+async function loadGraphData(forceRefresh: boolean = false) {
+    const graphContainer = document.getElementById("graph-container")!;
+    const graphStats = document.getElementById("graph-stats")!;
+
+    try {
+        // Always check cache first
+        const cached = loadCache(graphCacheStorage);
+
+        if (cached && isCacheValid(cached) && !forceRefresh) {
+            // Show cached data immediately
+            const cachedData = cached.data as CachedGraphData;
+            const age = getCacheAgeText(cached);
+            graphStats.textContent = `${cachedData.stats.nodeCount || 0} notes, ${cachedData.stats.edgeCount || 0} links (${age})`;
+            renderGraph(cachedData.graph, graphContainer, cachedData.nodePositions, cachedData.viewState);
+
+            // Background update (don't await, just start it)
+            updateGraphDataInBackground().catch(console.error);
+            return;
+        }
+
+        // No cache or force refresh - load fresh data
+        graphStats.textContent = "Building index...";
+        await LinkService.RebuildIndex();
+
+        const graph = await GraphService.GetFullGraph();
+        const stats = await GraphService.GetGraphStats();
+
+        // Save to cache
+        const cacheData: CachedGraphData = { graph, stats };
+        saveCache(graphCacheStorage, createCacheEntry(cacheData));
+
+        // Update stats display
+        graphStats.textContent = `${stats.nodeCount || 0} notes, ${stats.edgeCount || 0} links`;
+
+        // Render the graph
+        renderGraph(graph, graphContainer);
+    } catch (err) {
+        console.error("Failed to load graph:", err);
+        graphStats.textContent = "Failed to load graph";
+        graphContainer.innerHTML = '<div class="graph-error">Failed to load graph data</div>';
+    }
+}
+
+// Background update - fetches new data but doesn't update UI
+async function updateGraphDataInBackground() {
+    try {
+        await LinkService.RebuildIndex();
+        const graph = await GraphService.GetFullGraph();
+        const stats = await GraphService.GetGraphStats();
+
+        // Get current positions from cache to preserve them
+        const cached = loadCache(graphCacheStorage);
+        const cachedData = cached?.data as CachedGraphData | undefined;
+
+        // Save new data to cache, preserving positions and view state
+        const cacheData: CachedGraphData = {
+            graph,
+            stats,
+            nodePositions: cachedData?.nodePositions,
+            viewState: cachedData?.viewState,
+        };
+        saveCache(graphCacheStorage, createCacheEntry(cacheData));
+        console.log("[Graph] Background update complete");
+    } catch (err) {
+        console.error("[Graph] Background update failed:", err);
+    }
+}
+
+async function refreshGraphData() {
+    // Clear position cache to get fresh layout
+    const cached = loadCache(graphCacheStorage);
+    if (cached) {
+        const cachedData = cached.data as CachedGraphData;
+        cachedData.nodePositions = undefined;
+        cachedData.viewState = undefined;
+        saveCache(graphCacheStorage, createCacheEntry(cachedData, cached.timestamp));
+    }
+    await loadGraphData(true);
+}
+
+interface GraphNodeData {
+    id: string;
+    label: string;
+    linkCount: number;
+    x?: number;
+    y?: number;
+}
+
+interface GraphEdgeData {
+    source: string | GraphNodeData;
+    target: string | GraphNodeData;
+}
+
+function renderGraph(
+    graph: Graph,
+    container: HTMLElement,
+    savedPositions?: { [id: string]: { x: number; y: number } },
+    savedViewState?: { zoom: number; centerX: number; centerY: number }
+) {
+    // Clean up existing instance
+    if (graphInstance) {
+        graphInstance._destructor();
+    }
+
+    container.innerHTML = "";
+
+    // Prepare data for force-graph with restored positions
+    const nodes: GraphNodeData[] = graph.nodes.map(n => {
+        const pos = savedPositions?.[n.id];
+        return {
+            id: n.id,
+            label: n.label,
+            linkCount: n.linkCount,
+            // Restore position if available
+            ...(pos && { x: pos.x, y: pos.y, fx: pos.x, fy: pos.y })
+        };
+    });
+
+    const links: GraphEdgeData[] = graph.edges.map(e => ({
+        source: e.source,
+        target: e.target
+    }));
+
+    const width = container.clientWidth;
+    const height = container.clientHeight;
+
+    // Space/cosmic color scheme
+    const savedTheme = localStorage.getItem("obails-theme") || "github-light";
+    const isDark = !LIGHT_THEMES.includes(savedTheme);
+
+    const nodeColor = isDark ? "#9d8cff" : "#6366f1"; // Purple/indigo
+    const linkColor = isDark ? "rgba(147, 197, 253, 0.3)" : "rgba(99, 102, 241, 0.4)";
+    const textColor = isDark ? "#e2e8f0" : "#1e293b";
+    const highlightColor = "#f472b6"; // Pink for highlight
+
+    // Create the force graph - simple version for large graphs
+    graphInstance = ForceGraph()(container)
+        .width(width)
+        .height(height)
+        .graphData({ nodes, links })
+        .nodeId("id")
+        .nodeLabel("label")
+        .nodeColor(() => nodeColor)
+        .nodeVal((node: GraphNodeData) => Math.max(1, Math.log(node.linkCount + 1) * 2))
+        .linkSource("source")
+        .linkTarget("target")
+        .linkColor(() => linkColor)
+        .linkWidth(0.3)
+        .backgroundColor("transparent")
+        .enablePanInteraction(true) // Enable mouse drag pan
+        .enableZoomInteraction(false) // Disable default wheel zoom (we handle it custom)
+        .enablePointerInteraction(true) // Enable pointer events
+        .onNodeClick((node: GraphNodeData, event: MouseEvent) => {
+            console.log("[Graph] Node clicked:", node.id, node.label);
+            event.stopPropagation();
+            hideGraphView();
+            openNote(node.id);
+        })
+        .onNodeHover((node: GraphNodeData | null) => {
+            container.style.cursor = node ? "pointer" : "grab";
+        })
+        .cooldownTicks(savedPositions ? 0 : 100) // Skip simulation if positions restored
+        .d3AlphaDecay(0.02)
+        .d3VelocityDecay(0.3)
+        .warmupTicks(savedPositions ? 0 : 50); // Skip warmup if positions restored
+
+    // Restore view state or zoom to fit
+    setTimeout(() => {
+        if (savedViewState && savedPositions) {
+            // Restore previous view state
+            graphInstance?.zoom(savedViewState.zoom);
+            graphInstance?.centerAt(savedViewState.centerX, savedViewState.centerY);
+            // Release fixed positions after a short delay to allow dragging
+            setTimeout(() => {
+                const data = graphInstance?.graphData();
+                if (data) {
+                    for (const node of data.nodes as GraphNodeData[]) {
+                        node.fx = undefined;
+                        node.fy = undefined;
+                    }
+                }
+            }, 100);
+        } else {
+            // Zoom to fit for new graphs
+            graphInstance?.zoomToFit(400, 50);
+        }
+    }, 100);
+
+    // Custom wheel handler:
+    // - Normal 2-finger scroll = pan (move around)
+    // - Ctrl/Cmd/Shift + 2-finger scroll = zoom (standard for design tools)
+    container.addEventListener("wheel", (e: WheelEvent) => {
+        if (!graphInstance) return;
+        e.preventDefault();
+
+        if (e.ctrlKey || e.metaKey || e.shiftKey) {
+            // Ctrl/Cmd/Shift + scroll = zoom (supports all platforms)
+            const currentZoom = graphInstance.zoom();
+            const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+            graphInstance.zoom(currentZoom * zoomFactor);
+        } else {
+            // Normal scroll = pan
+            const { x, y } = graphInstance.centerAt() as { x: number; y: number };
+            const zoomLevel = graphInstance.zoom();
+            // Adjust pan speed based on zoom level
+            const panSpeed = 1 / zoomLevel;
+            graphInstance.centerAt(x + e.deltaX * panSpeed, y + e.deltaY * panSpeed);
+        }
+    }, { passive: false });
+
+    // Pinch zoom handler (macOS/Safari gesture events)
+    let initialPinchZoom = 1;
+    container.addEventListener("gesturestart", ((e: GestureEvent) => {
+        if (!graphInstance) return;
+        e.preventDefault();
+        initialPinchZoom = graphInstance.zoom();
+    }) as EventListener, { passive: false });
+
+    container.addEventListener("gesturechange", ((e: GestureEvent) => {
+        if (!graphInstance) return;
+        e.preventDefault();
+        graphInstance.zoom(initialPinchZoom * e.scale);
+    }) as EventListener, { passive: false });
+
+    container.addEventListener("gestureend", ((e: GestureEvent) => {
+        e.preventDefault();
+    }) as EventListener, { passive: false });
+}
+
+// GestureEvent type for macOS Safari
+interface GestureEvent extends UIEvent {
+    scale: number;
+    rotation: number;
 }
 
 // Mermaid Setup
@@ -854,9 +1210,7 @@ function openMermaidFullscreen(mermaidEl: HTMLElement) {
     mermaidSvgHeight = naturalHeight;
 
     // Calculate minimap scale
-    const minimapMaxWidth = 184;
-    const minimapMaxHeight = 134;
-    mermaidMinimapScale = Math.min(minimapMaxWidth / naturalWidth, minimapMaxHeight / naturalHeight);
+    mermaidMinimapScale = calculateMinimapScale(naturalWidth, naturalHeight);
 
     clonedSvg.style.width = naturalWidth + "px";
     clonedSvg.style.height = naturalHeight + "px";
@@ -865,15 +1219,14 @@ function openMermaidFullscreen(mermaidEl: HTMLElement) {
     const viewportHeight = window.innerHeight - 80;
     const viewportWidth = window.innerWidth - 40;
 
-    const fitZoom = Math.min(viewportHeight / naturalHeight, viewportWidth / naturalWidth);
+    const fitZoom = calculateFitZoom(naturalWidth, naturalHeight, viewportWidth, viewportHeight);
     mermaidZoom = fitZoom;
     mermaidInitialZoom = fitZoom;
 
     // Center the SVG
-    const scaledWidth = naturalWidth * mermaidZoom;
-    const scaledHeight = naturalHeight * mermaidZoom;
-    mermaidPanX = (viewportWidth - scaledWidth) / 2 + 20;
-    mermaidPanY = (viewportHeight - scaledHeight) / 2 + 60;
+    const centered = calculateCenteredPosition(naturalWidth, naturalHeight, viewportWidth, viewportHeight, mermaidZoom);
+    mermaidPanX = centered.x;
+    mermaidPanY = centered.y;
 
     fsOverlay.classList.add("visible");
     updateMermaidTransform();
@@ -935,15 +1288,16 @@ function updateMermaidMinimap() {
 function mermaidZoomAt(factor: number, clientX: number, clientY: number) {
     const fsContent = document.getElementById("mermaid-fs-content")!;
     const oldZoom = mermaidZoom;
-    mermaidZoom = Math.max(0.1, Math.min(10, mermaidZoom * factor));
+    mermaidZoom = clampZoom(mermaidZoom, factor);
 
     const rect = fsContent.getBoundingClientRect();
     const mouseX = clientX - rect.left;
     const mouseY = clientY - rect.top;
 
     const zoomRatio = mermaidZoom / oldZoom;
-    mermaidPanX = mouseX - (mouseX - mermaidPanX) * zoomRatio;
-    mermaidPanY = mouseY - (mouseY - mermaidPanY) * zoomRatio;
+    const newPan = calculateZoomPan(mouseX, mouseY, mermaidPanX, mermaidPanY, zoomRatio);
+    mermaidPanX = newPan.x;
+    mermaidPanY = newPan.y;
 
     updateMermaidTransform();
 }
@@ -967,10 +1321,9 @@ function setupMermaidFullscreenControls() {
         mermaidZoom = mermaidInitialZoom;
         const viewportHeight = window.innerHeight - 80;
         const viewportWidth = window.innerWidth - 40;
-        const scaledWidth = mermaidSvgWidth * mermaidZoom;
-        const scaledHeight = mermaidSvgHeight * mermaidZoom;
-        mermaidPanX = (viewportWidth - scaledWidth) / 2 + 20;
-        mermaidPanY = (viewportHeight - scaledHeight) / 2 + 60;
+        const centered = calculateCenteredPosition(mermaidSvgWidth, mermaidSvgHeight, viewportWidth, viewportHeight, mermaidZoom);
+        mermaidPanX = centered.x;
+        mermaidPanY = centered.y;
         updateMermaidTransform();
     });
 

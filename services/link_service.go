@@ -235,6 +235,22 @@ func (s *LinkService) GetIndexStats() map[string]int {
 	}
 }
 
+// ExportForwardIndex returns a copy of the forward index for graph building
+// The forward index maps file paths to the links they contain
+func (s *LinkService) ExportForwardIndex() map[string][]string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	// Return a copy to avoid race conditions
+	result := make(map[string][]string, len(s.forwardIndex))
+	for k, v := range s.forwardIndex {
+		linksCopy := make([]string, len(v))
+		copy(linksCopy, v)
+		result[k] = linksCopy
+	}
+	return result
+}
+
 func (s *LinkService) countTotalLinks() int {
 	total := 0
 	for _, links := range s.forwardIndex {
