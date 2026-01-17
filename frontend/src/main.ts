@@ -421,6 +421,7 @@ function createFileElement(file: FileInfo): HTMLElement {
 
     const el = document.createElement("div");
     el.className = `file-item ${file.isDir ? "folder" : "file"}`;
+    el.setAttribute("data-path", file.path);
 
     const icon = file.isDir ? (file.children && file.children.length > 0 ? "📁" : "📂") : "📄";
     el.innerHTML = `<span class="folder-icon">${icon}</span><span>${file.name}</span>`;
@@ -520,6 +521,10 @@ async function openNote(path: string) {
 
             // Save last opened file to localStorage
             localStorage.setItem("obails-last-file", path);
+
+            // Update pane titles (remove .md extension)
+            const filename = path.split("/").pop()?.replace(/\.md$/i, "") || path;
+            updatePaneTitles(filename);
         }
 
         // Hide thino, show editor
@@ -527,11 +532,25 @@ async function openNote(path: string) {
         thinoPanel.style.display = "none";
         editorContainer.style.display = "flex";
 
-        // Update file tree selection
+        // Update file tree selection - highlight the opened file
         document.querySelectorAll(".file-item").forEach(el => el.classList.remove("active"));
+        const fileItem = document.querySelector(`.file-item[data-path="${path}"]`);
+        if (fileItem) {
+            fileItem.classList.add("active");
+            // Scroll into view if needed
+            fileItem.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }
     } catch (err) {
         console.error("Failed to open note:", err);
     }
+}
+
+// Update editor and preview pane titles
+function updatePaneTitles(title: string) {
+    const editorTitle = document.getElementById("editor-title");
+    const previewTitle = document.getElementById("preview-title");
+    if (editorTitle) editorTitle.textContent = title;
+    if (previewTitle) previewTitle.textContent = title;
 }
 
 async function saveCurrentNote() {
@@ -553,6 +572,18 @@ async function openTodayNote() {
             editor.value = note.content;
             updatePreview();
             await loadBacklinks(note.path);
+
+            // Update pane titles
+            const filename = note.path.split("/").pop()?.replace(/\.md$/i, "") || note.path;
+            updatePaneTitles(filename);
+
+            // Update file tree selection
+            document.querySelectorAll(".file-item").forEach(el => el.classList.remove("active"));
+            const fileItem = document.querySelector(`.file-item[data-path="${note.path}"]`);
+            if (fileItem) {
+                fileItem.classList.add("active");
+                fileItem.scrollIntoView({ behavior: "smooth", block: "nearest" });
+            }
         }
 
         showThino = false;
