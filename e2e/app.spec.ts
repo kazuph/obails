@@ -158,3 +158,134 @@ test.describe('Mermaid', () => {
     await expect(page.locator('#mermaid-maximize-window')).toBeAttached();
   });
 });
+
+test.describe('Graph View', () => {
+  test('should have graph button in toolbar', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    const graphBtn = page.locator('#graph-btn');
+    await expect(graphBtn).toBeVisible();
+    await expect(graphBtn).toHaveText('Graph');
+  });
+
+  test('should have graph overlay (hidden by default)', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    const overlay = page.locator('#graph-overlay');
+    await expect(overlay).toBeAttached();
+    // Check it's not visible (no 'visible' class)
+    await expect(overlay).not.toHaveClass(/visible/);
+  });
+
+  test('should show graph overlay when clicking Graph button', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    // Click Graph button
+    await page.click('#graph-btn');
+
+    // Wait for overlay to become visible
+    const overlay = page.locator('#graph-overlay');
+    await expect(overlay).toHaveClass(/visible/, { timeout: 5000 });
+  });
+
+  test('should have graph header with title and close button', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    // Open graph view
+    await page.click('#graph-btn');
+
+    const overlay = page.locator('#graph-overlay');
+    await expect(overlay).toHaveClass(/visible/);
+
+    // Check header elements
+    await expect(page.locator('.graph-header h3')).toHaveText('Knowledge Graph');
+    await expect(page.locator('#graph-close')).toBeVisible();
+    await expect(page.locator('#graph-stats')).toBeVisible();
+  });
+
+  test('should close graph overlay when clicking close button', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    // Open graph view
+    await page.click('#graph-btn');
+
+    const overlay = page.locator('#graph-overlay');
+    await expect(overlay).toHaveClass(/visible/);
+
+    // Click close button
+    await page.click('#graph-close');
+
+    // Should be hidden
+    await expect(overlay).not.toHaveClass(/visible/);
+  });
+
+  test('should close graph overlay when pressing ESC', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    // Open graph view
+    await page.click('#graph-btn');
+
+    const overlay = page.locator('#graph-overlay');
+    await expect(overlay).toHaveClass(/visible/);
+
+    // Press ESC
+    await page.keyboard.press('Escape');
+
+    // Should be hidden
+    await expect(overlay).not.toHaveClass(/visible/);
+  });
+
+  test('should toggle graph view with keyboard shortcut (Cmd+G)', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    const overlay = page.locator('#graph-overlay');
+
+    // Initially hidden
+    await expect(overlay).not.toHaveClass(/visible/);
+
+    // Press Cmd+G to open
+    await page.keyboard.press('Meta+g');
+    await expect(overlay).toHaveClass(/visible/);
+
+    // Press Cmd+G again to close (toggle)
+    await page.keyboard.press('Meta+g');
+    await expect(overlay).not.toHaveClass(/visible/);
+  });
+
+  test('should have graph container for rendering', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    // Open graph view
+    await page.click('#graph-btn');
+
+    const container = page.locator('#graph-container');
+    await expect(container).toBeVisible();
+  });
+
+  test('graph overlay should have cosmic/space styling', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    // Open graph view
+    await page.click('#graph-btn');
+
+    const overlay = page.locator('#graph-overlay');
+    await expect(overlay).toHaveClass(/visible/);
+
+    // Check background color is dark (space theme)
+    const bgColor = await page.evaluate(() => {
+      const el = document.querySelector('.graph-overlay');
+      return getComputedStyle(el!).backgroundColor;
+    });
+    // Should be dark color (rgb(10, 10, 26) = #0a0a1a)
+    expect(bgColor).toContain('rgb(10, 10, 26)');
+  });
+});

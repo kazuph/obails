@@ -20,11 +20,19 @@ import {
   calculateFitZoom,
   calculateMinimapScale,
 } from "./lib/mermaid-calc";
+import {
+  isCacheValid,
+  getCacheAgeText,
+  createCacheEntry,
+  saveCache,
+  loadCache,
+  clearCache,
+} from "./lib/graph-cache";
 
 // State
 let currentNote: Note | null = null;
 let showThino = false;
-let showGraph = true; // Start with graph view
+let showGraph = false;
 let contextMenuTargetPath: string = "";
 let contextMenuTargetIsDir: boolean = false;
 let draggedFilePath: string | null = null;
@@ -48,30 +56,50 @@ async function init() {
         if (config?.Vault?.Path) {
             await loadFileTree();
 
-            // Check if we should show graph view on startup
-            const showGraphOnStartup = localStorage.getItem("obails-show-graph") !== "false";
-            if (showGraphOnStartup) {
-                showGraph = true;
-                await showGraphView();
-            } else {
-                showGraph = false;
-                // Open last file if exists
-                const lastFile = localStorage.getItem("obails-last-file");
-                if (lastFile) {
-                    try {
-                        await openNote(lastFile);
-                    } catch {
-                        // File might have been deleted, clear the storage
-                        localStorage.removeItem("obails-last-file");
-                    }
+            // Open last file if exists
+            const lastFile = localStorage.getItem("obails-last-file");
+            if (lastFile) {
+                try {
+                    await openNote(lastFile);
+                } catch {
+                    // File might have been deleted, clear the storage
+                    localStorage.removeItem("obails-last-file");
                 }
             }
+
+            // Prefetch graph data in background (don't block init)
+            prefetchGraphData().catch(console.error);
         }
     } catch (err) {
         console.warn("Running in browser mode - backend services unavailable");
     }
 
     setupEventListeners();
+}
+
+// Prefetch graph data on app startup
+async function prefetchGraphData() {
+    console.log("[Graph] Prefetching graph data...");
+    try {
+        await LinkService.RebuildIndex();
+        const graph = await GraphService.GetFullGraph();
+        const stats = await GraphService.GetGraphStats();
+
+        // Preserve existing positions if any
+        const cached = loadCache(graphCacheStorage);
+        const cachedData = cached?.data as CachedGraphData | undefined;
+
+        const cacheData: CachedGraphData = {
+            graph,
+            stats,
+            nodePositions: cachedData?.nodePositions,
+            viewState: cachedData?.viewState,
+        };
+        saveCache(graphCacheStorage, createCacheEntry(cacheData));
+        console.log("[Graph] Prefetch complete - ready for instant display");
+    } catch (err) {
+        console.error("[Graph] Prefetch failed:", err);
+    }
 }
 
 // Event Listeners
@@ -746,6 +774,11 @@ function setupResizeHandles() {
 async function refresh() {
     await loadFileTree();
     await LinkService.RebuildIndex();
+
+    // If graph view is showing, refresh the graph data
+    if (showGraph) {
+        await refreshGraphData();
+    }
 }
 
 
@@ -760,7 +793,6 @@ async function toggleGraphView() {
 
 async function showGraphView() {
     showGraph = true;
-    localStorage.setItem("obails-show-graph", "true");
 
     // Hide other views
     thinoPanel.style.display = "none";
@@ -775,7 +807,9 @@ async function showGraphView() {
 
 function hideGraphView() {
     showGraph = false;
-    localStorage.setItem("obails-show-graph", "false");
+
+    // Save node positions before closing
+    saveGraphNodePositions();
 
     const graphOverlay = document.getElementById("graph-overlay")!;
     graphOverlay.classList.remove("visible");
@@ -788,15 +822,89 @@ function hideGraphView() {
         graphInstance._destructor();
         graphInstance = null;
     }
+
+    // Open last file if exists and no note is currently open
+    if (!currentNote) {
+        const lastFile = localStorage.getItem("obails-last-file");
+        if (lastFile) {
+            openNote(lastFile).catch(() => {
+                localStorage.removeItem("obails-last-file");
+            });
+        }
+    }
 }
 
-async function loadGraphData() {
+function saveGraphNodePositions() {
+    if (!graphInstance) return;
+
+    const graphData = graphInstance.graphData();
+    const positions: { [id: string]: { x: number; y: number } } = {};
+
+    for (const node of graphData.nodes as GraphNodeData[]) {
+        if (node.x !== undefined && node.y !== undefined) {
+            positions[node.id] = { x: node.x, y: node.y };
+        }
+    }
+
+    // Save view state (zoom and center)
+    const zoom = graphInstance.zoom();
+    const center = graphInstance.centerAt();
+    const viewState = center ? { zoom, centerX: center.x, centerY: center.y } : undefined;
+
+    // Update cache with positions and view state
+    const cached = loadCache(graphCacheStorage);
+    if (cached && isCacheValid(cached)) {
+        const cachedData = cached.data as CachedGraphData;
+        cachedData.nodePositions = positions;
+        cachedData.viewState = viewState;
+        saveCache(graphCacheStorage, createCacheEntry(cachedData, cached.timestamp));
+    }
+}
+
+// localStorage adapter for graph cache
+const graphCacheStorage = {
+    get: (key: string) => localStorage.getItem(key),
+    set: (key: string, value: string) => localStorage.setItem(key, value),
+    remove: (key: string) => localStorage.removeItem(key),
+};
+
+interface CachedGraphData {
+    graph: Graph;
+    stats: { nodeCount: number; edgeCount: number };
+    nodePositions?: { [id: string]: { x: number; y: number } };
+    viewState?: { zoom: number; centerX: number; centerY: number };
+}
+
+async function loadGraphData(forceRefresh: boolean = false) {
     const graphContainer = document.getElementById("graph-container")!;
     const graphStats = document.getElementById("graph-stats")!;
 
     try {
+        // Always check cache first
+        const cached = loadCache(graphCacheStorage);
+
+        if (cached && isCacheValid(cached) && !forceRefresh) {
+            // Show cached data immediately
+            const cachedData = cached.data as CachedGraphData;
+            const age = getCacheAgeText(cached);
+            graphStats.textContent = `${cachedData.stats.nodeCount || 0} notes, ${cachedData.stats.edgeCount || 0} links (${age})`;
+            renderGraph(cachedData.graph, graphContainer, cachedData.nodePositions, cachedData.viewState);
+
+            // Background update (don't await, just start it)
+            updateGraphDataInBackground().catch(console.error);
+            return;
+        }
+
+        // No cache or force refresh - load fresh data
+        graphStats.textContent = "Building index...";
+        await LinkService.RebuildIndex();
+
         const graph = await GraphService.GetFullGraph();
         const stats = await GraphService.GetGraphStats();
+
+        // Save to cache
+        const cacheData: CachedGraphData = { graph, stats };
+        saveCache(graphCacheStorage, createCacheEntry(cacheData));
 
         // Update stats display
         graphStats.textContent = `${stats.nodeCount || 0} notes, ${stats.edgeCount || 0} links`;
@@ -808,6 +916,43 @@ async function loadGraphData() {
         graphStats.textContent = "Failed to load graph";
         graphContainer.innerHTML = '<div class="graph-error">Failed to load graph data</div>';
     }
+}
+
+// Background update - fetches new data but doesn't update UI
+async function updateGraphDataInBackground() {
+    try {
+        await LinkService.RebuildIndex();
+        const graph = await GraphService.GetFullGraph();
+        const stats = await GraphService.GetGraphStats();
+
+        // Get current positions from cache to preserve them
+        const cached = loadCache(graphCacheStorage);
+        const cachedData = cached?.data as CachedGraphData | undefined;
+
+        // Save new data to cache, preserving positions and view state
+        const cacheData: CachedGraphData = {
+            graph,
+            stats,
+            nodePositions: cachedData?.nodePositions,
+            viewState: cachedData?.viewState,
+        };
+        saveCache(graphCacheStorage, createCacheEntry(cacheData));
+        console.log("[Graph] Background update complete");
+    } catch (err) {
+        console.error("[Graph] Background update failed:", err);
+    }
+}
+
+async function refreshGraphData() {
+    // Clear position cache to get fresh layout
+    const cached = loadCache(graphCacheStorage);
+    if (cached) {
+        const cachedData = cached.data as CachedGraphData;
+        cachedData.nodePositions = undefined;
+        cachedData.viewState = undefined;
+        saveCache(graphCacheStorage, createCacheEntry(cachedData, cached.timestamp));
+    }
+    await loadGraphData(true);
 }
 
 interface GraphNodeData {
@@ -823,7 +968,12 @@ interface GraphEdgeData {
     target: string | GraphNodeData;
 }
 
-function renderGraph(graph: Graph, container: HTMLElement) {
+function renderGraph(
+    graph: Graph,
+    container: HTMLElement,
+    savedPositions?: { [id: string]: { x: number; y: number } },
+    savedViewState?: { zoom: number; centerX: number; centerY: number }
+) {
     // Clean up existing instance
     if (graphInstance) {
         graphInstance._destructor();
@@ -831,12 +981,17 @@ function renderGraph(graph: Graph, container: HTMLElement) {
 
     container.innerHTML = "";
 
-    // Prepare data for force-graph
-    const nodes: GraphNodeData[] = graph.nodes.map(n => ({
-        id: n.id,
-        label: n.label,
-        linkCount: n.linkCount
-    }));
+    // Prepare data for force-graph with restored positions
+    const nodes: GraphNodeData[] = graph.nodes.map(n => {
+        const pos = savedPositions?.[n.id];
+        return {
+            id: n.id,
+            label: n.label,
+            linkCount: n.linkCount,
+            // Restore position if available
+            ...(pos && { x: pos.x, y: pos.y, fx: pos.x, fy: pos.y })
+        };
+    });
 
     const links: GraphEdgeData[] = graph.edges.map(e => ({
         source: e.source,
@@ -855,7 +1010,7 @@ function renderGraph(graph: Graph, container: HTMLElement) {
     const textColor = isDark ? "#e2e8f0" : "#1e293b";
     const highlightColor = "#f472b6"; // Pink for highlight
 
-    // Create the force graph
+    // Create the force graph - simple version for large graphs
     graphInstance = ForceGraph()(container)
         .width(width)
         .height(height)
@@ -863,63 +1018,96 @@ function renderGraph(graph: Graph, container: HTMLElement) {
         .nodeId("id")
         .nodeLabel("label")
         .nodeColor(() => nodeColor)
-        .nodeVal((node: GraphNodeData) => Math.max(3, node.linkCount + 2))
+        .nodeVal((node: GraphNodeData) => Math.max(1, Math.log(node.linkCount + 1) * 2))
         .linkSource("source")
         .linkTarget("target")
         .linkColor(() => linkColor)
-        .linkWidth(1.5)
-        .linkDirectionalParticles(2)
-        .linkDirectionalParticleWidth(2)
-        .linkDirectionalParticleColor(() => highlightColor)
+        .linkWidth(0.3)
         .backgroundColor("transparent")
-        .onNodeClick((node: GraphNodeData) => {
-            // Close graph view and open the note
+        .enablePanInteraction(true) // Enable mouse drag pan
+        .enableZoomInteraction(false) // Disable default wheel zoom (we handle it custom)
+        .enablePointerInteraction(true) // Enable pointer events
+        .onNodeClick((node: GraphNodeData, event: MouseEvent) => {
+            console.log("[Graph] Node clicked:", node.id, node.label);
+            event.stopPropagation();
             hideGraphView();
             openNote(node.id);
         })
         .onNodeHover((node: GraphNodeData | null) => {
             container.style.cursor = node ? "pointer" : "grab";
         })
-        .nodeCanvasObject((node: GraphNodeData, ctx: CanvasRenderingContext2D, globalScale: number) => {
-            const label = node.label;
-            const size = Math.max(3, node.linkCount + 2);
-            const fontSize = Math.max(10, 12 / globalScale);
-
-            // Draw node (star-like glow effect)
-            ctx.beginPath();
-            ctx.arc(node.x!, node.y!, size, 0, 2 * Math.PI);
-
-            // Glow effect
-            const gradient = ctx.createRadialGradient(
-                node.x!, node.y!, 0,
-                node.x!, node.y!, size * 2
-            );
-            gradient.addColorStop(0, nodeColor);
-            gradient.addColorStop(1, "transparent");
-            ctx.fillStyle = gradient;
-            ctx.fill();
-
-            // Core
-            ctx.beginPath();
-            ctx.arc(node.x!, node.y!, size * 0.6, 0, 2 * Math.PI);
-            ctx.fillStyle = nodeColor;
-            ctx.fill();
-
-            // Draw label
-            ctx.font = `${fontSize}px "SF Pro Text", -apple-system, sans-serif`;
-            ctx.fillStyle = textColor;
-            ctx.textAlign = "center";
-            ctx.textBaseline = "top";
-            ctx.fillText(label, node.x!, node.y! + size + 4);
-        })
-        .cooldownTicks(100)
+        .cooldownTicks(savedPositions ? 0 : 100) // Skip simulation if positions restored
         .d3AlphaDecay(0.02)
-        .d3VelocityDecay(0.3);
+        .d3VelocityDecay(0.3)
+        .warmupTicks(savedPositions ? 0 : 50); // Skip warmup if positions restored
 
-    // Zoom to fit after data loads
+    // Restore view state or zoom to fit
     setTimeout(() => {
-        graphInstance?.zoomToFit(400, 50);
-    }, 500);
+        if (savedViewState && savedPositions) {
+            // Restore previous view state
+            graphInstance?.zoom(savedViewState.zoom);
+            graphInstance?.centerAt(savedViewState.centerX, savedViewState.centerY);
+            // Release fixed positions after a short delay to allow dragging
+            setTimeout(() => {
+                const data = graphInstance?.graphData();
+                if (data) {
+                    for (const node of data.nodes as GraphNodeData[]) {
+                        node.fx = undefined;
+                        node.fy = undefined;
+                    }
+                }
+            }, 100);
+        } else {
+            // Zoom to fit for new graphs
+            graphInstance?.zoomToFit(400, 50);
+        }
+    }, 100);
+
+    // Custom wheel handler:
+    // - Normal 2-finger scroll = pan (move around)
+    // - Ctrl/Cmd/Shift + 2-finger scroll = zoom (standard for design tools)
+    container.addEventListener("wheel", (e: WheelEvent) => {
+        if (!graphInstance) return;
+        e.preventDefault();
+
+        if (e.ctrlKey || e.metaKey || e.shiftKey) {
+            // Ctrl/Cmd/Shift + scroll = zoom (supports all platforms)
+            const currentZoom = graphInstance.zoom();
+            const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+            graphInstance.zoom(currentZoom * zoomFactor);
+        } else {
+            // Normal scroll = pan
+            const { x, y } = graphInstance.centerAt() as { x: number; y: number };
+            const zoomLevel = graphInstance.zoom();
+            // Adjust pan speed based on zoom level
+            const panSpeed = 1 / zoomLevel;
+            graphInstance.centerAt(x + e.deltaX * panSpeed, y + e.deltaY * panSpeed);
+        }
+    }, { passive: false });
+
+    // Pinch zoom handler (macOS/Safari gesture events)
+    let initialPinchZoom = 1;
+    container.addEventListener("gesturestart", ((e: GestureEvent) => {
+        if (!graphInstance) return;
+        e.preventDefault();
+        initialPinchZoom = graphInstance.zoom();
+    }) as EventListener, { passive: false });
+
+    container.addEventListener("gesturechange", ((e: GestureEvent) => {
+        if (!graphInstance) return;
+        e.preventDefault();
+        graphInstance.zoom(initialPinchZoom * e.scale);
+    }) as EventListener, { passive: false });
+
+    container.addEventListener("gestureend", ((e: GestureEvent) => {
+        e.preventDefault();
+    }) as EventListener, { passive: false });
+}
+
+// GestureEvent type for macOS Safari
+interface GestureEvent extends UIEvent {
+    scale: number;
+    rotation: number;
 }
 
 // Mermaid Setup
