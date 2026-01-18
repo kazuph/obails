@@ -19,11 +19,21 @@ type Thino struct {
 	Done    bool   `json:"done"`    // true if [x]
 }
 
+// FileType constants
+const (
+	FileTypeMarkdown = "markdown"
+	FileTypeImage    = "image"
+	FileTypePDF      = "pdf"
+	FileTypeHTML     = "html"
+	FileTypeOther    = "other"
+)
+
 // FileInfo represents a file or directory in the vault
 type FileInfo struct {
 	Name       string     `json:"name"`
 	Path       string     `json:"path"`
 	IsDir      bool       `json:"isDir"`
+	FileType   string     `json:"fileType,omitempty"` // markdown, image, pdf, html, other
 	Children   []FileInfo `json:"children,omitempty"`
 	ModifiedAt time.Time  `json:"modifiedAt"`
 }

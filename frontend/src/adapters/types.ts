@@ -23,6 +23,9 @@ export interface IFileAdapter {
   createFile(path: string, content: string): Promise<void>;
   moveFile(sourcePath: string, destPath: string): Promise<void>;
   deletePath(path: string): Promise<void>;
+  readFile(path: string): Promise<string>;
+  readBinaryFile(path: string): Promise<string>; // Returns base64 encoded content
+  openExternal(path: string): Promise<void>; // Open file with system default app
 }
 
 /**

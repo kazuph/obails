@@ -9,13 +9,13 @@
   
   <Identity 
     Name="com.example.obails"
-    Publisher="CN=My Company"
+    Publisher="CN=kazuph"
     Version="0.1.0.0" 
     ProcessorArchitecture="x64" />
   
   <Properties>
-    <DisplayName>My Product</DisplayName>
-    <PublisherDisplayName>My Company</PublisherDisplayName>
+    <DisplayName>Obails</DisplayName>
+    <PublisherDisplayName>kazuph</PublisherDisplayName>
     <Description>A obails application</Description>
     <Logo>Assets\StoreLogo.png</Logo>
   </Properties>
@@ -31,7 +31,7 @@
   <Applications>
     <Application Id="com.example.obails" Executable="obails" EntryPoint="Windows.FullTrustApplication">
       <uap:VisualElements
-        DisplayName="My Product"
+        DisplayName="Obails"
         Description="A obails application"
         BackgroundColor="transparent"
         Square150x150Logo="Assets\Square150x150Logo.png"

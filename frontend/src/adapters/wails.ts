@@ -19,6 +19,9 @@ export function createWailsAdapters(): IAppAdapters {
       createFile: (path, content) => FileService.CreateFile(path, content),
       moveFile: (src, dest) => FileService.MoveFile(src, dest),
       deletePath: (path) => FileService.DeletePath(path),
+      readFile: (path) => FileService.ReadFile(path),
+      readBinaryFile: (path) => FileService.ReadBinaryFile(path),
+      openExternal: (path) => FileService.OpenExternal(path),
     },
     note: {
       getNote: (path) => NoteService.GetNote(path),

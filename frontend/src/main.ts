@@ -52,6 +52,18 @@ const outlineList = document.getElementById("outline-list")!;
 const fileSearchInput = document.getElementById("file-search-input") as HTMLInputElement;
 const fileSearchClear = document.getElementById("file-search-clear")!;
 
+// New viewer elements
+const imageViewer = document.getElementById("image-viewer")!;
+const imagePreview = document.getElementById("image-preview") as HTMLImageElement;
+const imageTitle = document.getElementById("image-title")!;
+const pdfViewer = document.getElementById("pdf-viewer")!;
+const pdfFrame = document.getElementById("pdf-frame") as HTMLIFrameElement;
+const pdfTitle = document.getElementById("pdf-title")!;
+const htmlEditorContainer = document.getElementById("html-editor-container")!;
+const htmlEditor = document.getElementById("html-editor") as HTMLTextAreaElement;
+const htmlPreview = document.getElementById("html-preview") as HTMLIFrameElement;
+const htmlEditorTitle = document.getElementById("html-editor-title")!;
+
 // Initialize
 async function init() {
     try {
@@ -132,6 +144,10 @@ function setupEventListeners() {
 
     editor.addEventListener("input", debounce(saveCurrentNote, 500));
     editor.addEventListener("input", updatePreview);
+
+    // HTML Editor events
+    htmlEditor.addEventListener("input", debounce(saveHtmlFile, 500));
+    htmlEditor.addEventListener("input", updateHtmlPreview);
 
     // Keyboard shortcuts
     document.addEventListener("keydown", (e) => {
@@ -538,6 +554,168 @@ function setupThemeSelector() {
     });
 }
 
+// File Type Helpers
+function getFileIcon(file: FileInfo): string {
+    if (file.isDir) return "📁";
+
+    const fileType = file.fileType || "other";
+    switch (fileType) {
+        case "markdown": return "📝";
+        case "image": return "🖼️";
+        case "pdf": return "📕";
+        case "html": return "🌐";
+        default: return "📄";
+    }
+}
+
+// Open file based on file type
+async function openFile(path: string, fileType: string): Promise<void> {
+    hideAllViewers();
+
+    switch (fileType) {
+        case "markdown":
+            await openNote(path);
+            break;
+        case "image":
+            await openImage(path);
+            break;
+        case "pdf":
+            await openPDF(path);
+            break;
+        case "html":
+            await openHTML(path);
+            break;
+        default:
+            // Open with system default app (macOS open command)
+            await openExternal(path);
+            break;
+    }
+}
+
+// Hide all viewer panels
+function hideAllViewers() {
+    editorContainer.style.display = "none";
+    thinoPanel.style.display = "none";
+    imageViewer.style.display = "none";
+    pdfViewer.style.display = "none";
+    htmlEditorContainer.style.display = "none";
+}
+
+// Open image file
+async function openImage(path: string): Promise<void> {
+    try {
+        const base64Data = await FileService.ReadBinaryFile(path);
+        const ext = path.split('.').pop()?.toLowerCase() || 'png';
+        const mimeType = getMimeTypeFromExt(ext);
+
+        imagePreview.src = `data:${mimeType};base64,${base64Data}`;
+        imageTitle.textContent = path.split('/').pop() || 'Image';
+        imageViewer.style.display = "block";
+
+        // Update file tree selection
+        updateFileTreeSelection(path);
+    } catch (err) {
+        console.error("Failed to open image:", err);
+        alert(`Failed to open image: ${err}`);
+    }
+}
+
+// Open PDF file
+async function openPDF(path: string): Promise<void> {
+    try {
+        const base64Data = await FileService.ReadBinaryFile(path);
+        pdfFrame.src = `data:application/pdf;base64,${base64Data}`;
+        pdfTitle.textContent = path.split('/').pop() || 'PDF';
+        pdfViewer.style.display = "block";
+
+        // Update file tree selection
+        updateFileTreeSelection(path);
+    } catch (err) {
+        console.error("Failed to open PDF:", err);
+        alert(`Failed to open PDF: ${err}`);
+    }
+}
+
+// Open HTML file with editor + preview
+let currentHtmlPath: string | null = null;
+
+async function openHTML(path: string): Promise<void> {
+    try {
+        const content = await FileService.ReadFile(path);
+        currentHtmlPath = path;
+
+        htmlEditor.value = content;
+        htmlEditorTitle.textContent = path.split('/').pop() || 'HTML';
+        htmlEditorContainer.style.display = "flex";
+
+        // Update preview
+        updateHtmlPreview();
+
+        // Update file tree selection
+        updateFileTreeSelection(path);
+    } catch (err) {
+        console.error("Failed to open HTML:", err);
+        alert(`Failed to open HTML: ${err}`);
+    }
+}
+
+// Update HTML preview
+function updateHtmlPreview() {
+    const content = htmlEditor.value;
+    const doc = htmlPreview.contentDocument || htmlPreview.contentWindow?.document;
+    if (doc) {
+        doc.open();
+        doc.write(content);
+        doc.close();
+    }
+}
+
+// Save HTML file
+async function saveHtmlFile() {
+    if (!currentHtmlPath) return;
+
+    try {
+        await FileService.CreateFile(currentHtmlPath, htmlEditor.value);
+    } catch (err) {
+        console.error("Failed to save HTML:", err);
+    }
+}
+
+// Open file with system default app
+async function openExternal(path: string): Promise<void> {
+    try {
+        await FileService.OpenExternal(path);
+    } catch (err) {
+        console.error("Failed to open external:", err);
+        alert(`Failed to open file: ${err}`);
+    }
+}
+
+// Get MIME type from extension
+function getMimeTypeFromExt(ext: string): string {
+    const mimeTypes: { [key: string]: string } = {
+        png: "image/png",
+        jpg: "image/jpeg",
+        jpeg: "image/jpeg",
+        gif: "image/gif",
+        webp: "image/webp",
+        svg: "image/svg+xml",
+        bmp: "image/bmp",
+        ico: "image/x-icon",
+    };
+    return mimeTypes[ext] || "application/octet-stream";
+}
+
+// Update file tree selection highlight
+function updateFileTreeSelection(path: string) {
+    document.querySelectorAll(".file-item").forEach(el => el.classList.remove("active"));
+    const fileItem = document.querySelector(`.file-item[data-path="${path}"]`);
+    if (fileItem) {
+        fileItem.classList.add("active");
+        fileItem.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+}
+
 // File Tree
 async function loadFileTree() {
     try {
@@ -567,11 +745,11 @@ function createFileElement(file: FileInfo): HTMLElement {
     el.setAttribute("data-path", file.path);
     el.setAttribute("data-name", file.name);
 
-    const icon = file.isDir ? (file.children && file.children.length > 0 ? "📁" : "📂") : "📄";
+    const icon = getFileIcon(file);
     el.innerHTML = `<span class="folder-icon">${icon}</span><span class="file-name">${file.name}</span>`;
 
     // Make files draggable (not folders for now)
-    if (!file.isDir && file.name.endsWith(".md")) {
+    if (!file.isDir) {
         el.draggable = true;
         el.addEventListener("dragstart", (e) => {
             draggedFilePath = file.path;
@@ -637,10 +815,11 @@ function createFileElement(file: FileInfo): HTMLElement {
                 await moveFileToFolder(draggedFilePath, file.path);
             }
         });
-    } else if (file.name.endsWith(".md")) {
+    } else {
+        // Handle file click based on file type
         el.addEventListener("click", (e) => {
             e.stopPropagation();
-            openNote(file.path);
+            openFile(file.path, file.fileType || "other");
         });
 
         // Right-click context menu for files
@@ -672,19 +851,13 @@ async function openNote(path: string) {
             updatePaneTitles(filename);
         }
 
-        // Hide thino, show editor
+        // Hide all viewers, show markdown editor
         showThino = false;
-        thinoPanel.style.display = "none";
+        hideAllViewers();
         editorContainer.style.display = "flex";
 
-        // Update file tree selection - highlight the opened file
-        document.querySelectorAll(".file-item").forEach(el => el.classList.remove("active"));
-        const fileItem = document.querySelector(`.file-item[data-path="${path}"]`);
-        if (fileItem) {
-            fileItem.classList.add("active");
-            // Scroll into view if needed
-            fileItem.scrollIntoView({ behavior: "smooth", block: "nearest" });
-        }
+        // Update file tree selection
+        updateFileTreeSelection(path);
     } catch (err) {
         console.error("Failed to open note:", err);
     }
@@ -724,16 +897,11 @@ async function openTodayNote() {
             updatePaneTitles(filename);
 
             // Update file tree selection
-            document.querySelectorAll(".file-item").forEach(el => el.classList.remove("active"));
-            const fileItem = document.querySelector(`.file-item[data-path="${note.path}"]`);
-            if (fileItem) {
-                fileItem.classList.add("active");
-                fileItem.scrollIntoView({ behavior: "smooth", block: "nearest" });
-            }
+            updateFileTreeSelection(note.path);
         }
 
         showThino = false;
-        thinoPanel.style.display = "none";
+        hideAllViewers();
         editorContainer.style.display = "flex";
     } catch (err) {
         console.error("Failed to open today's note:", err);
@@ -798,12 +966,11 @@ function jumpToLine(lineNumber: number) {
 // Thino
 function toggleThino() {
     showThino = !showThino;
+    hideAllViewers();
     if (showThino) {
         thinoPanel.style.display = "block";
-        editorContainer.style.display = "none";
         loadThinos();
     } else {
-        thinoPanel.style.display = "none";
         editorContainer.style.display = "flex";
     }
 }
@@ -1032,9 +1199,8 @@ async function toggleGraphView() {
 async function showGraphView() {
     showGraph = true;
 
-    // Hide other views
-    thinoPanel.style.display = "none";
-    editorContainer.style.display = "none";
+    // Hide all viewers
+    hideAllViewers();
 
     const graphOverlay = document.getElementById("graph-overlay")!;
     graphOverlay.classList.add("visible");

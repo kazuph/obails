@@ -90,6 +90,43 @@
                     <!-- Thino entries will be rendered here -->
                 </div>
             </div>
+
+            <!-- Image Viewer -->
+            <div class="image-viewer" id="image-viewer" style="display: none;">
+                <div class="pane-header">
+                    <span class="pane-title" id="image-title">Image</span>
+                </div>
+                <div class="image-container" id="image-container">
+                    <img id="image-preview" alt="Preview" />
+                </div>
+            </div>
+
+            <!-- PDF Viewer -->
+            <div class="pdf-viewer" id="pdf-viewer" style="display: none;">
+                <div class="pane-header">
+                    <span class="pane-title" id="pdf-title">PDF</span>
+                </div>
+                <div class="pdf-container" id="pdf-container">
+                    <iframe id="pdf-frame" title="PDF Preview"></iframe>
+                </div>
+            </div>
+
+            <!-- HTML Editor -->
+            <div class="html-editor-container" id="html-editor-container" style="display: none;">
+                <div class="editor-pane" id="html-editor-pane">
+                    <div class="pane-header">
+                        <span class="pane-title" id="html-editor-title">HTML</span>
+                    </div>
+                    <textarea id="html-editor" placeholder="HTML content..."></textarea>
+                </div>
+                <div class="resize-handle vertical" id="html-editor-resize"></div>
+                <div class="preview-pane" id="html-preview-pane">
+                    <div class="pane-header">
+                        <span class="pane-title">Preview</span>
+                    </div>
+                    <iframe id="html-preview" sandbox="allow-same-origin" title="HTML Preview"></iframe>
+                </div>
+            </div>
         </div>
 
         <div class="right-sidebar" id="right-sidebar">

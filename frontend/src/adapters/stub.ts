@@ -30,6 +30,9 @@ export function createStubAdapters(
     createFile: async () => {},
     moveFile: async () => {},
     deletePath: async () => {},
+    readFile: async () => "",
+    readBinaryFile: async () => "",
+    openExternal: async () => {},
   };
 
   const defaultNote: INoteAdapter = {

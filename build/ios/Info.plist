@@ -7,9 +7,9 @@
     <key>CFBundleIdentifier</key>
     <string>com.example.obails</string>
     <key>CFBundleName</key>
-    <string>My Product</string>
+    <string>Obails</string>
     <key>CFBundleDisplayName</key>
-    <string>My Product</string>
+    <string>Obails</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
@@ -49,7 +49,7 @@
     </dict>
     
     <key>NSHumanReadableCopyright</key>
-    <string>© 2026, My Company</string>
+    <string>© 2026, kazuph</string>
     
     
     <key>CFBundleGetInfoString</key>
