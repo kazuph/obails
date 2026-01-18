@@ -13,6 +13,10 @@
                 <h2>Obails</h2>
                 <button id="settings-btn" title="Settings (⌘,)">⚙</button>
             </div>
+            <div class="file-search">
+                <input type="text" id="file-search-input" placeholder="Search files..." autocomplete="off">
+                <button id="file-search-clear" class="search-clear-btn" style="display: none;">✕</button>
+            </div>
             <div class="file-tree" id="file-tree">
                 <!-- File tree will be rendered here -->
             </div>
@@ -95,7 +99,14 @@
                     <!-- Outline will be rendered here -->
                 </div>
             </div>
-            <div class="resize-handle horizontal" id="right-sidebar-resize"></div>
+            <div class="resize-handle horizontal" id="outline-resize"></div>
+            <div class="outgoing-links-panel" id="outgoing-links-panel">
+                <h3>Outgoing Links</h3>
+                <div id="outgoing-links-list">
+                    <!-- Outgoing links will be rendered here -->
+                </div>
+            </div>
+            <div class="resize-handle horizontal" id="outgoing-resize"></div>
             <div class="backlinks-panel" id="backlinks-panel">
                 <h3>Backlinks</h3>
                 <div id="backlinks-list">

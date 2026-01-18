@@ -10,6 +10,7 @@ import type {
   Config,
   Thino,
   Backlink,
+  Link,
 } from "./types";
 
 /**
@@ -41,6 +42,7 @@ export function createStubAdapters(
 
   const defaultLink: ILinkAdapter = {
     getBacklinks: async () => [],
+    getOutgoingLinks: async () => [],
     rebuildIndex: async () => {},
   };
 
@@ -125,4 +127,18 @@ export function createMockConfig(
     },
     ...overrides,
   } as Config;
+}
+
+/**
+ * Helper to create a mock link for testing
+ */
+export function createMockLink(
+  overrides?: Partial<Link>
+): Link {
+  return {
+    text: "target-note",
+    targetPath: "target-note.md",
+    exists: true,
+    ...overrides,
+  } as Link;
 }

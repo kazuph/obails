@@ -4,7 +4,7 @@ import * as NoteService from "../bindings/github.com/kazuph/obails/services/note
 import * as LinkService from "../bindings/github.com/kazuph/obails/services/linkservice.js";
 import * as WindowService from "../bindings/github.com/kazuph/obails/services/windowservice.js";
 import * as GraphService from "../bindings/github.com/kazuph/obails/services/graphservice.js";
-import { FileInfo, Note, Thino, Backlink, Config, Graph } from "../bindings/github.com/kazuph/obails/models/models.js";
+import { FileInfo, Note, Thino, Backlink, Link, Config, Graph } from "../bindings/github.com/kazuph/obails/models/models.js";
 import mermaid from "mermaid";
 import hljs from "highlight.js";
 import "highlight.js/styles/github-dark.css";
@@ -47,7 +47,10 @@ const editorContainer = document.querySelector(".editor-container") as HTMLEleme
 const thinoInput = document.getElementById("thino-input") as HTMLTextAreaElement;
 const thinoTimeline = document.getElementById("thino-timeline")!;
 const backlinksList = document.getElementById("backlinks-list")!;
+const outgoingLinksList = document.getElementById("outgoing-links-list")!;
 const outlineList = document.getElementById("outline-list")!;
+const fileSearchInput = document.getElementById("file-search-input") as HTMLInputElement;
+const fileSearchClear = document.getElementById("file-search-clear")!;
 
 // Initialize
 async function init() {
@@ -144,9 +147,18 @@ function setupEventListeners() {
             e.preventDefault();
             toggleGraphView();
         }
-        // ESC to close graph view
-        if (e.key === "Escape" && showGraph) {
-            hideGraphView();
+        // ESC to close graph view or context menu
+        if (e.key === "Escape") {
+            if (showGraph) {
+                hideGraphView();
+            }
+            hideContextMenu();
+        }
+        // Cmd+F or Ctrl+F to focus file search
+        if ((e.metaKey || e.ctrlKey) && e.key === "f" && !editor.matches(":focus")) {
+            e.preventDefault();
+            fileSearchInput.focus();
+            fileSearchInput.select();
         }
     });
 
@@ -154,6 +166,7 @@ function setupEventListeners() {
     setupThemeSelector();
     setupContextMenu();
     setupFileTreeDropTarget();
+    setupFileSearch();
 }
 
 // Setup file-tree as drop target for moving files to root
@@ -180,6 +193,122 @@ function setupFileTreeDropTarget() {
             fileTree.classList.remove("drag-over-root");
             // Move to root (empty string as target)
             await moveFileToFolder(draggedFilePath, "");
+        }
+    });
+}
+
+// File Search
+function setupFileSearch() {
+    if (!fileSearchInput) {
+        console.error("[FileSearch] fileSearchInput element not found!");
+        return;
+    }
+    let searchTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    // Incremental search on input
+    fileSearchInput.addEventListener("input", () => {
+        const query = fileSearchInput.value.trim().toLowerCase();
+
+        // Show/hide clear button
+        fileSearchClear.style.display = query ? "block" : "none";
+
+        // Debounce search for performance
+        if (searchTimeout) {
+            clearTimeout(searchTimeout);
+        }
+        searchTimeout = setTimeout(() => {
+            filterFileTree(query);
+        }, 100);
+    });
+
+    // Clear search
+    fileSearchClear.addEventListener("click", () => {
+        fileSearchInput.value = "";
+        fileSearchClear.style.display = "none";
+        filterFileTree("");
+        fileSearchInput.focus();
+    });
+
+    // Escape to clear and blur
+    fileSearchInput.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") {
+            if (fileSearchInput.value) {
+                fileSearchInput.value = "";
+                fileSearchClear.style.display = "none";
+                filterFileTree("");
+            } else {
+                fileSearchInput.blur();
+            }
+        }
+    });
+}
+
+// Filter file tree based on search query
+function filterFileTree(query: string) {
+    const allFileItems = fileTree.querySelectorAll(".file-item");
+    const allFolderWrappers = fileTree.querySelectorAll(".file-wrapper");
+
+    if (!query) {
+        // Show all items and collapse folders to original state
+        allFileItems.forEach(item => {
+            item.classList.remove("search-hidden", "search-match");
+        });
+        allFolderWrappers.forEach(wrapper => {
+            wrapper.classList.remove("search-hidden");
+        });
+        return;
+    }
+
+    // Track which folders have matching children
+    const foldersWithMatches = new Set<Element>();
+
+    // First pass: mark matching files and collect parent folders
+    allFileItems.forEach(item => {
+        const fileName = item.getAttribute("data-name") || item.textContent || "";
+        const isMatch = fileName.toLowerCase().includes(query);
+
+        if (isMatch) {
+            item.classList.add("search-match");
+            item.classList.remove("search-hidden");
+
+            // Mark all parent folders as having matches
+            let parent = item.parentElement;
+            while (parent && parent !== fileTree) {
+                if (parent.classList.contains("file-wrapper") || parent.classList.contains("folder-children")) {
+                    foldersWithMatches.add(parent);
+                }
+                parent = parent.parentElement;
+            }
+        } else {
+            item.classList.remove("search-match");
+            item.classList.add("search-hidden");
+        }
+    });
+
+    // Second pass: show/hide folder wrappers
+    allFolderWrappers.forEach(wrapper => {
+        const hasMatchingDescendants = foldersWithMatches.has(wrapper) ||
+            wrapper.querySelector(".search-match") !== null;
+
+        if (hasMatchingDescendants) {
+            wrapper.classList.remove("search-hidden");
+            // Expand folder children to show matches
+            const children = wrapper.querySelector(".folder-children");
+            if (children) {
+                (children as HTMLElement).style.display = "block";
+            }
+        } else {
+            wrapper.classList.add("search-hidden");
+        }
+    });
+
+    // Show folder items that lead to matches
+    allFileItems.forEach(item => {
+        if (item.classList.contains("folder")) {
+            const wrapper = item.closest(".file-wrapper");
+            if (wrapper && foldersWithMatches.has(wrapper)) {
+                item.classList.remove("search-hidden");
+            }
         }
     });
 }
@@ -248,10 +377,23 @@ function setupContextMenu() {
     const ctxNewFile = document.getElementById("ctx-new-file")!;
     const ctxDelete = document.getElementById("ctx-delete")!;
 
-    // Hide context menu on click elsewhere
-    document.addEventListener("click", () => {
-        hideContextMenu();
-    });
+    // Hide context menu on any interaction elsewhere
+    // Use capture phase (true) to catch events before stopPropagation() is called
+    document.addEventListener("mousedown", (e) => {
+        // Don't hide if clicking inside context menu
+        if (!contextMenu.contains(e.target as Node)) {
+            hideContextMenu();
+        }
+    }, true); // capture phase
+
+    // Also hide on right-click elsewhere (contextmenu event)
+    document.addEventListener("contextmenu", (e) => {
+        // If right-clicking outside the context menu, hide it first
+        // (the new context menu will be shown by the file item's handler after)
+        if (!contextMenu.contains(e.target as Node)) {
+            hideContextMenu();
+        }
+    }, true); // capture phase
 
     // Handle "New File" click
     ctxNewFile.addEventListener("click", () => {
@@ -346,6 +488,7 @@ async function deleteTargetPathWithArgs(targetPath: string, isDir: boolean) {
             editor.value = "";
             updatePreview();
             clearBacklinks();
+            clearOutgoingLinks();
             localStorage.removeItem("obails-last-file");
         }
     } catch (err) {
@@ -422,9 +565,10 @@ function createFileElement(file: FileInfo): HTMLElement {
     const el = document.createElement("div");
     el.className = `file-item ${file.isDir ? "folder" : "file"}`;
     el.setAttribute("data-path", file.path);
+    el.setAttribute("data-name", file.name);
 
     const icon = file.isDir ? (file.children && file.children.length > 0 ? "📁" : "📂") : "📄";
-    el.innerHTML = `<span class="folder-icon">${icon}</span><span>${file.name}</span>`;
+    el.innerHTML = `<span class="folder-icon">${icon}</span><span class="file-name">${file.name}</span>`;
 
     // Make files draggable (not folders for now)
     if (!file.isDir && file.name.endsWith(".md")) {
@@ -518,6 +662,7 @@ async function openNote(path: string) {
             editor.value = currentNote.content;
             updatePreview();
             await loadBacklinks(path);
+            await loadOutgoingLinks(path);
 
             // Save last opened file to localStorage
             localStorage.setItem("obails-last-file", path);
@@ -572,6 +717,7 @@ async function openTodayNote() {
             editor.value = note.content;
             updatePreview();
             await loadBacklinks(note.path);
+            await loadOutgoingLinks(note.path);
 
             // Update pane titles
             const filename = note.path.split("/").pop()?.replace(/\.md$/i, "") || note.path;
@@ -740,6 +886,49 @@ function renderBacklinks(backlinks: Backlink[]) {
     }
 }
 
+// Outgoing Links
+async function loadOutgoingLinks(path: string) {
+    try {
+        const links = await LinkService.GetLinkInfo(path);
+        renderOutgoingLinks(links);
+    } catch (err) {
+        console.error("Failed to load outgoing links:", err);
+        outgoingLinksList.innerHTML = "";
+    }
+}
+
+function clearOutgoingLinks() {
+    outgoingLinksList.innerHTML = '<div class="empty">No outgoing links</div>';
+}
+
+function renderOutgoingLinks(links: Link[]) {
+    outgoingLinksList.innerHTML = "";
+
+    // Filter: only show existing markdown files
+    const filteredLinks = links.filter(link => {
+        if (!link.exists) return false;
+        // Check if it's a markdown file (ends with .md or has no extension)
+        const hasExtension = link.targetPath.includes('.');
+        if (hasExtension && !link.targetPath.endsWith('.md')) return false;
+        return true;
+    });
+
+    for (const link of filteredLinks) {
+        const el = document.createElement("div");
+        el.className = "outgoing-link-item exists";
+        el.innerHTML = `<span class="link-text">${link.text}</span>`;
+        el.addEventListener("click", (e) => {
+            e.stopPropagation();
+            openNote(link.targetPath);
+        });
+        outgoingLinksList.appendChild(el);
+    }
+
+    if (filteredLinks.length === 0) {
+        outgoingLinksList.innerHTML = '<div class="empty">No outgoing links</div>';
+    }
+}
+
 // Resize Panels
 function setupResizeHandles() {
     const sidebar = document.getElementById("sidebar")!;
@@ -748,7 +937,8 @@ function setupResizeHandles() {
     const editorResize = document.getElementById("editor-resize")!;
     const outlinePanel = document.getElementById("outline-panel")!;
     const backlinksPanel = document.getElementById("backlinks-panel")!;
-    const rightSidebarResize = document.getElementById("right-sidebar-resize")!;
+    // Use outline-resize for right sidebar panel resizing
+    const outlineResize = document.getElementById("outline-resize");
 
     // Sidebar resize
     let isResizingSidebar = false;
@@ -768,11 +958,13 @@ function setupResizeHandles() {
 
     // Right sidebar (outline/backlinks) resize
     let isResizingRightSidebar = false;
-    rightSidebarResize.addEventListener("mousedown", (e) => {
-        isResizingRightSidebar = true;
-        rightSidebarResize.classList.add("dragging");
-        e.preventDefault();
-    });
+    if (outlineResize) {
+        outlineResize.addEventListener("mousedown", (e) => {
+            isResizingRightSidebar = true;
+            outlineResize.classList.add("dragging");
+            e.preventDefault();
+        });
+    }
 
     document.addEventListener("mousemove", (e) => {
         if (isResizingSidebar) {
@@ -810,7 +1002,9 @@ function setupResizeHandles() {
         isResizingRightSidebar = false;
         sidebarResize.classList.remove("dragging");
         editorResize.classList.remove("dragging");
-        rightSidebarResize.classList.remove("dragging");
+        if (outlineResize) {
+            outlineResize.classList.remove("dragging");
+        }
     });
 }
 
@@ -1026,6 +1220,7 @@ function renderGraph(
     container.innerHTML = "";
 
     // Prepare data for force-graph with restored positions
+    // Note: Backend already filters to markdown-only nodes and edges
     const nodes: GraphNodeData[] = graph.nodes.map(n => {
         const pos = savedPositions?.[n.id];
         return {

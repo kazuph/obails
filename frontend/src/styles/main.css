@@ -294,6 +294,61 @@ body {
     color: var(--text-primary);
 }
 
+/* File Search */
+.file-search {
+    padding: 0.5rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+#file-search-input {
+    flex: 1;
+    padding: 0.4rem 0.6rem;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 0.85rem;
+}
+
+#file-search-input:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(var(--accent), 0.1);
+}
+
+#file-search-input::placeholder {
+    color: var(--text-muted);
+}
+
+.search-clear-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0.2rem 0.4rem;
+    font-size: 0.8rem;
+    border-radius: 4px;
+}
+
+.search-clear-btn:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+/* Search highlight */
+.file-item.search-match .file-name {
+    background: rgba(255, 235, 59, 0.3);
+    border-radius: 2px;
+}
+
+.file-item.search-hidden,
+.file-wrapper.search-hidden {
+    display: none;
+}
+
 .file-tree {
     flex: 1;
     overflow-y: auto;
@@ -613,13 +668,14 @@ body {
 
 /* Outline Panel */
 .outline-panel {
-    flex: 2;
-    min-height: 100px;
+    flex: 1;
+    min-height: 80px;
     padding: 1rem;
     overflow-y: auto;
 }
 
 .outline-panel h3,
+.outgoing-links-panel h3,
 .backlinks-panel h3 {
     font-size: 0.9rem;
     color: var(--text-secondary);
@@ -660,6 +716,65 @@ body {
 
 .right-sidebar .resize-handle.horizontal:hover {
     background: var(--accent);
+}
+
+/* Outgoing Links Panel */
+.outgoing-links-panel {
+    flex: 1;
+    min-height: 80px;
+    padding: 1rem;
+    overflow-y: auto;
+    border-top: 1px solid var(--border);
+}
+
+.outgoing-link-item {
+    padding: 0.5rem 0.75rem;
+    border-radius: 6px;
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Existing links - clickable */
+.outgoing-link-item.exists {
+    background: var(--bg-tertiary);
+    cursor: pointer;
+}
+
+.outgoing-link-item.exists:hover {
+    background: var(--border);
+}
+
+.outgoing-link-item.exists .link-text {
+    font-size: 0.85rem;
+    color: var(--accent);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Missing links - not clickable */
+.outgoing-link-item.missing {
+    background: transparent;
+    border: 1px dashed var(--border);
+    cursor: default;
+    opacity: 0.7;
+}
+
+.outgoing-link-item.missing .link-text {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.outgoing-link-item .link-status {
+    font-size: 0.7rem;
+    flex-shrink: 0;
+    color: var(--text-muted);
+    font-style: italic;
 }
 
 /* Backlinks Panel */

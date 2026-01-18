@@ -4,6 +4,7 @@ import type {
   Config,
   Thino,
   Backlink,
+  Link,
 } from "../../bindings/github.com/kazuph/obails/models/models.js";
 
 /**
@@ -40,6 +41,7 @@ export interface INoteAdapter {
  */
 export interface ILinkAdapter {
   getBacklinks(path: string): Promise<Backlink[]>;
+  getOutgoingLinks(path: string): Promise<Link[]>;
   rebuildIndex(): Promise<void>;
 }
 
@@ -62,4 +64,4 @@ export interface IAppAdapters {
 }
 
 // Re-export model types for convenience
-export type { Note, FileInfo, Config, Thino, Backlink };
+export type { Note, FileInfo, Config, Thino, Backlink, Link };

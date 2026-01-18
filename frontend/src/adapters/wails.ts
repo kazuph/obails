@@ -29,6 +29,7 @@ export function createWailsAdapters(): IAppAdapters {
     },
     link: {
       getBacklinks: (path) => LinkService.GetBacklinks(path),
+      getOutgoingLinks: (path) => LinkService.GetLinkInfo(path),
       rebuildIndex: () => LinkService.RebuildIndex(),
     },
     window: {
