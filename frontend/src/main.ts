@@ -4,7 +4,7 @@ import * as NoteService from "../bindings/github.com/kazuph/obails/services/note
 import * as LinkService from "../bindings/github.com/kazuph/obails/services/linkservice.js";
 import * as WindowService from "../bindings/github.com/kazuph/obails/services/windowservice.js";
 import * as GraphService from "../bindings/github.com/kazuph/obails/services/graphservice.js";
-import { FileInfo, Note, Thino, Backlink, Link, Config, Graph } from "../bindings/github.com/kazuph/obails/models/models.js";
+import { FileInfo, Note, Timeline, Backlink, Link, Config, Graph } from "../bindings/github.com/kazuph/obails/models/models.js";
 import mermaid from "mermaid";
 import hljs from "highlight.js";
 import "highlight.js/styles/github-dark.css";
@@ -28,10 +28,18 @@ import {
   loadCache,
   clearCache,
 } from "./lib/graph-cache";
+import * as pdfjsLib from "pdfjs-dist";
+
+// Setup PDF.js worker
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+  "pdfjs-dist/build/pdf.worker.mjs",
+  import.meta.url
+).toString();
 
 // State
 let currentNote: Note | null = null;
-let showThino = false;
+let currentFilePath: string | null = null;  // Tracks any open file (md, image, pdf, html)
+let showTimeline = false;
 let showGraph = false;
 let contextMenuTargetPath: string = "";
 let contextMenuTargetIsDir: boolean = false;
@@ -42,10 +50,10 @@ let graphInstance: ReturnType<typeof ForceGraph> | null = null;
 const fileTree = document.getElementById("file-tree")!;
 const editor = document.getElementById("editor") as HTMLTextAreaElement;
 const preview = document.getElementById("preview")!;
-const thinoPanel = document.getElementById("thino-panel")!;
+const timelinePanel = document.getElementById("timeline-panel")!;
 const editorContainer = document.querySelector(".editor-container") as HTMLElement;
-const thinoInput = document.getElementById("thino-input") as HTMLTextAreaElement;
-const thinoTimeline = document.getElementById("thino-timeline")!;
+const timelineInput = document.getElementById("timeline-input") as HTMLTextAreaElement;
+const timelineTimeline = document.getElementById("timeline-timeline")!;
 const backlinksList = document.getElementById("backlinks-list")!;
 const outgoingLinksList = document.getElementById("outgoing-links-list")!;
 const outlineList = document.getElementById("outline-list")!;
@@ -57,12 +65,38 @@ const imageViewer = document.getElementById("image-viewer")!;
 const imagePreview = document.getElementById("image-preview") as HTMLImageElement;
 const imageTitle = document.getElementById("image-title")!;
 const pdfViewer = document.getElementById("pdf-viewer")!;
-const pdfFrame = document.getElementById("pdf-frame") as HTMLIFrameElement;
+const pdfContainerA = document.getElementById("pdf-container-a")!;
+const pdfContainerB = document.getElementById("pdf-container-b")!;
+let pdfActiveBuffer: 'a' | 'b' = 'a';
 const pdfTitle = document.getElementById("pdf-title")!;
+const pdfPageInfo = document.getElementById("pdf-page-info")!;
+const pdfZoomInfo = document.getElementById("pdf-zoom-info")!;
 const htmlEditorContainer = document.getElementById("html-editor-container")!;
 const htmlEditor = document.getElementById("html-editor") as HTMLTextAreaElement;
 const htmlPreview = document.getElementById("html-preview") as HTMLIFrameElement;
 const htmlEditorTitle = document.getElementById("html-editor-title")!;
+
+// Fullscreen overlay elements
+const imageFullscreenOverlay = document.getElementById("image-fullscreen-overlay")!;
+const imageFsPreview = document.getElementById("image-fs-preview") as HTMLImageElement;
+const imageFsTitle = document.getElementById("image-fs-title")!;
+const pdfFullscreenOverlay = document.getElementById("pdf-fullscreen-overlay")!;
+const pdfFsContainer = document.getElementById("pdf-fs-container")!;
+const pdfFsTitle = document.getElementById("pdf-fs-title")!;
+const pdfFsPageInfo = document.getElementById("pdf-fs-page-info")!;
+const pdfFsZoomInfo = document.getElementById("pdf-fs-zoom-info")!;
+
+// PDF State
+let pdfDoc: pdfjsLib.PDFDocumentProxy | null = null;
+let pdfCurrentPage = 1;
+let pdfTotalPages = 0;
+let pdfScale = 1.0;
+let pdfRendering = false;
+let pdfPendingPage: number | null = null;
+let pdfViewMode: 'single' | 'continuous' = 'continuous'; // Default to continuous scroll
+let pdfCanvases: HTMLCanvasElement[] = [];
+let pdfIsFullscreen = false;
+let currentPdfPath: string | null = null;
 
 // Initialize
 async function init() {
@@ -72,10 +106,22 @@ async function init() {
             await loadFileTree();
 
             // Open last file if exists
-            const lastFile = localStorage.getItem("obails-last-file");
-            if (lastFile) {
+            const lastFileData = localStorage.getItem("obails-last-file");
+            if (lastFileData) {
                 try {
-                    await openNote(lastFile);
+                    // Support both new JSON format and legacy string format
+                    let path: string;
+                    let fileType: string;
+                    try {
+                        const parsed = JSON.parse(lastFileData);
+                        path = parsed.path;
+                        fileType = parsed.fileType;
+                    } catch {
+                        // Legacy format: just the path (assume markdown)
+                        path = lastFileData;
+                        fileType = "markdown";
+                    }
+                    await openFile(path, fileType);
                 } catch {
                     // File might have been deleted, clear the storage
                     localStorage.removeItem("obails-last-file");
@@ -122,10 +168,10 @@ function setupEventListeners() {
     document.getElementById("settings-btn")!.addEventListener("click", openSettings);
     document.getElementById("new-note-btn")!.addEventListener("click", showNewNoteForm);
     document.getElementById("daily-note-btn")!.addEventListener("click", openTodayNote);
-    document.getElementById("thino-btn")!.addEventListener("click", toggleThino);
+    document.getElementById("timeline-btn")!.addEventListener("click", toggleTimeline);
     document.getElementById("graph-btn")!.addEventListener("click", toggleGraphView);
     document.getElementById("refresh-btn")!.addEventListener("click", refresh);
-    document.getElementById("thino-submit")!.addEventListener("click", submitThino);
+    document.getElementById("timeline-submit")!.addEventListener("click", submitTimeline);
 
     // Graph overlay close button
     document.getElementById("graph-close")!.addEventListener("click", hideGraphView);
@@ -149,6 +195,44 @@ function setupEventListeners() {
     htmlEditor.addEventListener("input", debounce(saveHtmlFile, 500));
     htmlEditor.addEventListener("input", updateHtmlPreview);
 
+    // PDF Viewer controls
+    document.getElementById("pdf-prev")!.addEventListener("click", pdfPrevPage);
+    document.getElementById("pdf-next")!.addEventListener("click", pdfNextPage);
+    document.getElementById("pdf-zoom-in")!.addEventListener("click", pdfZoomIn);
+    document.getElementById("pdf-zoom-out")!.addEventListener("click", pdfZoomOut);
+    document.getElementById("pdf-view-mode")!.addEventListener("click", togglePdfViewMode);
+    document.getElementById("pdf-fullscreen")!.addEventListener("click", openPdfFullscreen);
+
+    // PDF Fullscreen controls
+    document.getElementById("pdf-fs-prev")!.addEventListener("click", pdfPrevPage);
+    document.getElementById("pdf-fs-next")!.addEventListener("click", pdfNextPage);
+    document.getElementById("pdf-fs-zoom-in")!.addEventListener("click", pdfZoomIn);
+    document.getElementById("pdf-fs-zoom-out")!.addEventListener("click", pdfZoomOut);
+    document.getElementById("pdf-fs-view-mode")!.addEventListener("click", togglePdfViewMode);
+    document.getElementById("pdf-fs-close")!.addEventListener("click", closePdfFullscreen);
+
+    // Image Viewer controls
+    document.getElementById("image-fullscreen")!.addEventListener("click", openImageFullscreen);
+    document.getElementById("image-fs-close")!.addEventListener("click", closeImageFullscreen);
+
+    // Handle external links in preview - open in external browser
+    preview.addEventListener("click", async (e) => {
+        const target = e.target as HTMLElement;
+        const link = target.closest("a");
+        if (link) {
+            const href = link.getAttribute("href");
+            if (href && (href.startsWith("http://") || href.startsWith("https://"))) {
+                e.preventDefault();
+                e.stopPropagation();
+                try {
+                    await FileService.OpenURL(href);
+                } catch (err) {
+                    console.error("Failed to open external link:", err);
+                }
+            }
+        }
+    });
+
     // Keyboard shortcuts
     document.addEventListener("keydown", (e) => {
         if ((e.metaKey || e.ctrlKey) && e.key === ",") {
@@ -163,9 +247,13 @@ function setupEventListeners() {
             e.preventDefault();
             toggleGraphView();
         }
-        // ESC to close graph view or context menu
+        // ESC to close overlays
         if (e.key === "Escape") {
-            if (showGraph) {
+            if (pdfIsFullscreen) {
+                closePdfFullscreen();
+            } else if (imageFullscreenOverlay.style.display !== "none") {
+                closeImageFullscreen();
+            } else if (showGraph) {
                 hideGraphView();
             }
             hideContextMenu();
@@ -478,7 +566,7 @@ async function moveFileToFolder(sourcePath: string, targetFolder: string) {
         // Update current note path if the moved file was open
         if (currentNote && currentNote.path === sourcePath) {
             currentNote.path = newPath!;
-            localStorage.setItem("obails-last-file", newPath!);
+            localStorage.setItem("obails-last-file", JSON.stringify({ path: newPath!, fileType: "markdown" }));
         }
     } catch (err) {
         console.error("Failed to move file:", err);
@@ -571,6 +659,12 @@ function getFileIcon(file: FileInfo): string {
 // Open file based on file type
 async function openFile(path: string, fileType: string): Promise<void> {
     hideAllViewers();
+    currentFilePath = path;  // Track current file for refresh
+
+    // Save last opened file to localStorage (for all supported types)
+    if (fileType === "markdown" || fileType === "image" || fileType === "pdf" || fileType === "html") {
+        localStorage.setItem("obails-last-file", JSON.stringify({ path, fileType }));
+    }
 
     switch (fileType) {
         case "markdown":
@@ -595,7 +689,7 @@ async function openFile(path: string, fileType: string): Promise<void> {
 // Hide all viewer panels
 function hideAllViewers() {
     editorContainer.style.display = "none";
-    thinoPanel.style.display = "none";
+    timelinePanel.style.display = "none";
     imageViewer.style.display = "none";
     pdfViewer.style.display = "none";
     htmlEditorContainer.style.display = "none";
@@ -620,13 +714,45 @@ async function openImage(path: string): Promise<void> {
     }
 }
 
-// Open PDF file
+// Open PDF file with PDF.js
 async function openPDF(path: string): Promise<void> {
     try {
+        currentPdfPath = path;
         const base64Data = await FileService.ReadBinaryFile(path);
-        pdfFrame.src = `data:application/pdf;base64,${base64Data}`;
-        pdfTitle.textContent = path.split('/').pop() || 'PDF';
-        pdfViewer.style.display = "block";
+        const binaryData = atob(base64Data);
+        const byteArray = new Uint8Array(binaryData.length);
+        for (let i = 0; i < binaryData.length; i++) {
+            byteArray[i] = binaryData.charCodeAt(i);
+        }
+
+        // Load PDF document
+        const loadingTask = pdfjsLib.getDocument({ data: byteArray });
+        pdfDoc = await loadingTask.promise;
+        pdfTotalPages = pdfDoc.numPages;
+        pdfCurrentPage = 1;
+
+        const fileName = path.split('/').pop() || 'PDF';
+        pdfTitle.textContent = fileName;
+        pdfViewer.style.display = "flex";
+
+        // Wait for layout to complete before calculating scale
+        await new Promise(resolve => requestAnimationFrame(resolve));
+
+        // Calculate initial scale to fit width
+        const firstPage = await pdfDoc.getPage(1);
+        const unscaledViewport = firstPage.getViewport({ scale: 1 });
+        const containerWidth = pdfContainerA.clientWidth - 40; // padding
+
+        // Ensure minimum scale and handle case when container isn't sized yet
+        if (containerWidth > 100) {
+            pdfScale = Math.min(Math.max(containerWidth / unscaledViewport.width, 0.5), 2.0);
+        } else {
+            pdfScale = 1.0; // Default scale if container not ready
+        }
+
+        // Update UI and render pages
+        updatePdfInfo();
+        await renderPdfPages();
 
         // Update file tree selection
         updateFileTreeSelection(path);
@@ -634,6 +760,275 @@ async function openPDF(path: string): Promise<void> {
         console.error("Failed to open PDF:", err);
         alert(`Failed to open PDF: ${err}`);
     }
+}
+
+// Get the active PDF container
+function getPdfActiveContainer(): HTMLElement {
+    if (pdfIsFullscreen) return pdfFsContainer;
+    return pdfActiveBuffer === 'a' ? pdfContainerA : pdfContainerB;
+}
+
+// Get the back buffer for rendering
+function getPdfBackContainer(): HTMLElement {
+    if (pdfIsFullscreen) return pdfFsContainer;
+    return pdfActiveBuffer === 'a' ? pdfContainerB : pdfContainerA;
+}
+
+// Swap buffers
+function swapPdfBuffers(): void {
+    if (pdfIsFullscreen) return;
+
+    const activeContainer = pdfActiveBuffer === 'a' ? pdfContainerA : pdfContainerB;
+    const backContainer = pdfActiveBuffer === 'a' ? pdfContainerB : pdfContainerA;
+
+    // Swap classes
+    activeContainer.classList.remove('pdf-buffer-active');
+    activeContainer.classList.add('pdf-buffer-back');
+    backContainer.classList.remove('pdf-buffer-back');
+    backContainer.classList.add('pdf-buffer-active');
+
+    // Update active buffer tracker
+    pdfActiveBuffer = pdfActiveBuffer === 'a' ? 'b' : 'a';
+}
+
+// Render PDF pages based on view mode (to active container)
+async function renderPdfPages(): Promise<void> {
+    if (!pdfDoc) return;
+
+    const container = getPdfActiveContainer();
+    container.innerHTML = '';
+    pdfCanvases = [];
+
+    if (pdfViewMode === 'continuous') {
+        // Render all pages
+        for (let i = 1; i <= pdfTotalPages; i++) {
+            const canvas = document.createElement('canvas');
+            canvas.className = 'pdf-page-canvas';
+            canvas.dataset.page = String(i);
+            container.appendChild(canvas);
+            pdfCanvases.push(canvas);
+        }
+        // Render all pages
+        await renderAllPages();
+    } else {
+        // Single page mode - render only current page
+        const canvas = document.createElement('canvas');
+        canvas.className = 'pdf-page-canvas';
+        canvas.dataset.page = String(pdfCurrentPage);
+        container.appendChild(canvas);
+        pdfCanvases.push(canvas);
+        await renderSinglePage(pdfCurrentPage, canvas);
+    }
+}
+
+// Render PDF pages to back buffer (for double buffering)
+async function renderPdfPagesToBackBuffer(targetPage: number): Promise<HTMLCanvasElement[]> {
+    if (!pdfDoc) return [];
+
+    const container = getPdfBackContainer();
+    container.innerHTML = '';
+    const canvases: HTMLCanvasElement[] = [];
+
+    if (pdfViewMode === 'continuous') {
+        // Render all pages
+        for (let i = 1; i <= pdfTotalPages; i++) {
+            const canvas = document.createElement('canvas');
+            canvas.className = 'pdf-page-canvas';
+            canvas.dataset.page = String(i);
+            container.appendChild(canvas);
+            canvases.push(canvas);
+        }
+        // Render all pages
+        for (let i = 0; i < canvases.length; i++) {
+            await renderSinglePage(i + 1, canvases[i]);
+        }
+        // Set scroll position before showing (use local canvases array!)
+        scrollToPage(container, targetPage, canvases);
+    } else {
+        // Single page mode - render only current page
+        const canvas = document.createElement('canvas');
+        canvas.className = 'pdf-page-canvas';
+        canvas.dataset.page = String(pdfCurrentPage);
+        container.appendChild(canvas);
+        canvases.push(canvas);
+        await renderSinglePage(pdfCurrentPage, canvas);
+    }
+
+    return canvases;
+}
+
+// Render all pages (for continuous mode)
+async function renderAllPages(): Promise<void> {
+    if (!pdfDoc) return;
+
+    for (let i = 0; i < pdfCanvases.length; i++) {
+        await renderSinglePage(i + 1, pdfCanvases[i]);
+    }
+}
+
+// Render a single page to a specific canvas
+async function renderSinglePage(pageNum: number, canvas: HTMLCanvasElement): Promise<void> {
+    if (!pdfDoc) return;
+
+    try {
+        const page = await pdfDoc.getPage(pageNum);
+        const viewport = page.getViewport({ scale: pdfScale });
+
+        const context = canvas.getContext("2d")!;
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+
+        const renderContext = {
+            canvasContext: context,
+            viewport: viewport
+        };
+
+        await page.render(renderContext).promise;
+    } catch (err) {
+        console.error(`Failed to render PDF page ${pageNum}:`, err);
+    }
+}
+
+// Update PDF info display
+function updatePdfInfo() {
+    const pageText = pdfViewMode === 'continuous'
+        ? `${pdfTotalPages} pages`
+        : `${pdfCurrentPage} / ${pdfTotalPages}`;
+    const zoomText = `${Math.round(pdfScale * 100)}%`;
+
+    pdfPageInfo.textContent = pageText;
+    pdfZoomInfo.textContent = zoomText;
+
+    if (pdfIsFullscreen) {
+        pdfFsPageInfo.textContent = pageText;
+        pdfFsZoomInfo.textContent = zoomText;
+    }
+
+    // Update view mode button icon
+    const viewModeBtn = document.getElementById("pdf-view-mode")!;
+    const viewModeFsBtn = document.getElementById("pdf-fs-view-mode")!;
+    const icon = pdfViewMode === 'continuous' ? '📄' : '📃';
+    viewModeBtn.textContent = icon;
+    viewModeFsBtn.textContent = icon;
+    viewModeBtn.title = pdfViewMode === 'continuous' ? 'Switch to Single Page' : 'Switch to Continuous Scroll';
+    viewModeFsBtn.title = viewModeBtn.title;
+}
+
+// Toggle view mode with double buffering
+async function togglePdfViewMode() {
+    const activeContainer = getPdfActiveContainer();
+
+    // Save current page before switching
+    if (pdfViewMode === 'continuous') {
+        // Calculate current page from scroll position
+        pdfCurrentPage = getCurrentPageFromScroll(activeContainer);
+    }
+
+    const targetPage = pdfCurrentPage;
+    pdfViewMode = pdfViewMode === 'continuous' ? 'single' : 'continuous';
+    updatePdfInfo();
+
+    // Render to back buffer
+    const newCanvases = await renderPdfPagesToBackBuffer(targetPage);
+
+    // Swap buffers (instantly shows the pre-rendered content)
+    swapPdfBuffers();
+
+    // Update canvas reference
+    pdfCanvases = newCanvases;
+}
+
+// Get current page from scroll position in continuous mode
+function getCurrentPageFromScroll(container: HTMLElement): number {
+    if (pdfCanvases.length === 0) return 1;
+
+    const scrollTop = container.scrollTop;
+    const containerHeight = container.clientHeight;
+    const scrollCenter = scrollTop + containerHeight / 3; // Use upper third as reference
+
+    for (let i = 0; i < pdfCanvases.length; i++) {
+        const canvas = pdfCanvases[i];
+        const canvasTop = canvas.offsetTop;
+        const canvasBottom = canvasTop + canvas.height;
+
+        if (scrollCenter >= canvasTop && scrollCenter < canvasBottom) {
+            return i + 1;
+        }
+    }
+
+    return pdfTotalPages; // Default to last page if at bottom
+}
+
+// Scroll to specific page in continuous mode
+function scrollToPage(container: HTMLElement, pageNum: number, canvases?: HTMLCanvasElement[]): void {
+    const targetCanvases = canvases || pdfCanvases;
+    const index = pageNum - 1;
+    if (index >= 0 && index < targetCanvases.length) {
+        const canvas = targetCanvases[index];
+        container.scrollTo({
+            top: canvas.offsetTop - 16, // Small offset for padding
+            behavior: 'auto'
+        });
+    }
+}
+
+// PDF navigation functions (only for single page mode)
+async function pdfPrevPage() {
+    if (pdfViewMode === 'continuous' || pdfCurrentPage <= 1) return;
+    pdfCurrentPage--;
+    updatePdfInfo();
+    await renderPdfPages();
+}
+
+async function pdfNextPage() {
+    if (pdfViewMode === 'continuous' || pdfCurrentPage >= pdfTotalPages) return;
+    pdfCurrentPage++;
+    updatePdfInfo();
+    await renderPdfPages();
+}
+
+async function pdfZoomIn() {
+    pdfScale = Math.min(pdfScale * 1.25, 5.0);
+    updatePdfInfo();
+    await renderPdfPages();
+}
+
+async function pdfZoomOut() {
+    pdfScale = Math.max(pdfScale * 0.8, 0.25);
+    updatePdfInfo();
+    await renderPdfPages();
+}
+
+// PDF Fullscreen functions
+function openPdfFullscreen() {
+    if (!pdfDoc) return;
+
+    pdfIsFullscreen = true;
+    pdfFsTitle.textContent = pdfTitle.textContent || 'PDF';
+    pdfFullscreenOverlay.style.display = "flex";
+
+    updatePdfInfo();
+    renderPdfPages();
+}
+
+function closePdfFullscreen() {
+    pdfIsFullscreen = false;
+    pdfFullscreenOverlay.style.display = "none";
+
+    // Re-render in normal container
+    updatePdfInfo();
+    renderPdfPages();
+}
+
+// Image fullscreen functions
+function openImageFullscreen() {
+    imageFsPreview.src = imagePreview.src;
+    imageFsTitle.textContent = imageTitle.textContent || 'Image';
+    imageFullscreenOverlay.style.display = "flex";
+}
+
+function closeImageFullscreen() {
+    imageFullscreenOverlay.style.display = "none";
 }
 
 // Open HTML file with editor + preview
@@ -708,11 +1103,52 @@ function getMimeTypeFromExt(ext: string): string {
 
 // Update file tree selection highlight
 function updateFileTreeSelection(path: string) {
+    // Remove previous selection
     document.querySelectorAll(".file-item").forEach(el => el.classList.remove("active"));
+
+    // Expand parent folders to reveal the file
+    expandParentFolders(path);
+
+    // Highlight the file
     const fileItem = document.querySelector(`.file-item[data-path="${path}"]`);
     if (fileItem) {
         fileItem.classList.add("active");
-        fileItem.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        // Delay scroll to ensure folder expansion is complete
+        setTimeout(() => {
+            fileItem.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }, 50);
+    }
+}
+
+// Expand all parent folders for a given file path
+function expandParentFolders(path: string) {
+    const parts = path.split("/");
+    let currentPath = "";
+
+    // Iterate through path parts (excluding the file itself)
+    for (let i = 0; i < parts.length - 1; i++) {
+        currentPath = currentPath ? `${currentPath}/${parts[i]}` : parts[i];
+
+        const folderItem = document.querySelector(`.file-item.folder[data-path="${currentPath}"]`);
+        if (folderItem && !folderItem.classList.contains("expanded")) {
+            // Expand the folder
+            folderItem.classList.add("expanded");
+
+            // Update folder icon
+            const iconSpan = folderItem.querySelector(".folder-icon");
+            if (iconSpan) {
+                iconSpan.textContent = "📂";
+            }
+
+            // Show children
+            const wrapper = folderItem.parentElement;
+            if (wrapper) {
+                const childrenEl = wrapper.querySelector(".folder-children") as HTMLElement;
+                if (childrenEl) {
+                    childrenEl.style.display = "block";
+                }
+            }
+        }
     }
 }
 
@@ -843,8 +1279,8 @@ async function openNote(path: string) {
             await loadBacklinks(path);
             await loadOutgoingLinks(path);
 
-            // Save last opened file to localStorage
-            localStorage.setItem("obails-last-file", path);
+            // Save to localStorage (also saves when called directly from backlinks/outgoing links/graph)
+            localStorage.setItem("obails-last-file", JSON.stringify({ path, fileType: "markdown" }));
 
             // Update pane titles (remove .md extension)
             const filename = path.split("/").pop()?.replace(/\.md$/i, "") || path;
@@ -852,7 +1288,7 @@ async function openNote(path: string) {
         }
 
         // Hide all viewers, show markdown editor
-        showThino = false;
+        showTimeline = false;
         hideAllViewers();
         editorContainer.style.display = "flex";
 
@@ -900,7 +1336,7 @@ async function openTodayNote() {
             updateFileTreeSelection(note.path);
         }
 
-        showThino = false;
+        showTimeline = false;
         hideAllViewers();
         editorContainer.style.display = "flex";
     } catch (err) {
@@ -963,56 +1399,56 @@ function jumpToLine(lineNumber: number) {
 }
 
 
-// Thino
-function toggleThino() {
-    showThino = !showThino;
+// Timeline
+function toggleTimeline() {
+    showTimeline = !showTimeline;
     hideAllViewers();
-    if (showThino) {
-        thinoPanel.style.display = "block";
-        loadThinos();
+    if (showTimeline) {
+        timelinePanel.style.display = "block";
+        loadTimelines();
     } else {
         editorContainer.style.display = "flex";
     }
 }
 
-async function loadThinos() {
+async function loadTimelines() {
     try {
-        const thinos = await NoteService.GetTodayThinos();
-        renderThinos(thinos);
+        const timelines = await NoteService.GetTodayTimelines();
+        renderTimelines(timelines);
     } catch (err) {
-        console.error("Failed to load thinos:", err);
-        thinoTimeline.innerHTML = '<div class="error">No thinos for today</div>';
+        console.error("Failed to load timelines:", err);
+        timelineTimeline.innerHTML = '<div class="error">No timelines for today</div>';
     }
 }
 
-function renderThinos(thinos: Thino[]) {
-    thinoTimeline.innerHTML = "";
+function renderTimelines(timelines: Timeline[]) {
+    timelineTimeline.innerHTML = "";
 
-    for (const thino of [...thinos].reverse()) {
+    for (const timeline of [...timelines].reverse()) {
         const el = document.createElement("div");
-        el.className = "thino-item";
+        el.className = "timeline-item";
         el.innerHTML = `
-            <div class="thino-time">${thino.time}</div>
-            <div class="thino-content">${thino.content}</div>
+            <div class="timeline-time">${timeline.time}</div>
+            <div class="timeline-content">${timeline.content}</div>
         `;
-        thinoTimeline.appendChild(el);
+        timelineTimeline.appendChild(el);
     }
 
-    if (thinos.length === 0) {
-        thinoTimeline.innerHTML = '<div class="empty">No memos yet. Start writing!</div>';
+    if (timelines.length === 0) {
+        timelineTimeline.innerHTML = '<div class="empty">No memos yet. Start writing!</div>';
     }
 }
 
-async function submitThino() {
-    const content = thinoInput.value.trim();
+async function submitTimeline() {
+    const content = timelineInput.value.trim();
     if (!content) return;
 
     try {
-        await NoteService.AddThino(content);
-        thinoInput.value = "";
-        await loadThinos();
+        await NoteService.AddTimeline(content);
+        timelineInput.value = "";
+        await loadTimelines();
     } catch (err) {
-        console.error("Failed to add thino:", err);
+        console.error("Failed to add timeline:", err);
     }
 }
 
@@ -1180,6 +1616,12 @@ async function refresh() {
     await loadFileTree();
     await LinkService.RebuildIndex();
 
+    // Restore file tree selection and expand parent folders
+    if (currentFilePath) {
+        expandParentFolders(currentFilePath);
+        updateFileTreeSelection(currentFilePath);
+    }
+
     // If graph view is showing, refresh the graph data
     if (showGraph) {
         await refreshGraphData();
@@ -1229,11 +1671,27 @@ function hideGraphView() {
 
     // Open last file if exists and no note is currently open
     if (!currentNote) {
-        const lastFile = localStorage.getItem("obails-last-file");
-        if (lastFile) {
-            openNote(lastFile).catch(() => {
+        const lastFileData = localStorage.getItem("obails-last-file");
+        if (lastFileData) {
+            try {
+                // Support both new JSON format and legacy string format
+                let path: string;
+                let fileType: string;
+                try {
+                    const parsed = JSON.parse(lastFileData);
+                    path = parsed.path;
+                    fileType = parsed.fileType;
+                } catch {
+                    // Legacy format: just the path (assume markdown)
+                    path = lastFileData;
+                    fileType = "markdown";
+                }
+                openFile(path, fileType).catch(() => {
+                    localStorage.removeItem("obails-last-file");
+                });
+            } catch {
                 localStorage.removeItem("obails-last-file");
-            });
+            }
         }
     }
 }
@@ -1537,16 +1995,16 @@ let mermaidStartX = 0, mermaidStartY = 0;
 let mermaidSvgWidth = 0, mermaidSvgHeight = 0;
 let mermaidMinimapScale = 1;
 
-function initMermaidDiagrams() {
+async function initMermaidDiagrams() {
     const previewEl = document.getElementById("preview");
     if (!previewEl) return;
 
     const codeBlocks = previewEl.querySelectorAll("pre code");
-    const errorToast = document.getElementById("mermaid-error-toast")!;
 
-    codeBlocks.forEach((code, idx) => {
+    for (let idx = 0; idx < codeBlocks.length; idx++) {
+        const code = codeBlocks[idx];
         const pre = code.parentElement;
-        if (!pre) return;
+        if (!pre) continue;
 
         const text = code.textContent?.trim() || "";
 
@@ -1554,29 +2012,44 @@ function initMermaidDiagrams() {
         const isMermaid = code.classList.contains("language-mermaid") ||
             text.match(/^(graph|flowchart|sequenceDiagram|classDiagram|stateDiagram|erDiagram|journey|gantt|pie|gitGraph|mindmap|timeline)/);
 
-        if (!isMermaid) return;
+        if (!isMermaid) continue;
 
         // Create container
         const container = document.createElement("div");
         container.className = "mermaid-container";
-        container.title = "Click to view fullscreen";
 
-        const mermaidDiv = document.createElement("div");
-        mermaidDiv.className = "mermaid";
-        mermaidDiv.id = `mermaid-${idx}`;
-        mermaidDiv.textContent = text;
+        try {
+            // Render mermaid diagram individually to catch errors per diagram
+            const { svg } = await mermaid.render(`mermaid-${idx}`, text);
 
-        container.addEventListener("click", () => openMermaidFullscreen(mermaidDiv));
-        container.appendChild(mermaidDiv);
+            const mermaidDiv = document.createElement("div");
+            mermaidDiv.className = "mermaid";
+            mermaidDiv.innerHTML = svg;
+            mermaidDiv.title = "Click to view fullscreen";
+
+            mermaidDiv.addEventListener("click", () => openMermaidFullscreen(mermaidDiv));
+            container.appendChild(mermaidDiv);
+        } catch (err: unknown) {
+            // Show error inline below the code block (copyable)
+            const errorDiv = document.createElement("div");
+            errorDiv.className = "mermaid-error-inline";
+            const errorMessage = err instanceof Error ? err.message : String(err);
+            errorDiv.innerHTML = `
+                <div class="mermaid-error-header">⚠️ Mermaid Syntax Error</div>
+                <pre class="mermaid-error-text">${escapeHtml(errorMessage)}</pre>
+            `;
+            container.appendChild(errorDiv);
+        }
+
         pre.replaceWith(container);
-    });
+    }
+}
 
-    // Render all mermaid diagrams
-    mermaid.run().catch(err => {
-        errorToast.textContent = "Mermaid Error: " + (err.message || err);
-        errorToast.classList.add("visible");
-        setTimeout(() => errorToast.classList.remove("visible"), 5000);
-    });
+// Escape HTML for safe display
+function escapeHtml(text: string): string {
+    const div = document.createElement("div");
+    div.textContent = text;
+    return div.innerHTML;
 }
 
 function openMermaidFullscreen(mermaidEl: HTMLElement) {

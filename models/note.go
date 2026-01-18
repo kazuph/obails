@@ -11,8 +11,8 @@ type Note struct {
 	ModifiedAt  time.Time      `json:"modifiedAt"`
 }
 
-// Thino represents a quick memo entry in daily notes
-type Thino struct {
+// Timeline represents a quick memo entry in daily notes
+type Timeline struct {
 	Time    string `json:"time"`    // "10:38"
 	Content string `json:"content"` // The memo content
 	IsTodo  bool   `json:"isTodo"`  // true if [ ] or [x]

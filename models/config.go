@@ -4,7 +4,7 @@ package models
 type Config struct {
 	Vault      VaultConfig      `toml:"vault"`
 	DailyNotes DailyNotesConfig `toml:"daily_notes"`
-	Thino      ThinoConfig      `toml:"thino"`
+	Timeline      TimelineConfig      `toml:"timeline"`
 	Templates  TemplatesConfig  `toml:"templates"`
 	Editor     EditorConfig     `toml:"editor"`
 	UI         UIConfig         `toml:"ui"`
@@ -20,7 +20,7 @@ type DailyNotesConfig struct {
 	Template string `toml:"template"`
 }
 
-type ThinoConfig struct {
+type TimelineConfig struct {
 	Section    string `toml:"section"`
 	TimeFormat string `toml:"time_format"`
 }
@@ -52,7 +52,7 @@ func DefaultConfig() *Config {
 			Format:   "2006-01-02",
 			Template: "daily_note",
 		},
-		Thino: ThinoConfig{
+		Timeline: TimelineConfig{
 			Section:    "## Memos",
 			TimeFormat: "15:04",
 		},

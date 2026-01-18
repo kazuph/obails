@@ -105,38 +105,38 @@ func (s *NoteService) GetTodayDailyNote() (*models.Note, error) {
 	return note, nil
 }
 
-// AddThino adds a memo to the current daily note's Memos section
-func (s *NoteService) AddThino(content string) error {
+// AddTimeline adds a memo to the current daily note's Memos section
+func (s *NoteService) AddTimeline(content string) error {
 	note, err := s.GetTodayDailyNote()
 	if err != nil {
 		return err
 	}
 
-	// Format the thino entry
-	timeStr := time.Now().Format(s.configService.GetThinoTimeFormat())
-	thinoEntry := fmt.Sprintf("- %s %s", timeStr, content)
+	// Format the timeline entry
+	timeStr := time.Now().Format(s.configService.GetTimelineTimeFormat())
+	timelineEntry := fmt.Sprintf("- %s %s", timeStr, content)
 
 	// Find the Memos section and insert the new entry
-	section := s.configService.GetThinoSection()
-	newContent := s.insertAfterSection(note.Content, section, thinoEntry)
+	section := s.configService.GetTimelineSection()
+	newContent := s.insertAfterSection(note.Content, section, timelineEntry)
 
 	return s.SaveNote(note.Path, newContent)
 }
 
-// GetThinos extracts all Thino entries from a daily note
-func (s *NoteService) GetThinos(dateStr string) ([]models.Thino, error) {
+// GetTimelines extracts all Timeline entries from a daily note
+func (s *NoteService) GetTimelines(dateStr string) ([]models.Timeline, error) {
 	note, err := s.GetDailyNote(dateStr)
 	if err != nil {
 		return nil, err
 	}
 
-	return s.parseThinos(note.Content), nil
+	return s.parseTimelines(note.Content), nil
 }
 
-// GetTodayThinos gets all Thino entries from today's daily note
-func (s *NoteService) GetTodayThinos() ([]models.Thino, error) {
+// GetTodayTimelines gets all Timeline entries from today's daily note
+func (s *NoteService) GetTodayTimelines() ([]models.Timeline, error) {
 	today := time.Now().Format("2006-01-02")
-	return s.GetThinos(today)
+	return s.GetTimelines(today)
 }
 
 // Helper functions
@@ -202,15 +202,15 @@ func (s *NoteService) insertAfterSection(content string, section string, entry s
 	return strings.Join(result, "\n")
 }
 
-func (s *NoteService) parseThinos(content string) []models.Thino {
-	var thinos []models.Thino
+func (s *NoteService) parseTimelines(content string) []models.Timeline {
+	var timelines []models.Timeline
 
-	section := s.configService.GetThinoSection()
+	section := s.configService.GetTimelineSection()
 	lines := strings.Split(content, "\n")
 	inMemosSection := false
 
-	// Regex to match Thino entries: - HH:MM content or - [x] HH:MM content
-	thinoRegex := regexp.MustCompile(`^-\s+(?:\[([ x])\]\s+)?(\d{1,2}:\d{2})\s+(.+)$`)
+	// Regex to match Timeline entries: - HH:MM content or - [x] HH:MM content
+	timelineRegex := regexp.MustCompile(`^-\s+(?:\[([ x])\]\s+)?(\d{1,2}:\d{2})\s+(.+)$`)
 
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
@@ -226,22 +226,22 @@ func (s *NoteService) parseThinos(content string) []models.Thino {
 		}
 
 		if inMemosSection {
-			matches := thinoRegex.FindStringSubmatch(trimmed)
+			matches := timelineRegex.FindStringSubmatch(trimmed)
 			if len(matches) == 4 {
 				checkbox := matches[1]
 				timeStr := matches[2]
 				text := matches[3]
 
-				thino := models.Thino{
+				timeline := models.Timeline{
 					Time:    timeStr,
 					Content: text,
 					IsTodo:  checkbox != "",
 					Done:    checkbox == "x",
 				}
-				thinos = append(thinos, thino)
+				timelines = append(timelines, timeline)
 			}
 		}
 	}
 
-	return thinos
+	return timelines
 }

@@ -27,8 +27,8 @@ export function createWailsAdapters(): IAppAdapters {
       getNote: (path) => NoteService.GetNote(path),
       saveNote: (path, content) => NoteService.SaveNote(path, content),
       getTodayDailyNote: () => NoteService.GetTodayDailyNote(),
-      getTodayThinos: () => NoteService.GetTodayThinos(),
-      addThino: (content) => NoteService.AddThino(content),
+      getTodayTimelines: () => NoteService.GetTodayTimelines(),
+      addTimeline: (content) => NoteService.AddTimeline(content),
     },
     link: {
       getBacklinks: (path) => LinkService.GetBacklinks(path),

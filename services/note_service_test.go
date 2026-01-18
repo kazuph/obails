@@ -27,7 +27,7 @@ func newTestNoteService(t *testing.T) (*NoteService, *FileService, string) {
 				Folder: "dailynotes",
 				Format: "2006-01-02",
 			},
-			Thino: models.ThinoConfig{
+			Timeline: models.TimelineConfig{
 				Section:    "## Memos",
 				TimeFormat: "15:04",
 			},
@@ -174,58 +174,58 @@ func TestNoteService_DailyNote(t *testing.T) {
 	})
 }
 
-func TestNoteService_Thino(t *testing.T) {
+func TestNoteService_Timeline(t *testing.T) {
 	ns, fs, tmpDir := newTestNoteService(t)
 	defer os.RemoveAll(tmpDir)
 
 	fs.CreateDirectory("dailynotes")
 
-	t.Run("add thino to daily note", func(t *testing.T) {
-		err := ns.AddThino("Test memo content")
+	t.Run("add timeline to daily note", func(t *testing.T) {
+		err := ns.AddTimeline("Test memo content")
 		if err != nil {
-			t.Fatalf("AddThino failed: %v", err)
+			t.Fatalf("AddTimeline failed: %v", err)
 		}
 
-		// Verify the thino was added
-		thinos, err := ns.GetTodayThinos()
+		// Verify the timeline was added
+		timelines, err := ns.GetTodayTimelines()
 		if err != nil {
-			t.Fatalf("GetTodayThinos failed: %v", err)
+			t.Fatalf("GetTodayTimelines failed: %v", err)
 		}
 
-		if len(thinos) == 0 {
-			t.Error("Expected at least one thino")
+		if len(timelines) == 0 {
+			t.Error("Expected at least one timeline")
 		}
 
 		found := false
-		for _, thino := range thinos {
-			if thino.Content == "Test memo content" {
+		for _, timeline := range timelines {
+			if timeline.Content == "Test memo content" {
 				found = true
 				break
 			}
 		}
 		if !found {
-			t.Error("Added thino not found")
+			t.Error("Added timeline not found")
 		}
 	})
 
-	t.Run("add multiple thinos", func(t *testing.T) {
-		ns.AddThino("First memo")
-		ns.AddThino("Second memo")
+	t.Run("add multiple timelines", func(t *testing.T) {
+		ns.AddTimeline("First memo")
+		ns.AddTimeline("Second memo")
 
-		thinos, _ := ns.GetTodayThinos()
+		timelines, _ := ns.GetTodayTimelines()
 
 		// Should have at least 3 (including the one from previous test)
-		if len(thinos) < 3 {
-			t.Errorf("Expected at least 3 thinos, got %d", len(thinos))
+		if len(timelines) < 3 {
+			t.Errorf("Expected at least 3 timelines, got %d", len(timelines))
 		}
 	})
 }
 
-func TestNoteService_ParseThinos(t *testing.T) {
+func TestNoteService_ParseTimelines(t *testing.T) {
 	ns, _, tmpDir := newTestNoteService(t)
 	defer os.RemoveAll(tmpDir)
 
-	t.Run("parse thinos from content", func(t *testing.T) {
+	t.Run("parse timelines from content", func(t *testing.T) {
 		content := `# Daily Note
 
 ## Day Planner
@@ -242,44 +242,44 @@ func TestNoteService_ParseThinos(t *testing.T) {
 - [ ] Something else
 `
 
-		thinos := ns.parseThinos(content)
+		timelines := ns.parseTimelines(content)
 
-		if len(thinos) != 4 {
-			t.Errorf("Expected 4 thinos, got %d", len(thinos))
+		if len(timelines) != 4 {
+			t.Errorf("Expected 4 timelines, got %d", len(timelines))
 		}
 
-		// Check first thino
-		if thinos[0].Time != "10:30" || thinos[0].Content != "Regular memo" {
-			t.Errorf("First thino mismatch: %+v", thinos[0])
+		// Check first timeline
+		if timelines[0].Time != "10:30" || timelines[0].Content != "Regular memo" {
+			t.Errorf("First timeline mismatch: %+v", timelines[0])
 		}
 
-		// Check todo thino
-		if thinos[2].Time != "14:00" || !thinos[2].IsTodo || thinos[2].Done {
-			t.Errorf("Todo thino mismatch: %+v", thinos[2])
+		// Check todo timeline
+		if timelines[2].Time != "14:00" || !timelines[2].IsTodo || timelines[2].Done {
+			t.Errorf("Todo timeline mismatch: %+v", timelines[2])
 		}
 
-		// Check completed thino
-		if thinos[3].Time != "15:30" || !thinos[3].IsTodo || !thinos[3].Done {
-			t.Errorf("Completed thino mismatch: %+v", thinos[3])
+		// Check completed timeline
+		if timelines[3].Time != "15:30" || !timelines[3].IsTodo || !timelines[3].Done {
+			t.Errorf("Completed timeline mismatch: %+v", timelines[3])
 		}
 	})
 
-	t.Run("thinos only from Memos section", func(t *testing.T) {
+	t.Run("timelines only from Memos section", func(t *testing.T) {
 		content := `# Daily Note
 
 ## Day Planner
 - 09:00 This should be ignored
 
 ## Memos
-- 10:00 This is a thino
+- 10:00 This is a timeline
 
 ## Todo
 - 11:00 This should also be ignored
 `
-		thinos := ns.parseThinos(content)
+		timelines := ns.parseTimelines(content)
 
-		if len(thinos) != 1 {
-			t.Errorf("Expected 1 thino (only from Memos section), got %d", len(thinos))
+		if len(timelines) != 1 {
+			t.Errorf("Expected 1 timeline (only from Memos section), got %d", len(timelines))
 		}
 	})
 }

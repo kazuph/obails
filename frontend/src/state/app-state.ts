@@ -6,8 +6,8 @@ import type { Note } from "../adapters/types";
 export interface AppState {
   /** Currently open note */
   currentNote: Note | null;
-  /** Whether thino panel is visible */
-  showThino: boolean;
+  /** Whether timeline panel is visible */
+  showTimeline: boolean;
   /** Path of item targeted by context menu */
   contextMenuTargetPath: string;
   /** Whether context menu target is a directory */
@@ -48,7 +48,7 @@ export interface MermaidState {
 export function createInitialAppState(): AppState {
   return {
     currentNote: null,
-    showThino: false,
+    showTimeline: false,
     contextMenuTargetPath: "",
     contextMenuTargetIsDir: false,
     draggedFilePath: null,

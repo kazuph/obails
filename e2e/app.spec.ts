@@ -25,7 +25,7 @@ test.describe('Obails App', () => {
     await page.waitForLoadState('networkidle');
 
     await expect(page.locator('#daily-note-btn')).toBeVisible();
-    await expect(page.locator('#thino-btn')).toBeVisible();
+    await expect(page.locator('#timeline-btn')).toBeVisible();
     await expect(page.locator('#refresh-btn')).toBeVisible();
   });
 
@@ -88,20 +88,20 @@ test.describe('Obails App', () => {
     expect(bgColor).toBe('#282a36');
   });
 
-  test('should toggle Thino panel', async ({ page }) => {
+  test('should toggle Timeline panel', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
 
-    const thinoPanel = page.locator('#thino-panel');
+    const timelinePanel = page.locator('#timeline-panel');
 
     // Initially hidden
-    await expect(thinoPanel).not.toBeVisible();
+    await expect(timelinePanel).not.toBeVisible();
 
-    // Click Thino button
-    await page.click('#thino-btn');
+    // Click Timeline button
+    await page.click('#timeline-btn');
 
     // Should be visible
-    await expect(thinoPanel).toBeVisible();
+    await expect(timelinePanel).toBeVisible();
   });
 
   test('should have resize handles that work', async ({ page }) => {

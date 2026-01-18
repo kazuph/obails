@@ -8,7 +8,7 @@ import type {
   Note,
   FileInfo,
   Config,
-  Thino,
+  Timeline,
   Backlink,
   Link,
 } from "./types";
@@ -39,8 +39,8 @@ export function createStubAdapters(
     getNote: async () => null,
     saveNote: async () => {},
     getTodayDailyNote: async () => null,
-    getTodayThinos: async () => [],
-    addThino: async () => {},
+    getTodayTimelines: async () => [],
+    addTimeline: async () => {},
   };
 
   const defaultLink: ILinkAdapter = {
@@ -92,16 +92,16 @@ export function createMockFileInfo(
 }
 
 /**
- * Helper to create a mock thino for testing
+ * Helper to create a mock timeline for testing
  */
-export function createMockThino(
-  overrides?: Partial<Thino>
-): Thino {
+export function createMockTimeline(
+  overrides?: Partial<Timeline>
+): Timeline {
   return {
     time: "10:00",
-    content: "Test thino content",
+    content: "Test timeline content",
     ...overrides,
-  } as Thino;
+  } as Timeline;
 }
 
 /**

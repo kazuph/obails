@@ -2,7 +2,7 @@ import type {
   Note,
   FileInfo,
   Config,
-  Thino,
+  Timeline,
   Backlink,
   Link,
 } from "../../bindings/github.com/kazuph/obails/models/models.js";
@@ -35,8 +35,8 @@ export interface INoteAdapter {
   getNote(path: string): Promise<Note | null>;
   saveNote(path: string, content: string): Promise<void>;
   getTodayDailyNote(): Promise<Note | null>;
-  getTodayThinos(): Promise<Thino[]>;
-  addThino(content: string): Promise<void>;
+  getTodayTimelines(): Promise<Timeline[]>;
+  addTimeline(content: string): Promise<void>;
 }
 
 /**
@@ -67,4 +67,4 @@ export interface IAppAdapters {
 }
 
 // Re-export model types for convenience
-export type { Note, FileInfo, Config, Thino, Backlink, Link };
+export type { Note, FileInfo, Config, Timeline, Backlink, Link };

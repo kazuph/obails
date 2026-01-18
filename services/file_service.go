@@ -335,3 +335,11 @@ func (s *FileService) OpenExternal(relativePath string) error {
 	cmd := exec.Command("open", fullPath)
 	return cmd.Start()
 }
+
+// OpenURL opens a URL in the system's default browser
+// Uses macOS 'open' command
+func (s *FileService) OpenURL(url string) error {
+	// Use macOS open command to open URL in default browser
+	cmd := exec.Command("open", url)
+	return cmd.Start()
+}
