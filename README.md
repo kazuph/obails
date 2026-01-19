@@ -184,7 +184,11 @@ wails3 task darwin:package
 - [ ] Full-text search
 - [x] Graph view
 - [x] Timeline view (Twitter-like memo stream)
-- [ ] Non-markdown file display (images, HTML, PDF, Canvas, Excalidraw)
+- [x] Image display (PNG, JPG, GIF, WebP, SVG, BMP, ICO)
+- [x] PDF viewer (with PDF.js)
+- [x] HTML preview
+- [ ] Canvas support
+- [ ] Excalidraw support
 
 ## License
 
