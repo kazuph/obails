@@ -230,7 +230,7 @@ export async function setEditorContent(page: Page, content: string): Promise<voi
 }
 
 /**
- * グラフビューにモックデータを注入する
+ * グラフビューにモックデータを注入する（複雑なナレッジグラフ）
  */
 export async function injectMockGraphData(page: Page): Promise<void> {
   await page.evaluate(() => {
@@ -239,77 +239,163 @@ export async function injectMockGraphData(page: Page): Promise<void> {
 
     if (!container) return;
 
-    // SVGでシンプルなグラフを描画
-    const nodes = [
-      { id: 'welcome', label: 'Welcome', x: 350, y: 200 },
-      { id: 'features', label: 'Features', x: 550, y: 150 },
-      { id: 'mermaid', label: 'Mermaid Demo', x: 550, y: 300 },
-      { id: 'code', label: 'Code Examples', x: 200, y: 150 },
-      { id: 'daily', label: '2025-01-19', x: 200, y: 300 },
+    // Generate complex knowledge graph with multiple clusters
+    interface Node { id: string; label: string; x: number; y: number; size: number; cluster: string; }
+    interface Link { source: string; target: string; }
+
+    const nodes: Node[] = [];
+    const links: Link[] = [];
+    const nodeMap = new Map<string, Node>();
+
+    // Cluster definitions with center positions
+    const clusters = [
+      { name: 'Projects', cx: 350, cy: 220, color: '#6366f1', count: 25 },      // Purple - center hub
+      { name: 'DailyNotes', cx: 580, cy: 120, color: '#22c55e', count: 40 },    // Green - top right
+      { name: 'People', cx: 120, cy: 120, color: '#f59e0b', count: 20 },        // Orange - top left
+      { name: 'Concepts', cx: 580, cy: 340, color: '#ec4899', count: 30 },      // Pink - bottom right
+      { name: 'Resources', cx: 120, cy: 340, color: '#06b6d4', count: 25 },     // Cyan - bottom left
+      { name: 'Archive', cx: 350, cy: 420, color: '#8b5cf6', count: 15 },       // Violet - bottom center
     ];
 
-    const links = [
-      { source: 'welcome', target: 'features' },
-      { source: 'welcome', target: 'mermaid' },
-      { source: 'welcome', target: 'code' },
-      { source: 'features', target: 'welcome' },
-      { source: 'features', target: 'code' },
-      { source: 'daily', target: 'features' },
-    ];
+    // Topic names for realistic labels
+    const projectNames = ['WebApp', 'MobileApp', 'API', 'Database', 'Auth', 'UI', 'Backend', 'Frontend', 'DevOps', 'Testing', 'Docs', 'Analytics', 'Search', 'Cache', 'Queue', 'ML', 'AI', 'Infra', 'Security', 'Performance', 'Monitoring', 'Logging', 'CI/CD', 'Deploy', 'Migration'];
+    const conceptNames = ['Architecture', 'Design', 'Patterns', 'Principles', 'Best Practices', 'Anti-patterns', 'Refactoring', 'Clean Code', 'SOLID', 'DRY', 'KISS', 'YAGNI', 'TDD', 'BDD', 'DDD', 'Microservices', 'Monolith', 'Serverless', 'Event-driven', 'REST', 'GraphQL', 'gRPC', 'WebSocket', 'OAuth', 'JWT', 'Encryption', 'Hashing', 'Caching', 'Indexing', 'Sharding'];
+    const personNames = ['Alice', 'Bob', 'Charlie', 'Diana', 'Eve', 'Frank', 'Grace', 'Henry', 'Ivy', 'Jack', 'Kate', 'Leo', 'Mia', 'Noah', 'Olivia', 'Paul', 'Quinn', 'Rose', 'Sam', 'Tina'];
+    const resourceNames = ['Tutorial', 'Book', 'Course', 'Video', 'Article', 'Paper', 'Blog', 'Podcast', 'Tool', 'Library', 'Framework', 'SDK', 'CLI', 'Plugin', 'Extension', 'Template', 'Boilerplate', 'Example', 'Demo', 'Benchmark', 'Comparison', 'Review', 'Guide', 'Cheatsheet', 'Reference'];
+    const archiveNames = ['2024-Q1', '2024-Q2', '2024-Q3', '2024-Q4', 'Legacy', 'Deprecated', 'Old', 'Backup', 'V1', 'V2', 'Draft', 'WIP', 'TODO', 'Ideas', 'Scratch'];
 
-    // SVG作成
+    // Generate nodes for each cluster
+    clusters.forEach((cluster, clusterIdx) => {
+      const names = clusterIdx === 0 ? projectNames :
+                    clusterIdx === 1 ? [] : // Daily notes use dates
+                    clusterIdx === 2 ? personNames :
+                    clusterIdx === 3 ? conceptNames :
+                    clusterIdx === 4 ? resourceNames : archiveNames;
+
+      for (let i = 0; i < cluster.count; i++) {
+        // Distribute nodes in a circular pattern around cluster center
+        const angle = (i / cluster.count) * Math.PI * 2 + (clusterIdx * 0.3);
+        const radius = 40 + Math.random() * 50;
+        const x = cluster.cx + Math.cos(angle) * radius;
+        const y = cluster.cy + Math.sin(angle) * radius;
+
+        let label: string;
+        if (clusterIdx === 1) {
+          // Daily notes - use dates
+          const date = new Date(2025, 0, 1 + i);
+          label = `${date.getMonth() + 1}/${date.getDate()}`;
+        } else {
+          label = names[i % names.length] || `Note${i}`;
+        }
+
+        const id = `${cluster.name}-${i}`;
+        const size = clusterIdx === 0 && i < 5 ? 6 : 3 + Math.random() * 3; // Hub nodes are bigger
+        const node = { id, label, x, y, size, cluster: cluster.name };
+        nodes.push(node);
+        nodeMap.set(id, node);
+      }
+    });
+
+    // Generate intra-cluster links (nodes within same cluster)
+    clusters.forEach((cluster, clusterIdx) => {
+      const clusterNodes = nodes.filter(n => n.cluster === cluster.name);
+      clusterNodes.forEach((node, i) => {
+        // Connect to 2-4 random nodes in same cluster
+        const connectionCount = 2 + Math.floor(Math.random() * 3);
+        for (let j = 0; j < connectionCount; j++) {
+          const targetIdx = Math.floor(Math.random() * clusterNodes.length);
+          if (targetIdx !== i) {
+            links.push({ source: node.id, target: clusterNodes[targetIdx].id });
+          }
+        }
+      });
+    });
+
+    // Generate inter-cluster links (connecting different clusters)
+    // Projects cluster is the hub - connects to all other clusters
+    const projectNodes = nodes.filter(n => n.cluster === 'Projects');
+    clusters.forEach((cluster, idx) => {
+      if (idx === 0) return; // Skip projects cluster itself
+      const clusterNodes = nodes.filter(n => n.cluster === cluster.name);
+      // Connect 5-10 nodes from each cluster to project nodes
+      const connectCount = 5 + Math.floor(Math.random() * 6);
+      for (let i = 0; i < connectCount; i++) {
+        const projectNode = projectNodes[Math.floor(Math.random() * projectNodes.length)];
+        const otherNode = clusterNodes[Math.floor(Math.random() * clusterNodes.length)];
+        links.push({ source: projectNode.id, target: otherNode.id });
+      }
+    });
+
+    // Additional cross-cluster connections for realism
+    const crossConnections = [
+      ['People', 'DailyNotes', 15],
+      ['Concepts', 'Resources', 12],
+      ['People', 'Concepts', 8],
+      ['Resources', 'Archive', 6],
+      ['DailyNotes', 'Archive', 10],
+    ] as const;
+
+    crossConnections.forEach(([cluster1, cluster2, count]) => {
+      const nodes1 = nodes.filter(n => n.cluster === cluster1);
+      const nodes2 = nodes.filter(n => n.cluster === cluster2);
+      for (let i = 0; i < count; i++) {
+        const n1 = nodes1[Math.floor(Math.random() * nodes1.length)];
+        const n2 = nodes2[Math.floor(Math.random() * nodes2.length)];
+        links.push({ source: n1.id, target: n2.id });
+      }
+    });
+
+    // Remove duplicate links
+    const uniqueLinks = Array.from(new Set(links.map(l =>
+      l.source < l.target ? `${l.source}-${l.target}` : `${l.target}-${l.source}`
+    ))).map(key => {
+      const [source, target] = key.split('-');
+      return { source: source + (key.includes('-') ? key.substring(key.indexOf('-')) : ''), target };
+    }).slice(0, 400); // Limit to 400 links for performance
+
+    // Create SVG
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('width', '100%');
     svg.setAttribute('height', '100%');
-    svg.setAttribute('viewBox', '0 0 700 450');
+    svg.setAttribute('viewBox', '0 0 700 480');
     svg.style.background = 'transparent';
 
-    // リンクを描画
+    // Draw links first (behind nodes)
     links.forEach(link => {
-      const source = nodes.find(n => n.id === link.source);
-      const target = nodes.find(n => n.id === link.target);
+      const source = nodeMap.get(link.source);
+      const target = nodeMap.get(link.target);
       if (source && target) {
         const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
         line.setAttribute('x1', String(source.x));
         line.setAttribute('y1', String(source.y));
         line.setAttribute('x2', String(target.x));
         line.setAttribute('y2', String(target.y));
-        line.setAttribute('stroke', 'rgba(100, 150, 255, 0.5)');
-        line.setAttribute('stroke-width', '2');
+        line.setAttribute('stroke', 'rgba(100, 150, 255, 0.15)');
+        line.setAttribute('stroke-width', '1');
         svg.appendChild(line);
       }
     });
 
-    // ノードを描画
+    // Draw nodes - use single purple color like real app (dark theme)
+    const nodeColor = '#9d8cff'; // Same as real app dark theme
     nodes.forEach(node => {
-      // 円
       const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
       circle.setAttribute('cx', String(node.x));
       circle.setAttribute('cy', String(node.y));
-      circle.setAttribute('r', '25');
-      circle.setAttribute('fill', node.id === 'welcome' ? '#6495ED' : '#4169E1');
-      circle.setAttribute('stroke', '#fff');
-      circle.setAttribute('stroke-width', '2');
+      circle.setAttribute('r', String(node.size));
+      circle.setAttribute('fill', nodeColor);
+      circle.setAttribute('opacity', '0.85');
       svg.appendChild(circle);
-
-      // ラベル
-      const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-      text.setAttribute('x', String(node.x));
-      text.setAttribute('y', String(node.y + 45));
-      text.setAttribute('text-anchor', 'middle');
-      text.setAttribute('fill', '#fff');
-      text.setAttribute('font-size', '12');
-      text.setAttribute('font-family', 'system-ui');
-      text.textContent = node.label;
-      svg.appendChild(text);
     });
+
+    // Note: Real app doesn't show cluster labels - only nodes and links
 
     container.innerHTML = '';
     container.appendChild(svg);
 
-    // 統計を更新
+    // Update stats
     if (stats) {
-      stats.textContent = '5 files • 6 links';
+      stats.textContent = `${nodes.length} files • ${links.length} links`;
     }
   });
 }
