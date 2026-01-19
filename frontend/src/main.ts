@@ -666,6 +666,11 @@ async function openFile(path: string, fileType: string): Promise<void> {
         localStorage.setItem("obails-last-file", JSON.stringify({ path, fileType }));
     }
 
+    // Clear outline for non-markdown files (outline is only relevant for markdown)
+    if (fileType !== "markdown") {
+        outlineList.innerHTML = '<div class="outline-empty">No outline available</div>';
+    }
+
     switch (fileType) {
         case "markdown":
             await openNote(path);

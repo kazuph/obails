@@ -684,6 +684,13 @@ body {
     letter-spacing: 0.5px;
 }
 
+.outline-empty {
+    padding: 0.5rem;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    font-style: italic;
+}
+
 .outline-item {
     padding: 0.4rem 0.5rem;
     cursor: pointer;
