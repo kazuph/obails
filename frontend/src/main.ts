@@ -4,6 +4,7 @@ import * as NoteService from "../bindings/github.com/kazuph/obails/services/note
 import * as LinkService from "../bindings/github.com/kazuph/obails/services/linkservice.js";
 import * as WindowService from "../bindings/github.com/kazuph/obails/services/windowservice.js";
 import * as GraphService from "../bindings/github.com/kazuph/obails/services/graphservice.js";
+import * as StateService from "../bindings/github.com/kazuph/obails/services/stateservice.js";
 import { FileInfo, Note, Timeline, Backlink, Link, Config, Graph } from "../bindings/github.com/kazuph/obails/models/models.js";
 import mermaid from "mermaid";
 import hljs from "highlight.js";
@@ -105,26 +106,14 @@ async function init() {
         if (config?.Vault?.Path) {
             await loadFileTree();
 
-            // Open last file if exists
-            const lastFileData = localStorage.getItem("obails-last-file");
-            if (lastFileData) {
+            // Open last file if exists (from vault state)
+            const lastFile = await StateService.GetLastOpenedFile();
+            if (lastFile) {
                 try {
-                    // Support both new JSON format and legacy string format
-                    let path: string;
-                    let fileType: string;
-                    try {
-                        const parsed = JSON.parse(lastFileData);
-                        path = parsed.path;
-                        fileType = parsed.fileType;
-                    } catch {
-                        // Legacy format: just the path (assume markdown)
-                        path = lastFileData;
-                        fileType = "markdown";
-                    }
-                    await openFile(path, fileType);
+                    await openFile(lastFile.path, lastFile.fileType);
                 } catch {
-                    // File might have been deleted, clear the storage
-                    localStorage.removeItem("obails-last-file");
+                    // File might have been deleted, clear the state
+                    await StateService.ClearLastOpenedFile();
                 }
             }
 
@@ -566,7 +555,7 @@ async function moveFileToFolder(sourcePath: string, targetFolder: string) {
         // Update current note path if the moved file was open
         if (currentNote && currentNote.path === sourcePath) {
             currentNote.path = newPath!;
-            localStorage.setItem("obails-last-file", JSON.stringify({ path: newPath!, fileType: "markdown" }));
+            await StateService.SetLastOpenedFile(newPath!, "markdown");
         }
     } catch (err) {
         console.error("Failed to move file:", err);
@@ -593,7 +582,7 @@ async function deleteTargetPathWithArgs(targetPath: string, isDir: boolean) {
             updatePreview();
             clearBacklinks();
             clearOutgoingLinks();
-            localStorage.removeItem("obails-last-file");
+            await StateService.ClearLastOpenedFile();
         }
     } catch (err) {
         console.error("Failed to delete:", err);
@@ -661,9 +650,9 @@ async function openFile(path: string, fileType: string): Promise<void> {
     hideAllViewers();
     currentFilePath = path;  // Track current file for refresh
 
-    // Save last opened file to localStorage (for all supported types)
+    // Save last opened file to vault state (for all supported types)
     if (fileType === "markdown" || fileType === "image" || fileType === "pdf" || fileType === "html") {
-        localStorage.setItem("obails-last-file", JSON.stringify({ path, fileType }));
+        await StateService.SetLastOpenedFile(path, fileType);
     }
 
     // Clear outline for non-markdown files (outline is only relevant for markdown)
@@ -1284,8 +1273,8 @@ async function openNote(path: string) {
             await loadBacklinks(path);
             await loadOutgoingLinks(path);
 
-            // Save to localStorage (also saves when called directly from backlinks/outgoing links/graph)
-            localStorage.setItem("obails-last-file", JSON.stringify({ path, fileType: "markdown" }));
+            // Save to vault state (also saves when called directly from backlinks/outgoing links/graph)
+            await StateService.SetLastOpenedFile(path, "markdown");
 
             // Update pane titles (remove .md extension)
             const filename = path.split("/").pop()?.replace(/\.md$/i, "") || path;
@@ -1656,7 +1645,7 @@ async function showGraphView() {
     await loadGraphData();
 }
 
-function hideGraphView() {
+async function hideGraphView() {
     showGraph = false;
 
     // Save node positions before closing
@@ -1676,26 +1665,12 @@ function hideGraphView() {
 
     // Open last file if exists and no note is currently open
     if (!currentNote) {
-        const lastFileData = localStorage.getItem("obails-last-file");
-        if (lastFileData) {
+        const lastFile = await StateService.GetLastOpenedFile();
+        if (lastFile) {
             try {
-                // Support both new JSON format and legacy string format
-                let path: string;
-                let fileType: string;
-                try {
-                    const parsed = JSON.parse(lastFileData);
-                    path = parsed.path;
-                    fileType = parsed.fileType;
-                } catch {
-                    // Legacy format: just the path (assume markdown)
-                    path = lastFileData;
-                    fileType = "markdown";
-                }
-                openFile(path, fileType).catch(() => {
-                    localStorage.removeItem("obails-last-file");
-                });
+                await openFile(lastFile.path, lastFile.fileType);
             } catch {
-                localStorage.removeItem("obails-last-file");
+                await StateService.ClearLastOpenedFile();
             }
         }
     }

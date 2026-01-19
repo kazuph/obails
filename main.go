@@ -19,6 +19,11 @@ func main() {
 		log.Printf("Warning: Failed to load config: %v", err)
 	}
 
+	stateService := services.NewStateService(configService)
+	if err := stateService.Load(); err != nil {
+		log.Printf("Warning: Failed to load state: %v", err)
+	}
+
 	fileService := services.NewFileService(configService)
 	noteService := services.NewNoteService(fileService, configService)
 	linkService := services.NewLinkService(fileService, configService)
@@ -38,6 +43,7 @@ func main() {
 		Description: "A lightweight Obsidian alternative",
 		Services: []application.Service{
 			application.NewService(configService),
+			application.NewService(stateService),
 			application.NewService(fileService),
 			application.NewService(noteService),
 			application.NewService(linkService),
