@@ -7,12 +7,14 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/kazuph/obails/models"
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 // ConfigService handles application configuration
 type ConfigService struct {
 	configPath string
 	config     *models.Config
+	app        *application.App
 }
 
 // NewConfigService creates a new ConfigService
@@ -127,4 +129,38 @@ func (s *ConfigService) OpenConfigFile() error {
 // ReloadConfig reloads the configuration from file
 func (s *ConfigService) ReloadConfig() error {
 	return s.Load()
+}
+
+// SetApp sets the application reference for dialog support
+func (s *ConfigService) SetApp(app *application.App) {
+	s.app = app
+}
+
+// SelectVaultFolder opens a folder selection dialog and sets the vault path
+func (s *ConfigService) SelectVaultFolder() (string, error) {
+	if s.app == nil {
+		return "", nil
+	}
+
+	// Open folder selection dialog
+	path, err := s.app.Dialog.OpenFile().
+		SetTitle("Select Vault Folder").
+		SetMessage("Choose the folder containing your notes").
+		CanChooseDirectories(true).
+		CanChooseFiles(false).
+		CanCreateDirectories(true).
+		PromptForSingleSelection()
+
+	if err != nil {
+		return "", err
+	}
+
+	// If user selected a folder, save it
+	if path != "" {
+		if err := s.SetVaultPath(path); err != nil {
+			return "", err
+		}
+	}
+
+	return path, nil
 }

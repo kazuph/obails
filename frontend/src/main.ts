@@ -119,12 +119,42 @@ async function init() {
 
             // Prefetch graph data in background (don't block init)
             prefetchGraphData().catch(console.error);
+        } else {
+            // Show vault setup dialog if no vault is configured
+            showVaultSetupDialog();
         }
     } catch (err) {
         console.warn("Running in browser mode - backend services unavailable");
     }
 
     setupEventListeners();
+}
+
+// Show vault setup dialog
+function showVaultSetupDialog() {
+    const overlay = document.getElementById("vault-setup-overlay")!;
+    overlay.style.display = "flex";
+}
+
+// Hide vault setup dialog
+function hideVaultSetupDialog() {
+    const overlay = document.getElementById("vault-setup-overlay")!;
+    overlay.style.display = "none";
+}
+
+// Handle vault folder selection
+async function handleVaultFolderSelection() {
+    try {
+        const path = await ConfigService.SelectVaultFolder();
+        if (path) {
+            hideVaultSetupDialog();
+            // Reload the app to apply the new vault
+            await loadFileTree();
+        }
+    } catch (err) {
+        console.error("Failed to select vault folder:", err);
+        alert("Failed to select vault folder. Please try again.");
+    }
 }
 
 // Prefetch graph data on app startup
@@ -161,6 +191,9 @@ function setupEventListeners() {
     document.getElementById("graph-btn")!.addEventListener("click", toggleGraphView);
     document.getElementById("refresh-btn")!.addEventListener("click", refresh);
     document.getElementById("timeline-submit")!.addEventListener("click", submitTimeline);
+
+    // Vault setup dialog
+    document.getElementById("vault-setup-btn")!.addEventListener("click", handleVaultFolderSelection);
 
     // Graph overlay close button
     document.getElementById("graph-close")!.addEventListener("click", hideGraphView);

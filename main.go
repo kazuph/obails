@@ -75,6 +75,9 @@ func main() {
 	// Set window reference for window service
 	windowService.SetWindow(mainWindow)
 
+	// Set app reference for config service (for dialogs)
+	configService.SetApp(app)
+
 	// Run the application
 	if err := app.Run(); err != nil {
 		log.Fatal(err)
