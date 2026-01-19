@@ -32,11 +32,59 @@
 
 ## Screenshots
 
+### Main Editor
+
 <p align="center">
   <img src="docs/screenshots/main-light.png" alt="Obails - GitHub Light Theme" width="800">
 </p>
 
-*GitHub Light theme with Mermaid diagram support*
+*GitHub Light theme - Split view with markdown editor and live preview*
+
+<p align="center">
+  <img src="docs/screenshots/main-dark.png" alt="Obails - Dracula Theme" width="800">
+</p>
+
+*Dracula theme - Beautiful dark mode for night coding*
+
+### Knowledge Graph
+
+<p align="center">
+  <img src="docs/screenshots/graph-view.png" alt="Obails - Knowledge Graph" width="800">
+</p>
+
+*Interactive knowledge graph showing connections between notes*
+
+### Mermaid Diagrams
+
+<p align="center">
+  <img src="docs/screenshots/mermaid-diagram.png" alt="Obails - Mermaid Diagrams" width="800">
+</p>
+
+*Full Mermaid.js support with flowcharts, sequence diagrams, and more*
+
+### Timeline & Daily Notes
+
+<p align="center">
+  <img src="docs/screenshots/timeline-panel.png" alt="Obails - Timeline Panel" width="800">
+</p>
+
+*Quick memos with timestamps - perfect for daily journaling*
+
+### Code Syntax Highlighting
+
+<p align="center">
+  <img src="docs/screenshots/code-highlight.png" alt="Obails - Code Highlighting" width="800">
+</p>
+
+*Syntax highlighting for TypeScript, Go, Python, and more*
+
+### Theme Gallery
+
+| Light Themes | Dark Themes |
+|:---:|:---:|
+| ![GitHub Light](docs/screenshots/theme-github-light.png) | ![Catppuccin Mocha](docs/screenshots/theme-catppuccin.png) |
+| ![Solarized Light](docs/screenshots/theme-solarized-light.png) | ![Dracula](docs/screenshots/theme-dracula.png) |
+| ![One Light](docs/screenshots/theme-one-light.png) | ![Tokyo Night](docs/screenshots/theme-tokyonight.png) |
 
 ## Installation
 
@@ -135,7 +183,7 @@ wails3 task darwin:package
 
 - [ ] Full-text search
 - [x] Graph view
-- [ ] Timeline view (Twitter-like memo stream)
+- [x] Timeline view (Twitter-like memo stream)
 - [ ] Non-markdown file display (images, HTML, PDF, Canvas, Excalidraw)
 
 ## License
