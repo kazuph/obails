@@ -2,8 +2,9 @@ import type {
   Note,
   FileInfo,
   Config,
-  Thino,
+  Timeline,
   Backlink,
+  Link,
 } from "../../bindings/github.com/kazuph/obails/models/models.js";
 
 /**
@@ -22,6 +23,9 @@ export interface IFileAdapter {
   createFile(path: string, content: string): Promise<void>;
   moveFile(sourcePath: string, destPath: string): Promise<void>;
   deletePath(path: string): Promise<void>;
+  readFile(path: string): Promise<string>;
+  readBinaryFile(path: string): Promise<string>; // Returns base64 encoded content
+  openExternal(path: string): Promise<void>; // Open file with system default app
 }
 
 /**
@@ -31,8 +35,8 @@ export interface INoteAdapter {
   getNote(path: string): Promise<Note | null>;
   saveNote(path: string, content: string): Promise<void>;
   getTodayDailyNote(): Promise<Note | null>;
-  getTodayThinos(): Promise<Thino[]>;
-  addThino(content: string): Promise<void>;
+  getTodayTimelines(): Promise<Timeline[]>;
+  addTimeline(content: string): Promise<void>;
 }
 
 /**
@@ -40,6 +44,7 @@ export interface INoteAdapter {
  */
 export interface ILinkAdapter {
   getBacklinks(path: string): Promise<Backlink[]>;
+  getOutgoingLinks(path: string): Promise<Link[]>;
   rebuildIndex(): Promise<void>;
 }
 
@@ -62,4 +67,4 @@ export interface IAppAdapters {
 }
 
 // Re-export model types for convenience
-export type { Note, FileInfo, Config, Thino, Backlink };
+export type { Note, FileInfo, Config, Timeline, Backlink, Link };

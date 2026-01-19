@@ -26,7 +26,7 @@
 - **Outline Panel** - Jump to any heading instantly
 - **Backlinks** - See which notes link to the current note
 - **Daily Notes** - Quick access to today's note
-- **Thino Support** - Quick memos with timestamp (`HH:mm content`)
+- **Timeline** - Quick memos with timestamp (`HH:mm content`)
 - **Code Highlighting** - Syntax highlighting for code blocks
 - **Native Performance** - Built with Go backend, runs as native app
 
@@ -86,7 +86,7 @@ Obails stores its configuration at `~/.config/obails/config.toml`:
   folder = "02_dailynotes"
   format = "2006-01-02"
 
-[thino]
+[timeline]
   section = "## Memos"
   time_format = "15:04"
 

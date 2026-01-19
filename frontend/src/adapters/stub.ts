@@ -8,8 +8,9 @@ import type {
   Note,
   FileInfo,
   Config,
-  Thino,
+  Timeline,
   Backlink,
+  Link,
 } from "./types";
 
 /**
@@ -29,18 +30,22 @@ export function createStubAdapters(
     createFile: async () => {},
     moveFile: async () => {},
     deletePath: async () => {},
+    readFile: async () => "",
+    readBinaryFile: async () => "",
+    openExternal: async () => {},
   };
 
   const defaultNote: INoteAdapter = {
     getNote: async () => null,
     saveNote: async () => {},
     getTodayDailyNote: async () => null,
-    getTodayThinos: async () => [],
-    addThino: async () => {},
+    getTodayTimelines: async () => [],
+    addTimeline: async () => {},
   };
 
   const defaultLink: ILinkAdapter = {
     getBacklinks: async () => [],
+    getOutgoingLinks: async () => [],
     rebuildIndex: async () => {},
   };
 
@@ -87,16 +92,16 @@ export function createMockFileInfo(
 }
 
 /**
- * Helper to create a mock thino for testing
+ * Helper to create a mock timeline for testing
  */
-export function createMockThino(
-  overrides?: Partial<Thino>
-): Thino {
+export function createMockTimeline(
+  overrides?: Partial<Timeline>
+): Timeline {
   return {
     time: "10:00",
-    content: "Test thino content",
+    content: "Test timeline content",
     ...overrides,
-  } as Thino;
+  } as Timeline;
 }
 
 /**
@@ -125,4 +130,18 @@ export function createMockConfig(
     },
     ...overrides,
   } as Config;
+}
+
+/**
+ * Helper to create a mock link for testing
+ */
+export function createMockLink(
+  overrides?: Partial<Link>
+): Link {
+  return {
+    text: "target-note",
+    targetPath: "target-note.md",
+    exists: true,
+    ...overrides,
+  } as Link;
 }

@@ -294,6 +294,61 @@ body {
     color: var(--text-primary);
 }
 
+/* File Search */
+.file-search {
+    padding: 0.5rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+#file-search-input {
+    flex: 1;
+    padding: 0.4rem 0.6rem;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 0.85rem;
+}
+
+#file-search-input:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(var(--accent), 0.1);
+}
+
+#file-search-input::placeholder {
+    color: var(--text-muted);
+}
+
+.search-clear-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0.2rem 0.4rem;
+    font-size: 0.8rem;
+    border-radius: 4px;
+}
+
+.search-clear-btn:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+/* Search highlight */
+.file-item.search-match .file-name {
+    background: rgba(255, 235, 59, 0.3);
+    border-radius: 2px;
+}
+
+.file-item.search-hidden,
+.file-wrapper.search-hidden {
+    display: none;
+}
+
 .file-tree {
     flex: 1;
     overflow-y: auto;
@@ -538,20 +593,20 @@ body {
     background: var(--border);
 }
 
-/* Thino Panel */
-.thino-panel {
+/* Timeline Panel */
+.timeline-panel {
     flex: 1;
     padding: 1rem;
     overflow: auto;
 }
 
-.thino-input {
+.timeline-input {
     display: flex;
     gap: 0.5rem;
     margin-bottom: 1rem;
 }
 
-.thino-input textarea {
+.timeline-input textarea {
     flex: 1;
     padding: 0.75rem;
     background: var(--bg-secondary);
@@ -563,7 +618,7 @@ body {
     min-height: 80px;
 }
 
-.thino-input button {
+.timeline-input button {
     padding: 0.75rem 1.5rem;
     background: var(--accent);
     border: none;
@@ -574,30 +629,30 @@ body {
     align-self: flex-end;
 }
 
-.thino-input button:hover {
+.timeline-input button:hover {
     background: var(--accent-hover);
 }
 
-.thino-timeline {
+.timeline-list {
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
 }
 
-.thino-item {
+.timeline-item {
     padding: 1rem;
     background: var(--bg-secondary);
     border: 1px solid var(--border);
     border-radius: 8px;
 }
 
-.thino-time {
+.timeline-time {
     font-size: 0.8rem;
     color: var(--text-muted);
     margin-bottom: 0.5rem;
 }
 
-.thino-content {
+.timeline-content {
     font-size: 0.95rem;
     line-height: 1.5;
 }
@@ -613,19 +668,27 @@ body {
 
 /* Outline Panel */
 .outline-panel {
-    flex: 2;
-    min-height: 100px;
+    flex: 1;
+    min-height: 80px;
     padding: 1rem;
     overflow-y: auto;
 }
 
 .outline-panel h3,
+.outgoing-links-panel h3,
 .backlinks-panel h3 {
     font-size: 0.9rem;
     color: var(--text-secondary);
     margin-bottom: 1rem;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+}
+
+.outline-empty {
+    padding: 0.5rem;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    font-style: italic;
 }
 
 .outline-item {
@@ -660,6 +723,65 @@ body {
 
 .right-sidebar .resize-handle.horizontal:hover {
     background: var(--accent);
+}
+
+/* Outgoing Links Panel */
+.outgoing-links-panel {
+    flex: 1;
+    min-height: 80px;
+    padding: 1rem;
+    overflow-y: auto;
+    border-top: 1px solid var(--border);
+}
+
+.outgoing-link-item {
+    padding: 0.5rem 0.75rem;
+    border-radius: 6px;
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Existing links - clickable */
+.outgoing-link-item.exists {
+    background: var(--bg-tertiary);
+    cursor: pointer;
+}
+
+.outgoing-link-item.exists:hover {
+    background: var(--border);
+}
+
+.outgoing-link-item.exists .link-text {
+    font-size: 0.85rem;
+    color: var(--accent);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Missing links - not clickable */
+.outgoing-link-item.missing {
+    background: transparent;
+    border: 1px dashed var(--border);
+    cursor: default;
+    opacity: 0.7;
+}
+
+.outgoing-link-item.missing .link-text {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.outgoing-link-item .link-status {
+    font-size: 0.7rem;
+    flex-shrink: 0;
+    color: var(--text-muted);
+    font-style: italic;
 }
 
 /* Backlinks Panel */
@@ -771,6 +893,75 @@ body {
 
 .mermaid-container:hover::after {
     opacity: 1;
+}
+
+/* Mermaid Inline Error */
+.mermaid-error-inline {
+    background: #fff5f5;
+    border: 1px solid #fed7d7;
+    border-radius: 6px;
+    padding: 12px;
+    margin: 8px 0;
+}
+
+.mermaid-error-header {
+    font-weight: 600;
+    color: #c53030;
+    margin-bottom: 8px;
+    font-size: 0.9rem;
+}
+
+.mermaid-error-text {
+    margin: 0;
+    padding: 8px 12px;
+    background: #fff;
+    border: 1px solid #feb2b2;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 0.85rem;
+    color: #742a2a;
+    white-space: pre-wrap;
+    word-break: break-word;
+    user-select: text;
+    cursor: text;
+    overflow-x: auto;
+}
+
+/* Dark theme support for mermaid error */
+[data-theme="dark"] .mermaid-error-inline,
+.theme-dracula .mermaid-error-inline,
+.theme-nord .mermaid-error-inline,
+.theme-solarized .mermaid-error-inline,
+.theme-onedark .mermaid-error-inline,
+.theme-gruvbox .mermaid-error-inline,
+.theme-tokyonight .mermaid-error-inline,
+.theme-catppuccin .mermaid-error-inline {
+    background: #3d1515;
+    border-color: #742a2a;
+}
+
+[data-theme="dark"] .mermaid-error-header,
+.theme-dracula .mermaid-error-header,
+.theme-nord .mermaid-error-header,
+.theme-solarized .mermaid-error-header,
+.theme-onedark .mermaid-error-header,
+.theme-gruvbox .mermaid-error-header,
+.theme-tokyonight .mermaid-error-header,
+.theme-catppuccin .mermaid-error-header {
+    color: #fc8181;
+}
+
+[data-theme="dark"] .mermaid-error-text,
+.theme-dracula .mermaid-error-text,
+.theme-nord .mermaid-error-text,
+.theme-solarized .mermaid-error-text,
+.theme-onedark .mermaid-error-text,
+.theme-gruvbox .mermaid-error-text,
+.theme-tokyonight .mermaid-error-text,
+.theme-catppuccin .mermaid-error-text {
+    background: #2d1515;
+    border-color: #742a2a;
+    color: #feb2b2;
 }
 
 /* Mermaid Fullscreen */
@@ -1110,3 +1301,339 @@ body {
 .graph-container canvas {
     display: block;
 }
+
+/* ========== IMAGE VIEWER ========== */
+.image-viewer {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-secondary);
+    overflow: hidden;
+}
+
+.image-container {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    overflow: hidden;
+    background: var(--bg-tertiary);
+    min-height: 0; /* Allow flex shrinking */
+}
+
+.image-container img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain; /* Maintain aspect ratio, fill container */
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* ========== PDF VIEWER ========== */
+.pdf-viewer {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    background: var(--bg-secondary);
+    overflow: hidden;
+}
+
+.pdf-viewer .pane-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 1rem;
+    background: var(--bg-tertiary);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+}
+
+.pdf-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.pdf-controls button {
+    padding: 0.25rem 0.5rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-primary);
+    cursor: pointer;
+    font-size: 0.85rem;
+    min-width: 2rem;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.pdf-controls button:hover {
+    background: var(--bg-primary);
+    border-color: var(--accent);
+}
+
+.pdf-controls button:active {
+    transform: scale(0.95);
+}
+
+#pdf-page-info,
+#pdf-zoom-info {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    min-width: 3.5rem;
+    text-align: center;
+}
+
+.pdf-container-wrapper {
+    flex: 1;
+    position: relative;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.pdf-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    overflow: auto;
+    padding: 1rem;
+    background: var(--bg-tertiary);
+}
+
+.pdf-buffer-active {
+    z-index: 2;
+    visibility: visible;
+}
+
+.pdf-buffer-back {
+    z-index: 1;
+    visibility: hidden;
+}
+
+.pdf-page-canvas {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    background: white;
+    margin-bottom: 1rem;
+    display: block;
+}
+
+.pdf-page-canvas:last-child {
+    margin-bottom: 0;
+}
+
+/* Image controls */
+.image-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.image-controls button {
+    padding: 0.25rem 0.5rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-primary);
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.image-controls button:hover {
+    background: var(--bg-primary);
+    border-color: var(--accent);
+}
+
+.image-viewer .pane-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 1rem;
+    background: var(--bg-tertiary);
+    border-bottom: 1px solid var(--border);
+}
+
+/* ========== IMAGE FULLSCREEN ========== */
+.image-fullscreen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.95);
+    z-index: 2000;
+    display: flex;
+    flex-direction: column;
+}
+
+.image-fs-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem 0.75rem 80px; /* Left padding avoids macOS window controls */
+    background: rgba(30, 30, 30, 0.9);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.image-fs-title {
+    color: #fff;
+    font-weight: 500;
+}
+
+.image-fs-header button {
+    padding: 0.4rem 0.75rem;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+    color: #fff;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: background 0.15s;
+}
+
+.image-fs-header button:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.image-fs-content {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    padding: 1rem;
+    min-height: 0;
+}
+
+.image-fs-content img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain; /* Fill the entire space while maintaining aspect ratio */
+}
+
+/* ========== PDF FULLSCREEN ========== */
+.pdf-fullscreen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.95);
+    z-index: 2000;
+    display: flex;
+    flex-direction: column;
+}
+
+.pdf-fs-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem 0.75rem 80px; /* Left padding avoids macOS window controls */
+    background: rgba(30, 30, 30, 0.9);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.pdf-fs-title {
+    color: #fff;
+    font-weight: 500;
+}
+
+.pdf-fs-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.pdf-fs-controls button {
+    padding: 0.4rem 0.6rem;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+    color: #fff;
+    cursor: pointer;
+    font-size: 0.85rem;
+    min-width: 2rem;
+    transition: background 0.15s;
+}
+
+.pdf-fs-controls button:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.pdf-fs-controls span {
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 0.8rem;
+    min-width: 4rem;
+    text-align: center;
+}
+
+.pdf-fs-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    overflow: auto;
+    padding: 1rem;
+    background: #333;
+}
+
+.pdf-fs-container .pdf-page-canvas {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+}
+
+/* ========== HTML EDITOR ========== */
+.html-editor-container {
+    flex: 1;
+    display: flex;
+    gap: 1px;
+    background: var(--border);
+    overflow: hidden;
+}
+
+.html-editor-container .editor-pane {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-secondary);
+}
+
+.html-editor-container .preview-pane {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-secondary);
+}
+
+#html-editor {
+    flex: 1;
+    padding: 1rem;
+    border: none;
+    resize: none;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: 'Fira Code', 'SF Mono', Consolas, monospace;
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+#html-editor:focus {
+    outline: none;
+}
+
+#html-preview {
+    flex: 1;
+    border: none;
+    background: var(--bg-primary);
+}
+
+/* ========== FILE TYPE ICONS ========== */
+.file-icon-image::before { content: '🖼️'; }
+.file-icon-pdf::before { content: '📕'; }
+.file-icon-html::before { content: '🌐'; }
+.file-icon-other::before { content: '📎'; }

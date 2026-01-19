@@ -23,15 +23,29 @@ func NewGraphService(linkService *LinkService, fileService *FileService, configS
 	}
 }
 
-// GetFullGraph returns the complete knowledge graph
+// isMarkdownFile checks if a file path is a markdown file
+func isMarkdownFile(path string) bool {
+	// If no extension, treat as markdown
+	if !strings.Contains(path, ".") {
+		return true
+	}
+	return strings.HasSuffix(path, ".md")
+}
+
+// GetFullGraph returns the complete knowledge graph (markdown files only)
 func (s *GraphService) GetFullGraph() models.Graph {
 	forwardIndex := s.linkService.ExportForwardIndex()
 
 	nodeMap := make(map[string]*models.GraphNode)
 	var edges []models.GraphEdge
 
-	// Build nodes from forwardIndex (all files that have been indexed)
+	// Build nodes from forwardIndex (only markdown files)
 	for filePath, links := range forwardIndex {
+		// Skip non-markdown files
+		if !isMarkdownFile(filePath) {
+			continue
+		}
+
 		// Create node for this file
 		if _, exists := nodeMap[filePath]; !exists {
 			nodeMap[filePath] = &models.GraphNode{
@@ -46,11 +60,13 @@ func (s *GraphService) GetFullGraph() models.Graph {
 			// Try to resolve the link to a file path
 			targetPath, exists := s.linkService.ResolveLink(linkText)
 			if !exists {
-				// Use the link text as-is for unresolved links
-				targetPath = linkText
-				if !strings.HasSuffix(targetPath, ".md") {
-					targetPath += ".md"
-				}
+				// Unresolved links are skipped (target doesn't exist)
+				continue
+			}
+
+			// Skip non-markdown targets
+			if !isMarkdownFile(targetPath) {
+				continue
 			}
 
 			// Create target node if not exists

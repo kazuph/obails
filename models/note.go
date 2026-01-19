@@ -11,19 +11,29 @@ type Note struct {
 	ModifiedAt  time.Time      `json:"modifiedAt"`
 }
 
-// Thino represents a quick memo entry in daily notes
-type Thino struct {
+// Timeline represents a quick memo entry in daily notes
+type Timeline struct {
 	Time    string `json:"time"`    // "10:38"
 	Content string `json:"content"` // The memo content
 	IsTodo  bool   `json:"isTodo"`  // true if [ ] or [x]
 	Done    bool   `json:"done"`    // true if [x]
 }
 
+// FileType constants
+const (
+	FileTypeMarkdown = "markdown"
+	FileTypeImage    = "image"
+	FileTypePDF      = "pdf"
+	FileTypeHTML     = "html"
+	FileTypeOther    = "other"
+)
+
 // FileInfo represents a file or directory in the vault
 type FileInfo struct {
 	Name       string     `json:"name"`
 	Path       string     `json:"path"`
 	IsDir      bool       `json:"isDir"`
+	FileType   string     `json:"fileType,omitempty"` // markdown, image, pdf, html, other
 	Children   []FileInfo `json:"children,omitempty"`
 	ModifiedAt time.Time  `json:"modifiedAt"`
 }

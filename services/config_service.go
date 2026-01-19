@@ -92,14 +92,14 @@ func (s *ConfigService) GetDailyNotesFormat() string {
 	return s.config.DailyNotes.Format
 }
 
-// GetThinoSection returns the Thino section header
-func (s *ConfigService) GetThinoSection() string {
-	return s.config.Thino.Section
+// GetTimelineSection returns the Timeline section header
+func (s *ConfigService) GetTimelineSection() string {
+	return s.config.Timeline.Section
 }
 
-// GetThinoTimeFormat returns the Thino time format
-func (s *ConfigService) GetThinoTimeFormat() string {
-	return s.config.Thino.TimeFormat
+// GetTimelineTimeFormat returns the Timeline time format
+func (s *ConfigService) GetTimelineTimeFormat() string {
+	return s.config.Timeline.TimeFormat
 }
 
 // GetTemplatesFolder returns the templates folder relative path

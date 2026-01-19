@@ -19,16 +19,20 @@ export function createWailsAdapters(): IAppAdapters {
       createFile: (path, content) => FileService.CreateFile(path, content),
       moveFile: (src, dest) => FileService.MoveFile(src, dest),
       deletePath: (path) => FileService.DeletePath(path),
+      readFile: (path) => FileService.ReadFile(path),
+      readBinaryFile: (path) => FileService.ReadBinaryFile(path),
+      openExternal: (path) => FileService.OpenExternal(path),
     },
     note: {
       getNote: (path) => NoteService.GetNote(path),
       saveNote: (path, content) => NoteService.SaveNote(path, content),
       getTodayDailyNote: () => NoteService.GetTodayDailyNote(),
-      getTodayThinos: () => NoteService.GetTodayThinos(),
-      addThino: (content) => NoteService.AddThino(content),
+      getTodayTimelines: () => NoteService.GetTodayTimelines(),
+      addTimeline: (content) => NoteService.AddTimeline(content),
     },
     link: {
       getBacklinks: (path) => LinkService.GetBacklinks(path),
+      getOutgoingLinks: (path) => LinkService.GetLinkInfo(path),
       rebuildIndex: () => LinkService.RebuildIndex(),
     },
     window: {

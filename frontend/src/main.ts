@@ -4,7 +4,7 @@ import * as NoteService from "../bindings/github.com/kazuph/obails/services/note
 import * as LinkService from "../bindings/github.com/kazuph/obails/services/linkservice.js";
 import * as WindowService from "../bindings/github.com/kazuph/obails/services/windowservice.js";
 import * as GraphService from "../bindings/github.com/kazuph/obails/services/graphservice.js";
-import { FileInfo, Note, Thino, Backlink, Config, Graph } from "../bindings/github.com/kazuph/obails/models/models.js";
+import { FileInfo, Note, Timeline, Backlink, Link, Config, Graph } from "../bindings/github.com/kazuph/obails/models/models.js";
 import mermaid from "mermaid";
 import hljs from "highlight.js";
 import "highlight.js/styles/github-dark.css";
@@ -28,10 +28,18 @@ import {
   loadCache,
   clearCache,
 } from "./lib/graph-cache";
+import * as pdfjsLib from "pdfjs-dist";
+
+// Setup PDF.js worker
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+  "pdfjs-dist/build/pdf.worker.mjs",
+  import.meta.url
+).toString();
 
 // State
 let currentNote: Note | null = null;
-let showThino = false;
+let currentFilePath: string | null = null;  // Tracks any open file (md, image, pdf, html)
+let showTimeline = false;
 let showGraph = false;
 let contextMenuTargetPath: string = "";
 let contextMenuTargetIsDir: boolean = false;
@@ -42,12 +50,53 @@ let graphInstance: ReturnType<typeof ForceGraph> | null = null;
 const fileTree = document.getElementById("file-tree")!;
 const editor = document.getElementById("editor") as HTMLTextAreaElement;
 const preview = document.getElementById("preview")!;
-const thinoPanel = document.getElementById("thino-panel")!;
+const timelinePanel = document.getElementById("timeline-panel")!;
 const editorContainer = document.querySelector(".editor-container") as HTMLElement;
-const thinoInput = document.getElementById("thino-input") as HTMLTextAreaElement;
-const thinoTimeline = document.getElementById("thino-timeline")!;
+const timelineInput = document.getElementById("timeline-input") as HTMLTextAreaElement;
+const timelineTimeline = document.getElementById("timeline-timeline")!;
 const backlinksList = document.getElementById("backlinks-list")!;
+const outgoingLinksList = document.getElementById("outgoing-links-list")!;
 const outlineList = document.getElementById("outline-list")!;
+const fileSearchInput = document.getElementById("file-search-input") as HTMLInputElement;
+const fileSearchClear = document.getElementById("file-search-clear")!;
+
+// New viewer elements
+const imageViewer = document.getElementById("image-viewer")!;
+const imagePreview = document.getElementById("image-preview") as HTMLImageElement;
+const imageTitle = document.getElementById("image-title")!;
+const pdfViewer = document.getElementById("pdf-viewer")!;
+const pdfContainerA = document.getElementById("pdf-container-a")!;
+const pdfContainerB = document.getElementById("pdf-container-b")!;
+let pdfActiveBuffer: 'a' | 'b' = 'a';
+const pdfTitle = document.getElementById("pdf-title")!;
+const pdfPageInfo = document.getElementById("pdf-page-info")!;
+const pdfZoomInfo = document.getElementById("pdf-zoom-info")!;
+const htmlEditorContainer = document.getElementById("html-editor-container")!;
+const htmlEditor = document.getElementById("html-editor") as HTMLTextAreaElement;
+const htmlPreview = document.getElementById("html-preview") as HTMLIFrameElement;
+const htmlEditorTitle = document.getElementById("html-editor-title")!;
+
+// Fullscreen overlay elements
+const imageFullscreenOverlay = document.getElementById("image-fullscreen-overlay")!;
+const imageFsPreview = document.getElementById("image-fs-preview") as HTMLImageElement;
+const imageFsTitle = document.getElementById("image-fs-title")!;
+const pdfFullscreenOverlay = document.getElementById("pdf-fullscreen-overlay")!;
+const pdfFsContainer = document.getElementById("pdf-fs-container")!;
+const pdfFsTitle = document.getElementById("pdf-fs-title")!;
+const pdfFsPageInfo = document.getElementById("pdf-fs-page-info")!;
+const pdfFsZoomInfo = document.getElementById("pdf-fs-zoom-info")!;
+
+// PDF State
+let pdfDoc: pdfjsLib.PDFDocumentProxy | null = null;
+let pdfCurrentPage = 1;
+let pdfTotalPages = 0;
+let pdfScale = 1.0;
+let pdfRendering = false;
+let pdfPendingPage: number | null = null;
+let pdfViewMode: 'single' | 'continuous' = 'continuous'; // Default to continuous scroll
+let pdfCanvases: HTMLCanvasElement[] = [];
+let pdfIsFullscreen = false;
+let currentPdfPath: string | null = null;
 
 // Initialize
 async function init() {
@@ -57,10 +106,22 @@ async function init() {
             await loadFileTree();
 
             // Open last file if exists
-            const lastFile = localStorage.getItem("obails-last-file");
-            if (lastFile) {
+            const lastFileData = localStorage.getItem("obails-last-file");
+            if (lastFileData) {
                 try {
-                    await openNote(lastFile);
+                    // Support both new JSON format and legacy string format
+                    let path: string;
+                    let fileType: string;
+                    try {
+                        const parsed = JSON.parse(lastFileData);
+                        path = parsed.path;
+                        fileType = parsed.fileType;
+                    } catch {
+                        // Legacy format: just the path (assume markdown)
+                        path = lastFileData;
+                        fileType = "markdown";
+                    }
+                    await openFile(path, fileType);
                 } catch {
                     // File might have been deleted, clear the storage
                     localStorage.removeItem("obails-last-file");
@@ -107,10 +168,10 @@ function setupEventListeners() {
     document.getElementById("settings-btn")!.addEventListener("click", openSettings);
     document.getElementById("new-note-btn")!.addEventListener("click", showNewNoteForm);
     document.getElementById("daily-note-btn")!.addEventListener("click", openTodayNote);
-    document.getElementById("thino-btn")!.addEventListener("click", toggleThino);
+    document.getElementById("timeline-btn")!.addEventListener("click", toggleTimeline);
     document.getElementById("graph-btn")!.addEventListener("click", toggleGraphView);
     document.getElementById("refresh-btn")!.addEventListener("click", refresh);
-    document.getElementById("thino-submit")!.addEventListener("click", submitThino);
+    document.getElementById("timeline-submit")!.addEventListener("click", submitTimeline);
 
     // Graph overlay close button
     document.getElementById("graph-close")!.addEventListener("click", hideGraphView);
@@ -130,6 +191,48 @@ function setupEventListeners() {
     editor.addEventListener("input", debounce(saveCurrentNote, 500));
     editor.addEventListener("input", updatePreview);
 
+    // HTML Editor events
+    htmlEditor.addEventListener("input", debounce(saveHtmlFile, 500));
+    htmlEditor.addEventListener("input", updateHtmlPreview);
+
+    // PDF Viewer controls
+    document.getElementById("pdf-prev")!.addEventListener("click", pdfPrevPage);
+    document.getElementById("pdf-next")!.addEventListener("click", pdfNextPage);
+    document.getElementById("pdf-zoom-in")!.addEventListener("click", pdfZoomIn);
+    document.getElementById("pdf-zoom-out")!.addEventListener("click", pdfZoomOut);
+    document.getElementById("pdf-view-mode")!.addEventListener("click", togglePdfViewMode);
+    document.getElementById("pdf-fullscreen")!.addEventListener("click", openPdfFullscreen);
+
+    // PDF Fullscreen controls
+    document.getElementById("pdf-fs-prev")!.addEventListener("click", pdfPrevPage);
+    document.getElementById("pdf-fs-next")!.addEventListener("click", pdfNextPage);
+    document.getElementById("pdf-fs-zoom-in")!.addEventListener("click", pdfZoomIn);
+    document.getElementById("pdf-fs-zoom-out")!.addEventListener("click", pdfZoomOut);
+    document.getElementById("pdf-fs-view-mode")!.addEventListener("click", togglePdfViewMode);
+    document.getElementById("pdf-fs-close")!.addEventListener("click", closePdfFullscreen);
+
+    // Image Viewer controls
+    document.getElementById("image-fullscreen")!.addEventListener("click", openImageFullscreen);
+    document.getElementById("image-fs-close")!.addEventListener("click", closeImageFullscreen);
+
+    // Handle external links in preview - open in external browser
+    preview.addEventListener("click", async (e) => {
+        const target = e.target as HTMLElement;
+        const link = target.closest("a");
+        if (link) {
+            const href = link.getAttribute("href");
+            if (href && (href.startsWith("http://") || href.startsWith("https://"))) {
+                e.preventDefault();
+                e.stopPropagation();
+                try {
+                    await FileService.OpenURL(href);
+                } catch (err) {
+                    console.error("Failed to open external link:", err);
+                }
+            }
+        }
+    });
+
     // Keyboard shortcuts
     document.addEventListener("keydown", (e) => {
         if ((e.metaKey || e.ctrlKey) && e.key === ",") {
@@ -144,9 +247,22 @@ function setupEventListeners() {
             e.preventDefault();
             toggleGraphView();
         }
-        // ESC to close graph view
-        if (e.key === "Escape" && showGraph) {
-            hideGraphView();
+        // ESC to close overlays
+        if (e.key === "Escape") {
+            if (pdfIsFullscreen) {
+                closePdfFullscreen();
+            } else if (imageFullscreenOverlay.style.display !== "none") {
+                closeImageFullscreen();
+            } else if (showGraph) {
+                hideGraphView();
+            }
+            hideContextMenu();
+        }
+        // Cmd+F or Ctrl+F to focus file search
+        if ((e.metaKey || e.ctrlKey) && e.key === "f" && !editor.matches(":focus")) {
+            e.preventDefault();
+            fileSearchInput.focus();
+            fileSearchInput.select();
         }
     });
 
@@ -154,6 +270,7 @@ function setupEventListeners() {
     setupThemeSelector();
     setupContextMenu();
     setupFileTreeDropTarget();
+    setupFileSearch();
 }
 
 // Setup file-tree as drop target for moving files to root
@@ -180,6 +297,122 @@ function setupFileTreeDropTarget() {
             fileTree.classList.remove("drag-over-root");
             // Move to root (empty string as target)
             await moveFileToFolder(draggedFilePath, "");
+        }
+    });
+}
+
+// File Search
+function setupFileSearch() {
+    if (!fileSearchInput) {
+        console.error("[FileSearch] fileSearchInput element not found!");
+        return;
+    }
+    let searchTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    // Incremental search on input
+    fileSearchInput.addEventListener("input", () => {
+        const query = fileSearchInput.value.trim().toLowerCase();
+
+        // Show/hide clear button
+        fileSearchClear.style.display = query ? "block" : "none";
+
+        // Debounce search for performance
+        if (searchTimeout) {
+            clearTimeout(searchTimeout);
+        }
+        searchTimeout = setTimeout(() => {
+            filterFileTree(query);
+        }, 100);
+    });
+
+    // Clear search
+    fileSearchClear.addEventListener("click", () => {
+        fileSearchInput.value = "";
+        fileSearchClear.style.display = "none";
+        filterFileTree("");
+        fileSearchInput.focus();
+    });
+
+    // Escape to clear and blur
+    fileSearchInput.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") {
+            if (fileSearchInput.value) {
+                fileSearchInput.value = "";
+                fileSearchClear.style.display = "none";
+                filterFileTree("");
+            } else {
+                fileSearchInput.blur();
+            }
+        }
+    });
+}
+
+// Filter file tree based on search query
+function filterFileTree(query: string) {
+    const allFileItems = fileTree.querySelectorAll(".file-item");
+    const allFolderWrappers = fileTree.querySelectorAll(".file-wrapper");
+
+    if (!query) {
+        // Show all items and collapse folders to original state
+        allFileItems.forEach(item => {
+            item.classList.remove("search-hidden", "search-match");
+        });
+        allFolderWrappers.forEach(wrapper => {
+            wrapper.classList.remove("search-hidden");
+        });
+        return;
+    }
+
+    // Track which folders have matching children
+    const foldersWithMatches = new Set<Element>();
+
+    // First pass: mark matching files and collect parent folders
+    allFileItems.forEach(item => {
+        const fileName = item.getAttribute("data-name") || item.textContent || "";
+        const isMatch = fileName.toLowerCase().includes(query);
+
+        if (isMatch) {
+            item.classList.add("search-match");
+            item.classList.remove("search-hidden");
+
+            // Mark all parent folders as having matches
+            let parent = item.parentElement;
+            while (parent && parent !== fileTree) {
+                if (parent.classList.contains("file-wrapper") || parent.classList.contains("folder-children")) {
+                    foldersWithMatches.add(parent);
+                }
+                parent = parent.parentElement;
+            }
+        } else {
+            item.classList.remove("search-match");
+            item.classList.add("search-hidden");
+        }
+    });
+
+    // Second pass: show/hide folder wrappers
+    allFolderWrappers.forEach(wrapper => {
+        const hasMatchingDescendants = foldersWithMatches.has(wrapper) ||
+            wrapper.querySelector(".search-match") !== null;
+
+        if (hasMatchingDescendants) {
+            wrapper.classList.remove("search-hidden");
+            // Expand folder children to show matches
+            const children = wrapper.querySelector(".folder-children");
+            if (children) {
+                (children as HTMLElement).style.display = "block";
+            }
+        } else {
+            wrapper.classList.add("search-hidden");
+        }
+    });
+
+    // Show folder items that lead to matches
+    allFileItems.forEach(item => {
+        if (item.classList.contains("folder")) {
+            const wrapper = item.closest(".file-wrapper");
+            if (wrapper && foldersWithMatches.has(wrapper)) {
+                item.classList.remove("search-hidden");
+            }
         }
     });
 }
@@ -248,10 +481,23 @@ function setupContextMenu() {
     const ctxNewFile = document.getElementById("ctx-new-file")!;
     const ctxDelete = document.getElementById("ctx-delete")!;
 
-    // Hide context menu on click elsewhere
-    document.addEventListener("click", () => {
-        hideContextMenu();
-    });
+    // Hide context menu on any interaction elsewhere
+    // Use capture phase (true) to catch events before stopPropagation() is called
+    document.addEventListener("mousedown", (e) => {
+        // Don't hide if clicking inside context menu
+        if (!contextMenu.contains(e.target as Node)) {
+            hideContextMenu();
+        }
+    }, true); // capture phase
+
+    // Also hide on right-click elsewhere (contextmenu event)
+    document.addEventListener("contextmenu", (e) => {
+        // If right-clicking outside the context menu, hide it first
+        // (the new context menu will be shown by the file item's handler after)
+        if (!contextMenu.contains(e.target as Node)) {
+            hideContextMenu();
+        }
+    }, true); // capture phase
 
     // Handle "New File" click
     ctxNewFile.addEventListener("click", () => {
@@ -320,7 +566,7 @@ async function moveFileToFolder(sourcePath: string, targetFolder: string) {
         // Update current note path if the moved file was open
         if (currentNote && currentNote.path === sourcePath) {
             currentNote.path = newPath!;
-            localStorage.setItem("obails-last-file", newPath!);
+            localStorage.setItem("obails-last-file", JSON.stringify({ path: newPath!, fileType: "markdown" }));
         }
     } catch (err) {
         console.error("Failed to move file:", err);
@@ -346,6 +592,7 @@ async function deleteTargetPathWithArgs(targetPath: string, isDir: boolean) {
             editor.value = "";
             updatePreview();
             clearBacklinks();
+            clearOutgoingLinks();
             localStorage.removeItem("obails-last-file");
         }
     } catch (err) {
@@ -395,6 +642,521 @@ function setupThemeSelector() {
     });
 }
 
+// File Type Helpers
+function getFileIcon(file: FileInfo): string {
+    if (file.isDir) return "📁";
+
+    const fileType = file.fileType || "other";
+    switch (fileType) {
+        case "markdown": return "📝";
+        case "image": return "🖼️";
+        case "pdf": return "📕";
+        case "html": return "🌐";
+        default: return "📄";
+    }
+}
+
+// Open file based on file type
+async function openFile(path: string, fileType: string): Promise<void> {
+    hideAllViewers();
+    currentFilePath = path;  // Track current file for refresh
+
+    // Save last opened file to localStorage (for all supported types)
+    if (fileType === "markdown" || fileType === "image" || fileType === "pdf" || fileType === "html") {
+        localStorage.setItem("obails-last-file", JSON.stringify({ path, fileType }));
+    }
+
+    // Clear outline for non-markdown files (outline is only relevant for markdown)
+    if (fileType !== "markdown") {
+        outlineList.innerHTML = '<div class="outline-empty">No outline available</div>';
+    }
+
+    switch (fileType) {
+        case "markdown":
+            await openNote(path);
+            break;
+        case "image":
+            await openImage(path);
+            break;
+        case "pdf":
+            await openPDF(path);
+            break;
+        case "html":
+            await openHTML(path);
+            break;
+        default:
+            // Open with system default app (macOS open command)
+            await openExternal(path);
+            break;
+    }
+}
+
+// Hide all viewer panels
+function hideAllViewers() {
+    editorContainer.style.display = "none";
+    timelinePanel.style.display = "none";
+    imageViewer.style.display = "none";
+    pdfViewer.style.display = "none";
+    htmlEditorContainer.style.display = "none";
+}
+
+// Open image file
+async function openImage(path: string): Promise<void> {
+    try {
+        const base64Data = await FileService.ReadBinaryFile(path);
+        const ext = path.split('.').pop()?.toLowerCase() || 'png';
+        const mimeType = getMimeTypeFromExt(ext);
+
+        imagePreview.src = `data:${mimeType};base64,${base64Data}`;
+        imageTitle.textContent = path.split('/').pop() || 'Image';
+        imageViewer.style.display = "block";
+
+        // Update file tree selection
+        updateFileTreeSelection(path);
+    } catch (err) {
+        console.error("Failed to open image:", err);
+        alert(`Failed to open image: ${err}`);
+    }
+}
+
+// Open PDF file with PDF.js
+async function openPDF(path: string): Promise<void> {
+    try {
+        currentPdfPath = path;
+        const base64Data = await FileService.ReadBinaryFile(path);
+        const binaryData = atob(base64Data);
+        const byteArray = new Uint8Array(binaryData.length);
+        for (let i = 0; i < binaryData.length; i++) {
+            byteArray[i] = binaryData.charCodeAt(i);
+        }
+
+        // Load PDF document
+        const loadingTask = pdfjsLib.getDocument({ data: byteArray });
+        pdfDoc = await loadingTask.promise;
+        pdfTotalPages = pdfDoc.numPages;
+        pdfCurrentPage = 1;
+
+        const fileName = path.split('/').pop() || 'PDF';
+        pdfTitle.textContent = fileName;
+        pdfViewer.style.display = "flex";
+
+        // Wait for layout to complete before calculating scale
+        await new Promise(resolve => requestAnimationFrame(resolve));
+
+        // Calculate initial scale to fit width
+        const firstPage = await pdfDoc.getPage(1);
+        const unscaledViewport = firstPage.getViewport({ scale: 1 });
+        const containerWidth = pdfContainerA.clientWidth - 40; // padding
+
+        // Ensure minimum scale and handle case when container isn't sized yet
+        if (containerWidth > 100) {
+            pdfScale = Math.min(Math.max(containerWidth / unscaledViewport.width, 0.5), 2.0);
+        } else {
+            pdfScale = 1.0; // Default scale if container not ready
+        }
+
+        // Update UI and render pages
+        updatePdfInfo();
+        await renderPdfPages();
+
+        // Update file tree selection
+        updateFileTreeSelection(path);
+    } catch (err) {
+        console.error("Failed to open PDF:", err);
+        alert(`Failed to open PDF: ${err}`);
+    }
+}
+
+// Get the active PDF container
+function getPdfActiveContainer(): HTMLElement {
+    if (pdfIsFullscreen) return pdfFsContainer;
+    return pdfActiveBuffer === 'a' ? pdfContainerA : pdfContainerB;
+}
+
+// Get the back buffer for rendering
+function getPdfBackContainer(): HTMLElement {
+    if (pdfIsFullscreen) return pdfFsContainer;
+    return pdfActiveBuffer === 'a' ? pdfContainerB : pdfContainerA;
+}
+
+// Swap buffers
+function swapPdfBuffers(): void {
+    if (pdfIsFullscreen) return;
+
+    const activeContainer = pdfActiveBuffer === 'a' ? pdfContainerA : pdfContainerB;
+    const backContainer = pdfActiveBuffer === 'a' ? pdfContainerB : pdfContainerA;
+
+    // Swap classes
+    activeContainer.classList.remove('pdf-buffer-active');
+    activeContainer.classList.add('pdf-buffer-back');
+    backContainer.classList.remove('pdf-buffer-back');
+    backContainer.classList.add('pdf-buffer-active');
+
+    // Update active buffer tracker
+    pdfActiveBuffer = pdfActiveBuffer === 'a' ? 'b' : 'a';
+}
+
+// Render PDF pages based on view mode (to active container)
+async function renderPdfPages(): Promise<void> {
+    if (!pdfDoc) return;
+
+    const container = getPdfActiveContainer();
+    container.innerHTML = '';
+    pdfCanvases = [];
+
+    if (pdfViewMode === 'continuous') {
+        // Render all pages
+        for (let i = 1; i <= pdfTotalPages; i++) {
+            const canvas = document.createElement('canvas');
+            canvas.className = 'pdf-page-canvas';
+            canvas.dataset.page = String(i);
+            container.appendChild(canvas);
+            pdfCanvases.push(canvas);
+        }
+        // Render all pages
+        await renderAllPages();
+    } else {
+        // Single page mode - render only current page
+        const canvas = document.createElement('canvas');
+        canvas.className = 'pdf-page-canvas';
+        canvas.dataset.page = String(pdfCurrentPage);
+        container.appendChild(canvas);
+        pdfCanvases.push(canvas);
+        await renderSinglePage(pdfCurrentPage, canvas);
+    }
+}
+
+// Render PDF pages to back buffer (for double buffering)
+async function renderPdfPagesToBackBuffer(targetPage: number): Promise<HTMLCanvasElement[]> {
+    if (!pdfDoc) return [];
+
+    const container = getPdfBackContainer();
+    container.innerHTML = '';
+    const canvases: HTMLCanvasElement[] = [];
+
+    if (pdfViewMode === 'continuous') {
+        // Render all pages
+        for (let i = 1; i <= pdfTotalPages; i++) {
+            const canvas = document.createElement('canvas');
+            canvas.className = 'pdf-page-canvas';
+            canvas.dataset.page = String(i);
+            container.appendChild(canvas);
+            canvases.push(canvas);
+        }
+        // Render all pages
+        for (let i = 0; i < canvases.length; i++) {
+            await renderSinglePage(i + 1, canvases[i]);
+        }
+        // Set scroll position before showing (use local canvases array!)
+        scrollToPage(container, targetPage, canvases);
+    } else {
+        // Single page mode - render only current page
+        const canvas = document.createElement('canvas');
+        canvas.className = 'pdf-page-canvas';
+        canvas.dataset.page = String(pdfCurrentPage);
+        container.appendChild(canvas);
+        canvases.push(canvas);
+        await renderSinglePage(pdfCurrentPage, canvas);
+    }
+
+    return canvases;
+}
+
+// Render all pages (for continuous mode)
+async function renderAllPages(): Promise<void> {
+    if (!pdfDoc) return;
+
+    for (let i = 0; i < pdfCanvases.length; i++) {
+        await renderSinglePage(i + 1, pdfCanvases[i]);
+    }
+}
+
+// Render a single page to a specific canvas
+async function renderSinglePage(pageNum: number, canvas: HTMLCanvasElement): Promise<void> {
+    if (!pdfDoc) return;
+
+    try {
+        const page = await pdfDoc.getPage(pageNum);
+        const viewport = page.getViewport({ scale: pdfScale });
+
+        const context = canvas.getContext("2d")!;
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+
+        const renderContext = {
+            canvasContext: context,
+            viewport: viewport
+        };
+
+        await page.render(renderContext).promise;
+    } catch (err) {
+        console.error(`Failed to render PDF page ${pageNum}:`, err);
+    }
+}
+
+// Update PDF info display
+function updatePdfInfo() {
+    const pageText = pdfViewMode === 'continuous'
+        ? `${pdfTotalPages} pages`
+        : `${pdfCurrentPage} / ${pdfTotalPages}`;
+    const zoomText = `${Math.round(pdfScale * 100)}%`;
+
+    pdfPageInfo.textContent = pageText;
+    pdfZoomInfo.textContent = zoomText;
+
+    if (pdfIsFullscreen) {
+        pdfFsPageInfo.textContent = pageText;
+        pdfFsZoomInfo.textContent = zoomText;
+    }
+
+    // Update view mode button icon
+    const viewModeBtn = document.getElementById("pdf-view-mode")!;
+    const viewModeFsBtn = document.getElementById("pdf-fs-view-mode")!;
+    const icon = pdfViewMode === 'continuous' ? '📄' : '📃';
+    viewModeBtn.textContent = icon;
+    viewModeFsBtn.textContent = icon;
+    viewModeBtn.title = pdfViewMode === 'continuous' ? 'Switch to Single Page' : 'Switch to Continuous Scroll';
+    viewModeFsBtn.title = viewModeBtn.title;
+}
+
+// Toggle view mode with double buffering
+async function togglePdfViewMode() {
+    const activeContainer = getPdfActiveContainer();
+
+    // Save current page before switching
+    if (pdfViewMode === 'continuous') {
+        // Calculate current page from scroll position
+        pdfCurrentPage = getCurrentPageFromScroll(activeContainer);
+    }
+
+    const targetPage = pdfCurrentPage;
+    pdfViewMode = pdfViewMode === 'continuous' ? 'single' : 'continuous';
+    updatePdfInfo();
+
+    // Render to back buffer
+    const newCanvases = await renderPdfPagesToBackBuffer(targetPage);
+
+    // Swap buffers (instantly shows the pre-rendered content)
+    swapPdfBuffers();
+
+    // Update canvas reference
+    pdfCanvases = newCanvases;
+}
+
+// Get current page from scroll position in continuous mode
+function getCurrentPageFromScroll(container: HTMLElement): number {
+    if (pdfCanvases.length === 0) return 1;
+
+    const scrollTop = container.scrollTop;
+    const containerHeight = container.clientHeight;
+    const scrollCenter = scrollTop + containerHeight / 3; // Use upper third as reference
+
+    for (let i = 0; i < pdfCanvases.length; i++) {
+        const canvas = pdfCanvases[i];
+        const canvasTop = canvas.offsetTop;
+        const canvasBottom = canvasTop + canvas.height;
+
+        if (scrollCenter >= canvasTop && scrollCenter < canvasBottom) {
+            return i + 1;
+        }
+    }
+
+    return pdfTotalPages; // Default to last page if at bottom
+}
+
+// Scroll to specific page in continuous mode
+function scrollToPage(container: HTMLElement, pageNum: number, canvases?: HTMLCanvasElement[]): void {
+    const targetCanvases = canvases || pdfCanvases;
+    const index = pageNum - 1;
+    if (index >= 0 && index < targetCanvases.length) {
+        const canvas = targetCanvases[index];
+        container.scrollTo({
+            top: canvas.offsetTop - 16, // Small offset for padding
+            behavior: 'auto'
+        });
+    }
+}
+
+// PDF navigation functions (only for single page mode)
+async function pdfPrevPage() {
+    if (pdfViewMode === 'continuous' || pdfCurrentPage <= 1) return;
+    pdfCurrentPage--;
+    updatePdfInfo();
+    await renderPdfPages();
+}
+
+async function pdfNextPage() {
+    if (pdfViewMode === 'continuous' || pdfCurrentPage >= pdfTotalPages) return;
+    pdfCurrentPage++;
+    updatePdfInfo();
+    await renderPdfPages();
+}
+
+async function pdfZoomIn() {
+    pdfScale = Math.min(pdfScale * 1.25, 5.0);
+    updatePdfInfo();
+    await renderPdfPages();
+}
+
+async function pdfZoomOut() {
+    pdfScale = Math.max(pdfScale * 0.8, 0.25);
+    updatePdfInfo();
+    await renderPdfPages();
+}
+
+// PDF Fullscreen functions
+function openPdfFullscreen() {
+    if (!pdfDoc) return;
+
+    pdfIsFullscreen = true;
+    pdfFsTitle.textContent = pdfTitle.textContent || 'PDF';
+    pdfFullscreenOverlay.style.display = "flex";
+
+    updatePdfInfo();
+    renderPdfPages();
+}
+
+function closePdfFullscreen() {
+    pdfIsFullscreen = false;
+    pdfFullscreenOverlay.style.display = "none";
+
+    // Re-render in normal container
+    updatePdfInfo();
+    renderPdfPages();
+}
+
+// Image fullscreen functions
+function openImageFullscreen() {
+    imageFsPreview.src = imagePreview.src;
+    imageFsTitle.textContent = imageTitle.textContent || 'Image';
+    imageFullscreenOverlay.style.display = "flex";
+}
+
+function closeImageFullscreen() {
+    imageFullscreenOverlay.style.display = "none";
+}
+
+// Open HTML file with editor + preview
+let currentHtmlPath: string | null = null;
+
+async function openHTML(path: string): Promise<void> {
+    try {
+        const content = await FileService.ReadFile(path);
+        currentHtmlPath = path;
+
+        htmlEditor.value = content;
+        htmlEditorTitle.textContent = path.split('/').pop() || 'HTML';
+        htmlEditorContainer.style.display = "flex";
+
+        // Update preview
+        updateHtmlPreview();
+
+        // Update file tree selection
+        updateFileTreeSelection(path);
+    } catch (err) {
+        console.error("Failed to open HTML:", err);
+        alert(`Failed to open HTML: ${err}`);
+    }
+}
+
+// Update HTML preview
+function updateHtmlPreview() {
+    const content = htmlEditor.value;
+    const doc = htmlPreview.contentDocument || htmlPreview.contentWindow?.document;
+    if (doc) {
+        doc.open();
+        doc.write(content);
+        doc.close();
+    }
+}
+
+// Save HTML file
+async function saveHtmlFile() {
+    if (!currentHtmlPath) return;
+
+    try {
+        await FileService.CreateFile(currentHtmlPath, htmlEditor.value);
+    } catch (err) {
+        console.error("Failed to save HTML:", err);
+    }
+}
+
+// Open file with system default app
+async function openExternal(path: string): Promise<void> {
+    try {
+        await FileService.OpenExternal(path);
+    } catch (err) {
+        console.error("Failed to open external:", err);
+        alert(`Failed to open file: ${err}`);
+    }
+}
+
+// Get MIME type from extension
+function getMimeTypeFromExt(ext: string): string {
+    const mimeTypes: { [key: string]: string } = {
+        png: "image/png",
+        jpg: "image/jpeg",
+        jpeg: "image/jpeg",
+        gif: "image/gif",
+        webp: "image/webp",
+        svg: "image/svg+xml",
+        bmp: "image/bmp",
+        ico: "image/x-icon",
+    };
+    return mimeTypes[ext] || "application/octet-stream";
+}
+
+// Update file tree selection highlight
+function updateFileTreeSelection(path: string) {
+    // Remove previous selection
+    document.querySelectorAll(".file-item").forEach(el => el.classList.remove("active"));
+
+    // Expand parent folders to reveal the file
+    expandParentFolders(path);
+
+    // Highlight the file
+    const fileItem = document.querySelector(`.file-item[data-path="${path}"]`);
+    if (fileItem) {
+        fileItem.classList.add("active");
+        // Delay scroll to ensure folder expansion is complete
+        setTimeout(() => {
+            fileItem.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }, 50);
+    }
+}
+
+// Expand all parent folders for a given file path
+function expandParentFolders(path: string) {
+    const parts = path.split("/");
+    let currentPath = "";
+
+    // Iterate through path parts (excluding the file itself)
+    for (let i = 0; i < parts.length - 1; i++) {
+        currentPath = currentPath ? `${currentPath}/${parts[i]}` : parts[i];
+
+        const folderItem = document.querySelector(`.file-item.folder[data-path="${currentPath}"]`);
+        if (folderItem && !folderItem.classList.contains("expanded")) {
+            // Expand the folder
+            folderItem.classList.add("expanded");
+
+            // Update folder icon
+            const iconSpan = folderItem.querySelector(".folder-icon");
+            if (iconSpan) {
+                iconSpan.textContent = "📂";
+            }
+
+            // Show children
+            const wrapper = folderItem.parentElement;
+            if (wrapper) {
+                const childrenEl = wrapper.querySelector(".folder-children") as HTMLElement;
+                if (childrenEl) {
+                    childrenEl.style.display = "block";
+                }
+            }
+        }
+    }
+}
+
 // File Tree
 async function loadFileTree() {
     try {
@@ -422,12 +1184,13 @@ function createFileElement(file: FileInfo): HTMLElement {
     const el = document.createElement("div");
     el.className = `file-item ${file.isDir ? "folder" : "file"}`;
     el.setAttribute("data-path", file.path);
+    el.setAttribute("data-name", file.name);
 
-    const icon = file.isDir ? (file.children && file.children.length > 0 ? "📁" : "📂") : "📄";
-    el.innerHTML = `<span class="folder-icon">${icon}</span><span>${file.name}</span>`;
+    const icon = getFileIcon(file);
+    el.innerHTML = `<span class="folder-icon">${icon}</span><span class="file-name">${file.name}</span>`;
 
     // Make files draggable (not folders for now)
-    if (!file.isDir && file.name.endsWith(".md")) {
+    if (!file.isDir) {
         el.draggable = true;
         el.addEventListener("dragstart", (e) => {
             draggedFilePath = file.path;
@@ -493,10 +1256,11 @@ function createFileElement(file: FileInfo): HTMLElement {
                 await moveFileToFolder(draggedFilePath, file.path);
             }
         });
-    } else if (file.name.endsWith(".md")) {
+    } else {
+        // Handle file click based on file type
         el.addEventListener("click", (e) => {
             e.stopPropagation();
-            openNote(file.path);
+            openFile(file.path, file.fileType || "other");
         });
 
         // Right-click context menu for files
@@ -518,28 +1282,23 @@ async function openNote(path: string) {
             editor.value = currentNote.content;
             updatePreview();
             await loadBacklinks(path);
+            await loadOutgoingLinks(path);
 
-            // Save last opened file to localStorage
-            localStorage.setItem("obails-last-file", path);
+            // Save to localStorage (also saves when called directly from backlinks/outgoing links/graph)
+            localStorage.setItem("obails-last-file", JSON.stringify({ path, fileType: "markdown" }));
 
             // Update pane titles (remove .md extension)
             const filename = path.split("/").pop()?.replace(/\.md$/i, "") || path;
             updatePaneTitles(filename);
         }
 
-        // Hide thino, show editor
-        showThino = false;
-        thinoPanel.style.display = "none";
+        // Hide all viewers, show markdown editor
+        showTimeline = false;
+        hideAllViewers();
         editorContainer.style.display = "flex";
 
-        // Update file tree selection - highlight the opened file
-        document.querySelectorAll(".file-item").forEach(el => el.classList.remove("active"));
-        const fileItem = document.querySelector(`.file-item[data-path="${path}"]`);
-        if (fileItem) {
-            fileItem.classList.add("active");
-            // Scroll into view if needed
-            fileItem.scrollIntoView({ behavior: "smooth", block: "nearest" });
-        }
+        // Update file tree selection
+        updateFileTreeSelection(path);
     } catch (err) {
         console.error("Failed to open note:", err);
     }
@@ -572,22 +1331,18 @@ async function openTodayNote() {
             editor.value = note.content;
             updatePreview();
             await loadBacklinks(note.path);
+            await loadOutgoingLinks(note.path);
 
             // Update pane titles
             const filename = note.path.split("/").pop()?.replace(/\.md$/i, "") || note.path;
             updatePaneTitles(filename);
 
             // Update file tree selection
-            document.querySelectorAll(".file-item").forEach(el => el.classList.remove("active"));
-            const fileItem = document.querySelector(`.file-item[data-path="${note.path}"]`);
-            if (fileItem) {
-                fileItem.classList.add("active");
-                fileItem.scrollIntoView({ behavior: "smooth", block: "nearest" });
-            }
+            updateFileTreeSelection(note.path);
         }
 
-        showThino = false;
-        thinoPanel.style.display = "none";
+        showTimeline = false;
+        hideAllViewers();
         editorContainer.style.display = "flex";
     } catch (err) {
         console.error("Failed to open today's note:", err);
@@ -630,63 +1385,75 @@ function jumpToLine(lineNumber: number) {
     }
     editor.focus();
     editor.setSelectionRange(pos, pos);
-    // Scroll to position
-    const lineHeight = 20; // approximate
+    // Calculate actual line height from computed styles
+    const computedStyle = getComputedStyle(editor);
+    const fontSize = parseFloat(computedStyle.fontSize);
+    const lineHeightStr = computedStyle.lineHeight;
+    // lineHeight can be "normal", a number, or a pixel value
+    let lineHeight: number;
+    if (lineHeightStr === "normal") {
+        lineHeight = fontSize * 1.2; // default normal line-height
+    } else if (lineHeightStr.endsWith("px")) {
+        lineHeight = parseFloat(lineHeightStr);
+    } else {
+        // It's a multiplier (e.g., "1.6")
+        lineHeight = fontSize * parseFloat(lineHeightStr);
+    }
+    // Scroll to position, centering the target line in view
     editor.scrollTop = lineNumber * lineHeight - editor.clientHeight / 3;
 }
 
 
-// Thino
-function toggleThino() {
-    showThino = !showThino;
-    if (showThino) {
-        thinoPanel.style.display = "block";
-        editorContainer.style.display = "none";
-        loadThinos();
+// Timeline
+function toggleTimeline() {
+    showTimeline = !showTimeline;
+    hideAllViewers();
+    if (showTimeline) {
+        timelinePanel.style.display = "block";
+        loadTimelines();
     } else {
-        thinoPanel.style.display = "none";
         editorContainer.style.display = "flex";
     }
 }
 
-async function loadThinos() {
+async function loadTimelines() {
     try {
-        const thinos = await NoteService.GetTodayThinos();
-        renderThinos(thinos);
+        const timelines = await NoteService.GetTodayTimelines();
+        renderTimelines(timelines);
     } catch (err) {
-        console.error("Failed to load thinos:", err);
-        thinoTimeline.innerHTML = '<div class="error">No thinos for today</div>';
+        console.error("Failed to load timelines:", err);
+        timelineTimeline.innerHTML = '<div class="error">No timelines for today</div>';
     }
 }
 
-function renderThinos(thinos: Thino[]) {
-    thinoTimeline.innerHTML = "";
+function renderTimelines(timelines: Timeline[]) {
+    timelineTimeline.innerHTML = "";
 
-    for (const thino of [...thinos].reverse()) {
+    for (const timeline of [...timelines].reverse()) {
         const el = document.createElement("div");
-        el.className = "thino-item";
+        el.className = "timeline-item";
         el.innerHTML = `
-            <div class="thino-time">${thino.time}</div>
-            <div class="thino-content">${thino.content}</div>
+            <div class="timeline-time">${timeline.time}</div>
+            <div class="timeline-content">${timeline.content}</div>
         `;
-        thinoTimeline.appendChild(el);
+        timelineTimeline.appendChild(el);
     }
 
-    if (thinos.length === 0) {
-        thinoTimeline.innerHTML = '<div class="empty">No memos yet. Start writing!</div>';
+    if (timelines.length === 0) {
+        timelineTimeline.innerHTML = '<div class="empty">No memos yet. Start writing!</div>';
     }
 }
 
-async function submitThino() {
-    const content = thinoInput.value.trim();
+async function submitTimeline() {
+    const content = timelineInput.value.trim();
     if (!content) return;
 
     try {
-        await NoteService.AddThino(content);
-        thinoInput.value = "";
-        await loadThinos();
+        await NoteService.AddTimeline(content);
+        timelineInput.value = "";
+        await loadTimelines();
     } catch (err) {
-        console.error("Failed to add thino:", err);
+        console.error("Failed to add timeline:", err);
     }
 }
 
@@ -727,6 +1494,49 @@ function renderBacklinks(backlinks: Backlink[]) {
     }
 }
 
+// Outgoing Links
+async function loadOutgoingLinks(path: string) {
+    try {
+        const links = await LinkService.GetLinkInfo(path);
+        renderOutgoingLinks(links);
+    } catch (err) {
+        console.error("Failed to load outgoing links:", err);
+        outgoingLinksList.innerHTML = "";
+    }
+}
+
+function clearOutgoingLinks() {
+    outgoingLinksList.innerHTML = '<div class="empty">No outgoing links</div>';
+}
+
+function renderOutgoingLinks(links: Link[]) {
+    outgoingLinksList.innerHTML = "";
+
+    // Filter: only show existing markdown files
+    const filteredLinks = links.filter(link => {
+        if (!link.exists) return false;
+        // Check if it's a markdown file (ends with .md or has no extension)
+        const hasExtension = link.targetPath.includes('.');
+        if (hasExtension && !link.targetPath.endsWith('.md')) return false;
+        return true;
+    });
+
+    for (const link of filteredLinks) {
+        const el = document.createElement("div");
+        el.className = "outgoing-link-item exists";
+        el.innerHTML = `<span class="link-text">${link.text}</span>`;
+        el.addEventListener("click", (e) => {
+            e.stopPropagation();
+            openNote(link.targetPath);
+        });
+        outgoingLinksList.appendChild(el);
+    }
+
+    if (filteredLinks.length === 0) {
+        outgoingLinksList.innerHTML = '<div class="empty">No outgoing links</div>';
+    }
+}
+
 // Resize Panels
 function setupResizeHandles() {
     const sidebar = document.getElementById("sidebar")!;
@@ -735,7 +1545,8 @@ function setupResizeHandles() {
     const editorResize = document.getElementById("editor-resize")!;
     const outlinePanel = document.getElementById("outline-panel")!;
     const backlinksPanel = document.getElementById("backlinks-panel")!;
-    const rightSidebarResize = document.getElementById("right-sidebar-resize")!;
+    // Use outline-resize for right sidebar panel resizing
+    const outlineResize = document.getElementById("outline-resize");
 
     // Sidebar resize
     let isResizingSidebar = false;
@@ -755,11 +1566,13 @@ function setupResizeHandles() {
 
     // Right sidebar (outline/backlinks) resize
     let isResizingRightSidebar = false;
-    rightSidebarResize.addEventListener("mousedown", (e) => {
-        isResizingRightSidebar = true;
-        rightSidebarResize.classList.add("dragging");
-        e.preventDefault();
-    });
+    if (outlineResize) {
+        outlineResize.addEventListener("mousedown", (e) => {
+            isResizingRightSidebar = true;
+            outlineResize.classList.add("dragging");
+            e.preventDefault();
+        });
+    }
 
     document.addEventListener("mousemove", (e) => {
         if (isResizingSidebar) {
@@ -797,7 +1610,9 @@ function setupResizeHandles() {
         isResizingRightSidebar = false;
         sidebarResize.classList.remove("dragging");
         editorResize.classList.remove("dragging");
-        rightSidebarResize.classList.remove("dragging");
+        if (outlineResize) {
+            outlineResize.classList.remove("dragging");
+        }
     });
 }
 
@@ -805,6 +1620,12 @@ function setupResizeHandles() {
 async function refresh() {
     await loadFileTree();
     await LinkService.RebuildIndex();
+
+    // Restore file tree selection and expand parent folders
+    if (currentFilePath) {
+        expandParentFolders(currentFilePath);
+        updateFileTreeSelection(currentFilePath);
+    }
 
     // If graph view is showing, refresh the graph data
     if (showGraph) {
@@ -825,9 +1646,8 @@ async function toggleGraphView() {
 async function showGraphView() {
     showGraph = true;
 
-    // Hide other views
-    thinoPanel.style.display = "none";
-    editorContainer.style.display = "none";
+    // Hide all viewers
+    hideAllViewers();
 
     const graphOverlay = document.getElementById("graph-overlay")!;
     graphOverlay.classList.add("visible");
@@ -856,11 +1676,27 @@ function hideGraphView() {
 
     // Open last file if exists and no note is currently open
     if (!currentNote) {
-        const lastFile = localStorage.getItem("obails-last-file");
-        if (lastFile) {
-            openNote(lastFile).catch(() => {
+        const lastFileData = localStorage.getItem("obails-last-file");
+        if (lastFileData) {
+            try {
+                // Support both new JSON format and legacy string format
+                let path: string;
+                let fileType: string;
+                try {
+                    const parsed = JSON.parse(lastFileData);
+                    path = parsed.path;
+                    fileType = parsed.fileType;
+                } catch {
+                    // Legacy format: just the path (assume markdown)
+                    path = lastFileData;
+                    fileType = "markdown";
+                }
+                openFile(path, fileType).catch(() => {
+                    localStorage.removeItem("obails-last-file");
+                });
+            } catch {
                 localStorage.removeItem("obails-last-file");
-            });
+            }
         }
     }
 }
@@ -1013,6 +1849,7 @@ function renderGraph(
     container.innerHTML = "";
 
     // Prepare data for force-graph with restored positions
+    // Note: Backend already filters to markdown-only nodes and edges
     const nodes: GraphNodeData[] = graph.nodes.map(n => {
         const pos = savedPositions?.[n.id];
         return {
@@ -1163,16 +2000,16 @@ let mermaidStartX = 0, mermaidStartY = 0;
 let mermaidSvgWidth = 0, mermaidSvgHeight = 0;
 let mermaidMinimapScale = 1;
 
-function initMermaidDiagrams() {
+async function initMermaidDiagrams() {
     const previewEl = document.getElementById("preview");
     if (!previewEl) return;
 
     const codeBlocks = previewEl.querySelectorAll("pre code");
-    const errorToast = document.getElementById("mermaid-error-toast")!;
 
-    codeBlocks.forEach((code, idx) => {
+    for (let idx = 0; idx < codeBlocks.length; idx++) {
+        const code = codeBlocks[idx];
         const pre = code.parentElement;
-        if (!pre) return;
+        if (!pre) continue;
 
         const text = code.textContent?.trim() || "";
 
@@ -1180,29 +2017,44 @@ function initMermaidDiagrams() {
         const isMermaid = code.classList.contains("language-mermaid") ||
             text.match(/^(graph|flowchart|sequenceDiagram|classDiagram|stateDiagram|erDiagram|journey|gantt|pie|gitGraph|mindmap|timeline)/);
 
-        if (!isMermaid) return;
+        if (!isMermaid) continue;
 
         // Create container
         const container = document.createElement("div");
         container.className = "mermaid-container";
-        container.title = "Click to view fullscreen";
 
-        const mermaidDiv = document.createElement("div");
-        mermaidDiv.className = "mermaid";
-        mermaidDiv.id = `mermaid-${idx}`;
-        mermaidDiv.textContent = text;
+        try {
+            // Render mermaid diagram individually to catch errors per diagram
+            const { svg } = await mermaid.render(`mermaid-${idx}`, text);
 
-        container.addEventListener("click", () => openMermaidFullscreen(mermaidDiv));
-        container.appendChild(mermaidDiv);
+            const mermaidDiv = document.createElement("div");
+            mermaidDiv.className = "mermaid";
+            mermaidDiv.innerHTML = svg;
+            mermaidDiv.title = "Click to view fullscreen";
+
+            mermaidDiv.addEventListener("click", () => openMermaidFullscreen(mermaidDiv));
+            container.appendChild(mermaidDiv);
+        } catch (err: unknown) {
+            // Show error inline below the code block (copyable)
+            const errorDiv = document.createElement("div");
+            errorDiv.className = "mermaid-error-inline";
+            const errorMessage = err instanceof Error ? err.message : String(err);
+            errorDiv.innerHTML = `
+                <div class="mermaid-error-header">⚠️ Mermaid Syntax Error</div>
+                <pre class="mermaid-error-text">${escapeHtml(errorMessage)}</pre>
+            `;
+            container.appendChild(errorDiv);
+        }
+
         pre.replaceWith(container);
-    });
+    }
+}
 
-    // Render all mermaid diagrams
-    mermaid.run().catch(err => {
-        errorToast.textContent = "Mermaid Error: " + (err.message || err);
-        errorToast.classList.add("visible");
-        setTimeout(() => errorToast.classList.remove("visible"), 5000);
-    });
+// Escape HTML for safe display
+function escapeHtml(text: string): string {
+    const div = document.createElement("div");
+    div.textContent = text;
+    return div.innerHTML;
 }
 
 function openMermaidFullscreen(mermaidEl: HTMLElement) {

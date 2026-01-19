@@ -1,13 +1,38 @@
 package services
 
 import (
+	"encoding/base64"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/kazuph/obails/models"
 )
+
+// Image file extensions
+var imageExtensions = map[string]bool{
+	".png": true, ".jpg": true, ".jpeg": true, ".gif": true,
+	".webp": true, ".svg": true, ".bmp": true, ".ico": true,
+}
+
+// GetFileType determines the file type based on extension
+func GetFileType(filename string) string {
+	ext := strings.ToLower(filepath.Ext(filename))
+	switch {
+	case ext == ".md":
+		return models.FileTypeMarkdown
+	case ext == ".pdf":
+		return models.FileTypePDF
+	case ext == ".html" || ext == ".htm":
+		return models.FileTypeHTML
+	case imageExtensions[ext]:
+		return models.FileTypeImage
+	default:
+		return models.FileTypeOther
+	}
+}
 
 // FileService handles file system operations
 type FileService struct {
@@ -143,7 +168,11 @@ func (s *FileService) listDirectoryRecursive(fullPath string, relativePath strin
 			Name:       entry.Name(),
 			Path:       entryRelPath,
 			IsDir:      entry.IsDir(),
+			FileType:   GetFileType(entry.Name()),
 			ModifiedAt: info.ModTime(),
+		}
+		if entry.IsDir() {
+			fileInfo.FileType = "" // Directories don't have a file type
 		}
 
 		if entry.IsDir() && maxDepth > 1 {
@@ -257,4 +286,60 @@ func (s *FileService) getFullPath(relativePath string) string {
 		return vaultPath
 	}
 	return filepath.Join(vaultPath, relativePath)
+}
+
+// ReadBinaryFile reads a binary file and returns it as base64 encoded string
+// Used for images and PDFs that need to be displayed in the frontend
+func (s *FileService) ReadBinaryFile(relativePath string) (string, error) {
+	fullPath := s.getFullPath(relativePath)
+	content, err := os.ReadFile(fullPath)
+	if err != nil {
+		return "", err
+	}
+	return base64.StdEncoding.EncodeToString(content), nil
+}
+
+// GetMimeType returns the MIME type for a file based on extension
+func GetMimeType(filename string) string {
+	ext := strings.ToLower(filepath.Ext(filename))
+	mimeTypes := map[string]string{
+		".png":  "image/png",
+		".jpg":  "image/jpeg",
+		".jpeg": "image/jpeg",
+		".gif":  "image/gif",
+		".webp": "image/webp",
+		".svg":  "image/svg+xml",
+		".bmp":  "image/bmp",
+		".ico":  "image/x-icon",
+		".pdf":  "application/pdf",
+		".html": "text/html",
+		".htm":  "text/html",
+	}
+	if mime, ok := mimeTypes[ext]; ok {
+		return mime
+	}
+	return "application/octet-stream"
+}
+
+// OpenExternal opens a file with the system's default application
+// Uses macOS 'open' command
+func (s *FileService) OpenExternal(relativePath string) error {
+	fullPath := s.getFullPath(relativePath)
+
+	// Verify the file exists
+	if _, err := os.Stat(fullPath); err != nil {
+		return err
+	}
+
+	// Use macOS open command
+	cmd := exec.Command("open", fullPath)
+	return cmd.Start()
+}
+
+// OpenURL opens a URL in the system's default browser
+// Uses macOS 'open' command
+func (s *FileService) OpenURL(url string) error {
+	// Use macOS open command to open URL in default browser
+	cmd := exec.Command("open", url)
+	return cmd.Start()
 }

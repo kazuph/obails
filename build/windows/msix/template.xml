@@ -10,13 +10,13 @@
     <Installer
         Path="obails"
         Arguments=""
-        InstallLocation="C:\Program Files\My Company\My Product">
+        InstallLocation="C:\Program Files\kazuph\Obails">
     </Installer>
     <PackageInformation
-        PackageName="My Product"
-        PackageDisplayName="My Product"
-        PublisherName="CN=My Company"
-        PublisherDisplayName="My Company"
+        PackageName="Obails"
+        PackageDisplayName="Obails"
+        PublisherName="CN=kazuph"
+        PublisherDisplayName="kazuph"
         Version="0.1.0.0"
         PackageDescription="A obails application">
         <Capabilities>
@@ -27,7 +27,7 @@
             <Application
                 Id="com.example.obails"
                 Description="A obails application"
-                DisplayName="My Product"
+                DisplayName="Obails"
                 ExecutableName="obails"
                 EntryPoint="Windows.FullTrustApplication">
                 
@@ -41,8 +41,8 @@
         </Dependencies>
         <Properties>
             <Framework>false</Framework>
-            <DisplayName>My Product</DisplayName>
-            <PublisherDisplayName>My Company</PublisherDisplayName>
+            <DisplayName>Obails</DisplayName>
+            <PublisherDisplayName>kazuph</PublisherDisplayName>
             <Description>A obails application</Description>
             <Logo>Assets\AppIcon.png</Logo>
         </Properties>

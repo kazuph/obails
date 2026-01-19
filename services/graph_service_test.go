@@ -221,12 +221,14 @@ func TestGraphService_GetFullGraph_UnresolvedLinks(t *testing.T) {
 
 	graph := gs.GetFullGraph()
 
-	// Should have 2 nodes: one for the file and one for the unresolved link
-	if len(graph.Nodes) != 2 {
-		t.Errorf("Expected 2 nodes (including unresolved), got %d", len(graph.Nodes))
+	// Unresolved links (links to non-existent files) are filtered out from the graph
+	// Should have only 1 node: the source file (non-existent targets are excluded)
+	if len(graph.Nodes) != 1 {
+		t.Errorf("Expected 1 node (unresolved links filtered out), got %d", len(graph.Nodes))
 	}
-	if len(graph.Edges) != 1 {
-		t.Errorf("Expected 1 edge, got %d", len(graph.Edges))
+	// Should have 0 edges: no edge to non-existent file
+	if len(graph.Edges) != 0 {
+		t.Errorf("Expected 0 edges (unresolved links filtered out), got %d", len(graph.Edges))
 	}
 }
 

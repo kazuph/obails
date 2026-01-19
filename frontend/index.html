@@ -13,6 +13,10 @@
                 <h2>Obails</h2>
                 <button id="settings-btn" title="Settings (⌘,)">⚙</button>
             </div>
+            <div class="file-search">
+                <input type="text" id="file-search-input" placeholder="Search files..." autocomplete="off">
+                <button id="file-search-clear" class="search-clear-btn" style="display: none;">✕</button>
+            </div>
             <div class="file-tree" id="file-tree">
                 <!-- File tree will be rendered here -->
             </div>
@@ -21,11 +25,11 @@
 
         <div class="main-content">
             <div class="toolbar">
-                <button id="new-note-btn" title="New Note (⌘N)">New</button>
-                <button id="daily-note-btn">Today's Note</button>
-                <button id="thino-btn">Thino</button>
-                <button id="graph-btn" title="Graph View (⌘G)">Graph</button>
-                <button id="refresh-btn">Refresh</button>
+                <button id="new-note-btn" title="New Note (⌘N)">✏️</button>
+                <button id="daily-note-btn" title="Today's Daily Note">📅</button>
+                <button id="timeline-btn" title="Timeline">💭</button>
+                <button id="graph-btn" title="Graph View (⌘G)">🕸️</button>
+                <button id="refresh-btn" title="Refresh">🔄</button>
                 <div class="toolbar-spacer"></div>
                 <div class="theme-selector">
                     <label>Theme:</label>
@@ -77,13 +81,64 @@
                 </div>
             </div>
 
-            <div class="thino-panel" id="thino-panel" style="display: none;">
-                <div class="thino-input">
-                    <textarea id="thino-input" placeholder="What's on your mind?"></textarea>
-                    <button id="thino-submit">Post</button>
+            <div class="timeline-panel" id="timeline-panel" style="display: none;">
+                <div class="timeline-input">
+                    <textarea id="timeline-input" placeholder="What's on your mind?"></textarea>
+                    <button id="timeline-submit">Post</button>
                 </div>
-                <div class="thino-timeline" id="thino-timeline">
-                    <!-- Thino entries will be rendered here -->
+                <div class="timeline-list" id="timeline-list">
+                    <!-- Timeline entries will be rendered here -->
+                </div>
+            </div>
+
+            <!-- Image Viewer -->
+            <div class="image-viewer" id="image-viewer" style="display: none;">
+                <div class="pane-header">
+                    <span class="pane-title" id="image-title">Image</span>
+                    <div class="image-controls">
+                        <button id="image-fullscreen" title="Fullscreen">⤢</button>
+                    </div>
+                </div>
+                <div class="image-container" id="image-container">
+                    <img id="image-preview" alt="Preview" />
+                </div>
+            </div>
+
+            <!-- PDF Viewer -->
+            <div class="pdf-viewer" id="pdf-viewer" style="display: none;">
+                <div class="pane-header">
+                    <span class="pane-title" id="pdf-title">PDF</span>
+                    <div class="pdf-controls">
+                        <button id="pdf-view-mode" title="Toggle View Mode (Single/Continuous)">📄</button>
+                        <button id="pdf-prev" title="Previous Page">◀</button>
+                        <span id="pdf-page-info">1 / 1</span>
+                        <button id="pdf-next" title="Next Page">▶</button>
+                        <button id="pdf-zoom-out" title="Zoom Out">−</button>
+                        <span id="pdf-zoom-info">100%</span>
+                        <button id="pdf-zoom-in" title="Zoom In">+</button>
+                        <button id="pdf-fullscreen" title="Fullscreen">⬜</button>
+                    </div>
+                </div>
+                <div class="pdf-container-wrapper" id="pdf-container-wrapper">
+                    <div class="pdf-container pdf-buffer-active" id="pdf-container-a"></div>
+                    <div class="pdf-container pdf-buffer-back" id="pdf-container-b"></div>
+                </div>
+            </div>
+
+            <!-- HTML Editor -->
+            <div class="html-editor-container" id="html-editor-container" style="display: none;">
+                <div class="editor-pane" id="html-editor-pane">
+                    <div class="pane-header">
+                        <span class="pane-title" id="html-editor-title">HTML</span>
+                    </div>
+                    <textarea id="html-editor" placeholder="HTML content..."></textarea>
+                </div>
+                <div class="resize-handle vertical" id="html-editor-resize"></div>
+                <div class="preview-pane" id="html-preview-pane">
+                    <div class="pane-header">
+                        <span class="pane-title">Preview</span>
+                    </div>
+                    <iframe id="html-preview" sandbox="allow-same-origin" title="HTML Preview"></iframe>
                 </div>
             </div>
         </div>
@@ -95,13 +150,51 @@
                     <!-- Outline will be rendered here -->
                 </div>
             </div>
-            <div class="resize-handle horizontal" id="right-sidebar-resize"></div>
+            <div class="resize-handle horizontal" id="outline-resize"></div>
+            <div class="outgoing-links-panel" id="outgoing-links-panel">
+                <h3>Outgoing Links</h3>
+                <div id="outgoing-links-list">
+                    <!-- Outgoing links will be rendered here -->
+                </div>
+            </div>
+            <div class="resize-handle horizontal" id="outgoing-resize"></div>
             <div class="backlinks-panel" id="backlinks-panel">
                 <h3>Backlinks</h3>
                 <div id="backlinks-list">
                     <!-- Backlinks will be rendered here -->
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- Image Fullscreen Overlay -->
+    <div class="image-fullscreen" id="image-fullscreen-overlay" style="display: none;">
+        <div class="image-fs-header">
+            <span class="image-fs-title" id="image-fs-title">Image</span>
+            <button id="image-fs-close" title="Close (ESC)">✕</button>
+        </div>
+        <div class="image-fs-content">
+            <img id="image-fs-preview" alt="Fullscreen Preview" />
+        </div>
+    </div>
+
+    <!-- PDF Fullscreen Overlay -->
+    <div class="pdf-fullscreen" id="pdf-fullscreen-overlay" style="display: none;">
+        <div class="pdf-fs-header">
+            <span class="pdf-fs-title" id="pdf-fs-title">PDF</span>
+            <div class="pdf-fs-controls">
+                <button id="pdf-fs-view-mode" title="Toggle View Mode">📄</button>
+                <button id="pdf-fs-prev" title="Previous Page">◀</button>
+                <span id="pdf-fs-page-info">1 / 1</span>
+                <button id="pdf-fs-next" title="Next Page">▶</button>
+                <button id="pdf-fs-zoom-out" title="Zoom Out">−</button>
+                <span id="pdf-fs-zoom-info">100%</span>
+                <button id="pdf-fs-zoom-in" title="Zoom In">+</button>
+                <button id="pdf-fs-close" title="Close (ESC)">✕</button>
+            </div>
+        </div>
+        <div class="pdf-fs-container" id="pdf-fs-container">
+            <!-- Canvas elements will be added dynamically -->
         </div>
     </div>
 
