@@ -134,8 +134,9 @@ wails3 task darwin:package
 ## Roadmap
 
 - [ ] Full-text search
-- [ ] Graph view
+- [x] Graph view
 - [ ] Timeline view (Twitter-like memo stream)
+- [ ] Non-markdown file display (images, HTML, PDF, Canvas, Excalidraw)
 
 ## License
 
