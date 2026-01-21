@@ -505,8 +505,9 @@ async function openSearchSelectedFile() {
     let pathToOpen: string | null = null;
 
     if (selectedItem) {
-        // Skip if selected item is a folder
+        // Toggle folder if selected item is a folder
         if (selectedItem.classList.contains("folder")) {
+            selectedItem.click();
             return;
         }
         pathToOpen = selectedItem.getAttribute("data-path");
