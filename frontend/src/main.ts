@@ -520,14 +520,17 @@ async function openSearchSelectedFile() {
     }
 
     if (pathToOpen) {
+        const fileType = getFileTypeFromPath(pathToOpen);
         fileSearchInput.blur();
         resetSearchSelection();
-        await openNote(pathToOpen);
-        // Focus editor and reset cursor position
-        editor.focus();
-        editor.selectionStart = 0;
-        editor.selectionEnd = 0;
-        editor.scrollTop = 0;
+        await openFile(pathToOpen, fileType);
+        // Focus editor and reset cursor position (only for markdown files)
+        if (fileType === "markdown") {
+            editor.focus();
+            editor.selectionStart = 0;
+            editor.selectionEnd = 0;
+            editor.scrollTop = 0;
+        }
     }
 }
 
