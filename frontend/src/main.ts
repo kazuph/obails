@@ -37,6 +37,14 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   import.meta.url
 ).toString();
 
+// Platform detection
+const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+
+// Helper to check for the correct modifier key (Cmd on macOS, Ctrl on others)
+function isModKey(e: KeyboardEvent): boolean {
+    return isMac ? e.metaKey : e.ctrlKey;
+}
+
 // State
 let currentNote: Note | null = null;
 let currentFilePath: string | null = null;  // Tracks any open file (md, image, pdf, html)
@@ -46,6 +54,11 @@ let contextMenuTargetPath: string = "";
 let contextMenuTargetIsDir: boolean = false;
 let draggedFilePath: string | null = null;
 let graphInstance: ReturnType<typeof ForceGraph> | null = null;
+
+// Keyboard navigation state
+let fileTreeFocused = false;
+let keyboardSelectedIndex = -1;
+let searchSelectionIndex = -1; // For Ctrl+N/P navigation in search input
 
 // DOM Elements
 const fileTree = document.getElementById("file-tree")!;
@@ -257,21 +270,30 @@ function setupEventListeners() {
 
     // Keyboard shortcuts
     document.addEventListener("keydown", (e) => {
-        if ((e.metaKey || e.ctrlKey) && e.key === ",") {
+        // Show shortcuts help with "?" key (when not typing in an input)
+        if (e.key === "?" && !isInputFocused()) {
+            e.preventDefault();
+            toggleShortcutsHelp();
+            return;
+        }
+        if (isModKey(e) && e.key === ",") {
             e.preventDefault();
             openSettings();
         }
-        if ((e.metaKey || e.ctrlKey) && e.key === "n") {
+        if (isModKey(e) && e.key === "n") {
             e.preventDefault();
             showNewNoteForm();
         }
-        if ((e.metaKey || e.ctrlKey) && e.key === "g") {
+        if (isModKey(e) && e.key === "g") {
             e.preventDefault();
             toggleGraphView();
         }
-        // ESC to close overlays
-        if (e.key === "Escape") {
-            if (pdfIsFullscreen) {
+        // ESC to close overlays (skip if file tree is focused - handled separately)
+        if (e.key === "Escape" && !fileTreeFocused) {
+            const shortcutsOverlay = document.getElementById("shortcuts-overlay");
+            if (shortcutsOverlay?.classList.contains("visible")) {
+                hideShortcutsHelp();
+            } else if (pdfIsFullscreen) {
                 closePdfFullscreen();
             } else if (imageFullscreenOverlay.style.display !== "none") {
                 closeImageFullscreen();
@@ -280,8 +302,14 @@ function setupEventListeners() {
             }
             hideContextMenu();
         }
-        // Cmd+F or Ctrl+F to focus file search
-        if ((e.metaKey || e.ctrlKey) && e.key === "f" && !editor.matches(":focus")) {
+        // Cmd+P (Quick Open) to focus file search
+        if (isModKey(e) && e.key === "p") {
+            e.preventDefault();
+            fileSearchInput.focus();
+            fileSearchInput.select();
+        }
+        // Cmd+F (or Ctrl+F on non-Mac) to focus file search (when not in editor)
+        if (isModKey(e) && e.key === "f" && !editor.matches(":focus")) {
             e.preventDefault();
             fileSearchInput.focus();
             fileSearchInput.select();
@@ -293,6 +321,23 @@ function setupEventListeners() {
     setupContextMenu();
     setupFileTreeDropTarget();
     setupFileSearch();
+    setupFileTreeKeyboardNavigation();
+    setupShortcutsHelp();
+}
+
+function setupShortcutsHelp() {
+    const overlay = document.getElementById("shortcuts-overlay");
+    const closeBtn = document.getElementById("shortcuts-close");
+
+    // Close button click
+    closeBtn?.addEventListener("click", hideShortcutsHelp);
+
+    // Click on backdrop to close
+    overlay?.addEventListener("click", (e) => {
+        if (e.target === overlay) {
+            hideShortcutsHelp();
+        }
+    });
 }
 
 // Setup file-tree as drop target for moving files to root
@@ -331,12 +376,23 @@ function setupFileSearch() {
     }
     let searchTimeout: ReturnType<typeof setTimeout> | null = null;
 
+    // When search input is focused, disable file tree keyboard mode
+    fileSearchInput.addEventListener("focus", () => {
+        // Clear file tree keyboard navigation state
+        if (fileTreeFocused) {
+            blurFileTree();
+        }
+    });
+
     // Incremental search on input
     fileSearchInput.addEventListener("input", () => {
         const query = fileSearchInput.value.trim().toLowerCase();
 
         // Show/hide clear button
         fileSearchClear.style.display = query ? "block" : "none";
+
+        // Reset search selection when query changes
+        resetSearchSelection();
 
         // Debounce search for performance
         if (searchTimeout) {
@@ -352,21 +408,126 @@ function setupFileSearch() {
         fileSearchInput.value = "";
         fileSearchClear.style.display = "none";
         filterFileTree("");
+        resetSearchSelection();
         fileSearchInput.focus();
     });
 
-    // Escape to clear and blur
+    // Keyboard navigation in search
     fileSearchInput.addEventListener("keydown", (e) => {
         if (e.key === "Escape") {
             if (fileSearchInput.value) {
                 fileSearchInput.value = "";
                 fileSearchClear.style.display = "none";
                 filterFileTree("");
+                resetSearchSelection();
             } else {
                 fileSearchInput.blur();
+                resetSearchSelection();
             }
+            return;
+        }
+
+        // Ctrl+N: Move selection down
+        if (e.ctrlKey && e.key === "n") {
+            e.preventDefault();
+            moveSearchSelection(1);
+            return;
+        }
+
+        // Ctrl+P: Move selection up
+        if (e.ctrlKey && e.key === "p") {
+            e.preventDefault();
+            moveSearchSelection(-1);
+            return;
+        }
+
+        // Enter: Open selected file
+        if (e.key === "Enter") {
+            e.preventDefault();
+            openSearchSelectedFile();
+            return;
         }
     });
+}
+
+// Reset search selection
+function resetSearchSelection() {
+    const previousSelected = fileTree.querySelector(".search-selected");
+    if (previousSelected) {
+        previousSelected.classList.remove("search-selected");
+    }
+    searchSelectionIndex = -1;
+}
+
+// Move search selection up or down
+function moveSearchSelection(direction: number) {
+    // Include both files and folders - treat file tree as a flat list
+    const visibleItems = getVisibleFileItems();
+    if (visibleItems.length === 0) return;
+
+    // Clear previous search selection
+    const previousSearchSelected = fileTree.querySelector(".search-selected");
+    if (previousSearchSelected) {
+        previousSearchSelected.classList.remove("search-selected");
+    }
+
+    // Also clear any keyboard selection to prevent double highlights
+    const previousKeyboardSelected = fileTree.querySelector(".keyboard-selected");
+    if (previousKeyboardSelected) {
+        previousKeyboardSelected.classList.remove("keyboard-selected");
+    }
+
+    // Calculate new index
+    if (searchSelectionIndex === -1) {
+        // First selection
+        searchSelectionIndex = direction > 0 ? 0 : visibleItems.length - 1;
+    } else {
+        searchSelectionIndex += direction;
+        // Wrap around
+        if (searchSelectionIndex < 0) {
+            searchSelectionIndex = visibleItems.length - 1;
+        } else if (searchSelectionIndex >= visibleItems.length) {
+            searchSelectionIndex = 0;
+        }
+    }
+
+    // Apply selection
+    const selectedItem = visibleItems[searchSelectionIndex];
+    if (selectedItem) {
+        selectedItem.classList.add("search-selected");
+        selectedItem.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+}
+
+// Open the search-selected file
+async function openSearchSelectedFile() {
+    const selectedItem = fileTree.querySelector(".search-selected") as HTMLElement | null;
+    let pathToOpen: string | null = null;
+
+    if (selectedItem) {
+        // Skip if selected item is a folder
+        if (selectedItem.classList.contains("folder")) {
+            return;
+        }
+        pathToOpen = selectedItem.getAttribute("data-path");
+    } else {
+        // If no selection, open the first visible file (skip folders)
+        const visibleItems = getVisibleFileItems().filter(item => !item.classList.contains("folder"));
+        if (visibleItems.length > 0) {
+            pathToOpen = visibleItems[0].getAttribute("data-path");
+        }
+    }
+
+    if (pathToOpen) {
+        fileSearchInput.blur();
+        resetSearchSelection();
+        await openNote(pathToOpen);
+        // Focus editor and reset cursor position
+        editor.focus();
+        editor.selectionStart = 0;
+        editor.selectionEnd = 0;
+        editor.scrollTop = 0;
+    }
 }
 
 // Filter file tree based on search query
@@ -437,6 +598,262 @@ function filterFileTree(query: string) {
             }
         }
     });
+}
+
+// Keyboard Navigation for File Tree
+function getVisibleFileItems(): HTMLElement[] {
+    const items: HTMLElement[] = [];
+
+    function collectVisibleItems(container: Element) {
+        for (const wrapper of container.children) {
+            if (!(wrapper instanceof HTMLElement)) continue;
+            if (!wrapper.classList.contains("file-wrapper")) continue;
+            if (wrapper.classList.contains("search-hidden")) continue;
+
+            const fileItem = wrapper.querySelector(":scope > .file-item") as HTMLElement | null;
+            if (!fileItem) continue;
+            if (fileItem.classList.contains("search-hidden")) continue;
+
+            items.push(fileItem);
+
+            // If it's a folder with visible children, collect them
+            // Check both "expanded" class (normal state) and visible folder-children (search filter state)
+            if (fileItem.classList.contains("folder")) {
+                const childrenContainer = wrapper.querySelector(":scope > .folder-children") as HTMLElement | null;
+                if (childrenContainer) {
+                    const isExpanded = fileItem.classList.contains("expanded");
+                    const isVisible = childrenContainer.style.display !== "none" && childrenContainer.style.display !== "";
+                    // Collect children if folder is expanded OR children are visible (search mode)
+                    if (isExpanded || isVisible) {
+                        collectVisibleItems(childrenContainer);
+                    }
+                }
+            }
+        }
+    }
+
+    collectVisibleItems(fileTree);
+    return items;
+}
+
+function updateKeyboardSelection(newIndex: number) {
+    const visibleItems = getVisibleFileItems();
+    if (visibleItems.length === 0) return;
+
+    // Remove previous keyboard selection
+    document.querySelectorAll(".file-item.keyboard-selected").forEach(el => {
+        el.classList.remove("keyboard-selected");
+    });
+
+    // Clamp index
+    keyboardSelectedIndex = Math.max(0, Math.min(newIndex, visibleItems.length - 1));
+
+    // Apply keyboard selection
+    const selectedItem = visibleItems[keyboardSelectedIndex];
+    if (selectedItem) {
+        selectedItem.classList.add("keyboard-selected");
+        selectedItem.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+}
+
+function clearKeyboardSelection() {
+    document.querySelectorAll(".file-item.keyboard-selected").forEach(el => {
+        el.classList.remove("keyboard-selected");
+    });
+    keyboardSelectedIndex = -1;
+}
+
+function focusFileTree() {
+    fileTreeFocused = true;
+    fileTree.classList.add("keyboard-focused");
+
+    // If nothing is selected, select the first item or currently active file
+    if (keyboardSelectedIndex === -1) {
+        const visibleItems = getVisibleFileItems();
+        if (visibleItems.length > 0) {
+            // Try to select currently active file
+            const activeItem = visibleItems.find(item => item.classList.contains("active"));
+            if (activeItem) {
+                keyboardSelectedIndex = visibleItems.indexOf(activeItem);
+            } else {
+                keyboardSelectedIndex = 0;
+            }
+            updateKeyboardSelection(keyboardSelectedIndex);
+        }
+    }
+}
+
+function blurFileTree() {
+    fileTreeFocused = false;
+    fileTree.classList.remove("keyboard-focused");
+    clearKeyboardSelection();
+}
+
+function handleFileTreeKeydown(e: KeyboardEvent) {
+    if (!fileTreeFocused) return;
+
+    // Escape should work even with empty file tree
+    if (e.key === "Escape") {
+        e.preventDefault();
+        blurFileTree();
+        return;
+    }
+
+    const visibleItems = getVisibleFileItems();
+    if (visibleItems.length === 0) return;
+
+    const currentItem = visibleItems[keyboardSelectedIndex];
+
+    switch (e.key) {
+        case "j":
+            e.preventDefault();
+            updateKeyboardSelection(keyboardSelectedIndex + 1);
+            break;
+
+        case "k":
+            e.preventDefault();
+            updateKeyboardSelection(keyboardSelectedIndex - 1);
+            break;
+
+        case "l":
+            e.preventDefault();
+            if (currentItem?.classList.contains("folder")) {
+                // Open folder if closed
+                if (!currentItem.classList.contains("expanded")) {
+                    currentItem.click();
+                }
+            }
+            break;
+
+        case "h":
+            e.preventDefault();
+            if (currentItem) {
+                // Move to parent folder (don't close folders)
+                const parentWrapper = currentItem.closest(".folder-children")?.closest(".file-wrapper");
+                if (parentWrapper) {
+                    const parentFolder = parentWrapper.querySelector(":scope > .file-item.folder") as HTMLElement | null;
+                    if (parentFolder) {
+                        const newIndex = visibleItems.indexOf(parentFolder);
+                        if (newIndex !== -1) {
+                            updateKeyboardSelection(newIndex);
+                        }
+                    }
+                }
+            }
+            break;
+
+        case "Enter":
+            e.preventDefault();
+            if (currentItem) {
+                if (currentItem.classList.contains("folder")) {
+                    // Toggle folder
+                    currentItem.click();
+                } else {
+                    // Open file directly and focus editor
+                    const filePath = currentItem.getAttribute("data-path");
+                    if (filePath) {
+                        const fileType = getFileTypeFromPath(filePath);
+                        blurFileTree();
+                        openFile(filePath, fileType).then(() => {
+                            // Focus editor for markdown files
+                            // Cursor position is already reset to 0 in openNote
+                            if (fileType === "markdown") {
+                                editor.focus();
+                            }
+                        });
+                    }
+                }
+            }
+            break;
+
+        // Escape is handled above before visibleItems check
+    }
+}
+
+function setupFileTreeKeyboardNavigation() {
+    document.addEventListener("keydown", (e) => {
+        // Shift+Tab to toggle focus between file tree and editor
+        if (e.key === "Tab" && e.shiftKey) {
+            const activeEl = document.activeElement;
+
+            // Don't interfere if we're in specific input elements
+            if (activeEl && (
+                activeEl.id === "file-search-input" ||
+                activeEl.id === "timeline-input" ||
+                activeEl.id === "new-note-input"
+            )) {
+                return;
+            }
+
+            e.preventDefault();
+            e.stopPropagation();
+
+            if (fileTreeFocused) {
+                blurFileTree();
+                editor.focus();
+            } else {
+                editor.blur();
+                focusFileTree();
+            }
+            return;
+        }
+
+        // Handle j/k/h/l/Enter/Escape when file tree is focused
+        // Skip if any input element is focused (search mode, etc.)
+        if (["j", "k", "h", "l", "Enter", "Escape"].includes(e.key)) {
+            if (fileTreeFocused && !isInputFocused()) {
+                handleFileTreeKeydown(e);
+            }
+        }
+    });
+
+    // Click on file tree to focus it
+    fileTree.addEventListener("click", (e) => {
+        // Only focus if clicking directly on file tree (not on items)
+        if (e.target === fileTree) {
+            focusFileTree();
+        }
+    });
+
+    // Make file tree focusable
+    fileTree.setAttribute("tabindex", "-1");
+}
+
+// Helper to check if an input/textarea is focused
+function isInputFocused(): boolean {
+    const activeEl = document.activeElement;
+    if (!activeEl) return false;
+    const tagName = activeEl.tagName.toLowerCase();
+    return tagName === "input" || tagName === "textarea" || (activeEl as HTMLElement).isContentEditable;
+}
+
+// Shortcuts Help Overlay
+function toggleShortcutsHelp() {
+    const overlay = document.getElementById("shortcuts-overlay");
+    if (overlay?.classList.contains("visible")) {
+        hideShortcutsHelp();
+    } else {
+        showShortcutsHelp();
+    }
+}
+
+function showShortcutsHelp() {
+    const overlay = document.getElementById("shortcuts-overlay");
+    if (overlay) {
+        // Update modifier key display based on platform
+        const modKey = isMac ? "⌘" : "Ctrl";
+        overlay.querySelectorAll(".mod-key").forEach(el => {
+            el.textContent = modKey;
+        });
+        overlay.classList.add("visible");
+    }
+}
+
+function hideShortcutsHelp() {
+    const overlay = document.getElementById("shortcuts-overlay");
+    if (overlay) {
+        overlay.classList.remove("visible");
+    }
 }
 
 // Settings
@@ -612,6 +1029,10 @@ async function deleteTargetPathWithArgs(targetPath: string, isDir: boolean) {
         if (currentNote && currentNote.path === targetPath) {
             currentNote = null;
             editor.value = "";
+            // Reset cursor position and scroll to the top
+            editor.selectionStart = 0;
+            editor.selectionEnd = 0;
+            editor.scrollTop = 0;
             updatePreview();
             clearBacklinks();
             clearOutgoingLinks();
@@ -676,6 +1097,15 @@ function getFileIcon(file: FileInfo): string {
         case "html": return "🌐";
         default: return "📄";
     }
+}
+
+function getFileTypeFromPath(path: string): string {
+    const ext = path.split('.').pop()?.toLowerCase() || '';
+    if (ext === 'md' || ext === 'markdown') return 'markdown';
+    if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp'].includes(ext)) return 'image';
+    if (ext === 'pdf') return 'pdf';
+    if (ext === 'html' || ext === 'htm') return 'html';
+    return 'other';
 }
 
 // Open file based on file type
@@ -1302,6 +1732,10 @@ async function openNote(path: string) {
         currentNote = await NoteService.GetNote(path);
         if (currentNote) {
             editor.value = currentNote.content;
+            // Reset cursor position and scroll to the top
+            editor.selectionStart = 0;
+            editor.selectionEnd = 0;
+            editor.scrollTop = 0;
             updatePreview();
             await loadBacklinks(path);
             await loadOutgoingLinks(path);
@@ -1351,6 +1785,10 @@ async function openTodayNote() {
         if (note) {
             currentNote = note;
             editor.value = note.content;
+            // Reset cursor position and scroll to the top
+            editor.selectionStart = 0;
+            editor.selectionEnd = 0;
+            editor.scrollTop = 0;
             updatePreview();
             await loadBacklinks(note.path);
             await loadOutgoingLinks(note.path);

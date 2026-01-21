@@ -374,6 +374,34 @@ body {
     color: var(--bg-primary);
 }
 
+/* Keyboard navigation selection - use magenta to differentiate from active file */
+.file-item.keyboard-selected {
+    outline: 2px solid #d946ef;
+    outline-offset: -2px;
+    background: color-mix(in srgb, #d946ef 15%, transparent);
+}
+
+.file-item.keyboard-selected.active {
+    outline-color: #d946ef;
+    background: color-mix(in srgb, #d946ef 25%, transparent);
+}
+
+#file-tree.keyboard-focused {
+    outline: none;
+}
+
+/* Search navigation selection (Ctrl+N/P in search input) */
+.file-item.search-selected {
+    outline: 2px solid #d946ef;
+    outline-offset: -2px;
+    background: color-mix(in srgb, #d946ef 15%, transparent);
+}
+
+.file-item.search-selected.active {
+    outline-color: #d946ef;
+    background: color-mix(in srgb, #d946ef 25%, transparent);
+}
+
 .file-item.folder {
     color: var(--text-secondary);
 }
@@ -1700,4 +1728,167 @@ body {
 
 .primary-btn:active {
     transform: translateY(0);
+}
+
+/* ========== SHORTCUTS HELP OVERLAY ========== */
+
+.shortcuts-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.2s ease, visibility 0.2s ease;
+    backdrop-filter: blur(4px);
+}
+
+.shortcuts-overlay.visible {
+    opacity: 1;
+    visibility: visible;
+}
+
+.shortcuts-content {
+    background: var(--bg-primary);
+    border-radius: 16px;
+    max-width: 600px;
+    width: 90%;
+    max-height: 80vh;
+    overflow: hidden;
+    box-shadow: 0 25px 80px rgba(0, 0, 0, 0.4);
+    display: flex;
+    flex-direction: column;
+    animation: shortcuts-slide-in 0.2s ease;
+}
+
+@keyframes shortcuts-slide-in {
+    from {
+        transform: translateY(-20px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.shortcuts-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-secondary);
+}
+
+.shortcuts-header h2 {
+    margin: 0;
+    font-size: 1.25rem;
+    color: var(--text-primary);
+}
+
+.shortcuts-close {
+    background: none;
+    border: none;
+    font-size: 1.25rem;
+    cursor: pointer;
+    color: var(--text-secondary);
+    padding: 4px 8px;
+    border-radius: 6px;
+    transition: background 0.15s, color 0.15s;
+}
+
+.shortcuts-close:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.shortcuts-body {
+    padding: 24px;
+    overflow-y: auto;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 24px;
+}
+
+.shortcuts-section h3 {
+    margin: 0 0 12px 0;
+    font-size: 0.875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    font-weight: 600;
+}
+
+.shortcuts-hint {
+    margin: 0 0 12px 0;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+.shortcuts-hint kbd {
+    font-size: 0.7rem;
+    padding: 2px 4px;
+}
+
+.shortcut-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+}
+
+.shortcut-row:last-child {
+    border-bottom: none;
+}
+
+.shortcut-keys {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.shortcut-keys kbd {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-family: inherit;
+    font-size: 0.8rem;
+    color: var(--text-primary);
+    box-shadow: 0 2px 0 var(--border);
+    min-width: 24px;
+    text-align: center;
+}
+
+.shortcut-desc {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+}
+
+.shortcuts-footer {
+    padding: 16px 24px;
+    border-top: 1px solid var(--border);
+    background: var(--bg-secondary);
+    text-align: center;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.shortcuts-footer kbd {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-family: inherit;
+    font-size: 0.75rem;
+    color: var(--text-primary);
 }

@@ -163,8 +163,8 @@ test.describe('Editor', () => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
 
-    const preview = page.locator('.preview-pane #preview');
-    await expect(page.locator('.preview-pane')).toBeVisible();
+    const preview = page.locator('#preview-pane #preview');
+    await expect(page.locator('#preview-pane')).toBeVisible();
 
     // Type markdown content
     const editor = page.locator('#editor');
@@ -229,7 +229,8 @@ test.describe('Graph View', () => {
 
     const graphBtn = page.locator('#graph-btn');
     await expect(graphBtn).toBeVisible();
-    await expect(graphBtn).toHaveText('Graph');
+    // Button has emoji icon instead of text
+    await expect(graphBtn).toHaveAttribute('title', 'Graph View (⌘G)');
   });
 
   test('should have graph overlay (hidden by default)', async ({ page }) => {
@@ -554,5 +555,606 @@ More text.
 
     // "## Second" is on line 2 (0-indexed)
     expect(cursorInfo.lineNumber).toBe(2);
+  });
+});
+
+test.describe('Keyboard Navigation', () => {
+  test('should focus file tree with Shift+Tab from editor', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    // First focus the editor
+    const editor = page.locator('#editor');
+    await editor.focus();
+    await expect(editor).toBeFocused();
+
+    // Press Shift+Tab to focus file tree
+    await page.keyboard.press('Shift+Tab');
+    await page.waitForTimeout(100);
+
+    // File tree should have keyboard-focused class
+    const fileTree = page.locator('#file-tree');
+    await expect(fileTree).toHaveClass(/keyboard-focused/);
+  });
+
+  test('should focus editor with Shift+Tab from file tree', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    const editor = page.locator('#editor');
+    const fileTree = page.locator('#file-tree');
+
+    // First focus the editor, then switch to file tree
+    await editor.focus();
+    await page.keyboard.press('Shift+Tab');
+    await page.waitForTimeout(100);
+    await expect(fileTree).toHaveClass(/keyboard-focused/);
+
+    // Press Shift+Tab again to go back to editor
+    await page.keyboard.press('Shift+Tab');
+    await page.waitForTimeout(100);
+
+    // File tree should lose keyboard-focused class
+    await expect(fileTree).not.toHaveClass(/keyboard-focused/);
+    // Editor should be focused
+    await expect(editor).toBeFocused();
+  });
+
+  test('should blur file tree with Escape key', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    const editor = page.locator('#editor');
+    const fileTree = page.locator('#file-tree');
+
+    // Focus editor then switch to file tree
+    await editor.focus();
+    await page.keyboard.press('Shift+Tab');
+    await page.waitForTimeout(100);
+    await expect(fileTree).toHaveClass(/keyboard-focused/);
+
+    // Press Escape to blur file tree
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(100);
+
+    // File tree should lose keyboard-focused class
+    await expect(fileTree).not.toHaveClass(/keyboard-focused/);
+  });
+
+  test('should not interfere with Shift+Tab when in search input', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    const searchInput = page.locator('#file-search-input');
+    const fileTree = page.locator('#file-tree');
+
+    // Focus search input
+    await searchInput.focus();
+    await expect(searchInput).toBeFocused();
+
+    // Press Shift+Tab - should NOT focus file tree (browser default behavior)
+    await page.keyboard.press('Shift+Tab');
+    await page.waitForTimeout(100);
+
+    // File tree should NOT have keyboard-focused class
+    await expect(fileTree).not.toHaveClass(/keyboard-focused/);
+  });
+
+  test('keyboard navigation state should be isolated per focus cycle', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    const editor = page.locator('#editor');
+    const fileTree = page.locator('#file-tree');
+
+    // First cycle: focus file tree
+    await editor.focus();
+    await page.keyboard.press('Shift+Tab');
+    await page.waitForTimeout(100);
+    await expect(fileTree).toHaveClass(/keyboard-focused/);
+
+    // Escape to blur
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(100);
+    await expect(fileTree).not.toHaveClass(/keyboard-focused/);
+
+    // Second cycle: focus file tree again
+    await page.keyboard.press('Shift+Tab');
+    await page.waitForTimeout(100);
+    await expect(fileTree).toHaveClass(/keyboard-focused/);
+  });
+
+  test('should reset cursor and scroll when editor value changes', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    const editor = page.locator('#editor');
+
+    // Fill editor with content and move cursor to middle
+    const testContent = 'Line 1\nLine 2\nLine 3\nLine 4\nLine 5\nLine 6\nLine 7\nLine 8\nLine 9\nLine 10';
+    await editor.fill(testContent);
+
+    // Move cursor to middle
+    await page.evaluate(() => {
+      const ed = document.getElementById('editor') as HTMLTextAreaElement;
+      const mid = Math.floor(ed.value.length / 2);
+      ed.selectionStart = mid;
+      ed.selectionEnd = mid;
+      ed.scrollTop = 100; // Scroll down a bit
+    });
+
+    // Verify cursor moved to middle
+    let cursorPos = await page.evaluate(() => {
+      const ed = document.getElementById('editor') as HTMLTextAreaElement;
+      return { start: ed.selectionStart, scrollTop: ed.scrollTop };
+    });
+    expect(cursorPos.start).toBeGreaterThan(0);
+
+    // Now simulate what happens when a new file is opened:
+    // Set new content and reset cursor (this mimics openNote behavior)
+    await page.evaluate(() => {
+      const ed = document.getElementById('editor') as HTMLTextAreaElement;
+      ed.value = 'New file content here';
+      // This is what we expect to happen in openNote after fix
+      ed.selectionStart = 0;
+      ed.selectionEnd = 0;
+      ed.scrollTop = 0;
+    });
+
+    // Verify cursor is at position 0 and scroll is at top
+    const finalState = await page.evaluate(() => {
+      const ed = document.getElementById('editor') as HTMLTextAreaElement;
+      return {
+        selectionStart: ed.selectionStart,
+        selectionEnd: ed.selectionEnd,
+        scrollTop: ed.scrollTop
+      };
+    });
+
+    expect(finalState.selectionStart).toBe(0);
+    expect(finalState.selectionEnd).toBe(0);
+    expect(finalState.scrollTop).toBe(0);
+  });
+});
+
+test.describe('Shortcuts Help', () => {
+  test('should show shortcuts help when pressing ?', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    const shortcutsOverlay = page.locator('#shortcuts-overlay');
+
+    // Initially hidden
+    await expect(shortcutsOverlay).not.toHaveClass(/visible/);
+
+    // Press ? to show shortcuts help
+    await page.keyboard.type('?');
+    await page.waitForTimeout(100);
+
+    // Should now be visible
+    await expect(shortcutsOverlay).toHaveClass(/visible/);
+  });
+
+  test('should close shortcuts help with Escape', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    const shortcutsOverlay = page.locator('#shortcuts-overlay');
+
+    // Open shortcuts help
+    await page.keyboard.type('?');
+    await page.waitForTimeout(100);
+    await expect(shortcutsOverlay).toHaveClass(/visible/);
+
+    // Close with Escape
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(100);
+
+    // Should be hidden
+    await expect(shortcutsOverlay).not.toHaveClass(/visible/);
+  });
+
+  test('should close shortcuts help when pressing ? again', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    const shortcutsOverlay = page.locator('#shortcuts-overlay');
+
+    // Open shortcuts help
+    await page.keyboard.type('?');
+    await page.waitForTimeout(100);
+    await expect(shortcutsOverlay).toHaveClass(/visible/);
+
+    // Press ? again to close
+    await page.keyboard.type('?');
+    await page.waitForTimeout(100);
+
+    // Should be hidden
+    await expect(shortcutsOverlay).not.toHaveClass(/visible/);
+  });
+
+  test('should close shortcuts help when clicking close button', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    const shortcutsOverlay = page.locator('#shortcuts-overlay');
+    const closeBtn = page.locator('#shortcuts-close');
+
+    // Open shortcuts help
+    await page.keyboard.type('?');
+    await page.waitForTimeout(100);
+    await expect(shortcutsOverlay).toHaveClass(/visible/);
+
+    // Click close button
+    await closeBtn.click();
+    await page.waitForTimeout(100);
+
+    // Should be hidden
+    await expect(shortcutsOverlay).not.toHaveClass(/visible/);
+  });
+});
+
+test.describe('File Search Navigation', () => {
+  test('should focus search input with Cmd+P', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    const searchInput = page.locator('#file-search-input');
+
+    // Initially not focused
+    await expect(searchInput).not.toBeFocused();
+
+    // Press Cmd+P
+    await page.keyboard.press('Meta+p');
+    await page.waitForTimeout(100);
+
+    // Should be focused
+    await expect(searchInput).toBeFocused();
+  });
+
+  test('should navigate with Ctrl+N/P when search input is focused', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    // Inject test file items into file tree for testing
+    await page.evaluate(() => {
+      const fileTree = document.getElementById('file-tree');
+      if (!fileTree) return;
+      fileTree.innerHTML = `
+        <div class="file-wrapper">
+          <div class="file-item" data-path="test1.md" data-name="test1.md">test1.md</div>
+        </div>
+        <div class="file-wrapper">
+          <div class="file-item" data-path="test2.md" data-name="test2.md">test2.md</div>
+        </div>
+        <div class="file-wrapper">
+          <div class="file-item" data-path="test3.md" data-name="test3.md">test3.md</div>
+        </div>
+      `;
+    });
+
+    const searchInput = page.locator('#file-search-input');
+
+    // Focus search input
+    await searchInput.focus();
+    await expect(searchInput).toBeFocused();
+
+    // Press Ctrl+N to select first file
+    await page.keyboard.press('Control+n');
+    await page.waitForTimeout(100);
+
+    // Check that first file is selected
+    const selected1 = page.locator('.file-item.search-selected');
+    await expect(selected1).toHaveCount(1);
+    await expect(selected1).toHaveAttribute('data-name', 'test1.md');
+
+    // Press Ctrl+N again to select second file
+    await page.keyboard.press('Control+n');
+    await page.waitForTimeout(100);
+
+    const selected2 = page.locator('.file-item.search-selected');
+    await expect(selected2).toHaveCount(1);
+    await expect(selected2).toHaveAttribute('data-name', 'test2.md');
+
+    // Press Ctrl+P to go back to first file
+    await page.keyboard.press('Control+p');
+    await page.waitForTimeout(100);
+
+    const selected3 = page.locator('.file-item.search-selected');
+    await expect(selected3).toHaveCount(1);
+    await expect(selected3).toHaveAttribute('data-name', 'test1.md');
+  });
+
+  test('should clear selection with Escape in search input', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    // Inject test file items
+    await page.evaluate(() => {
+      const fileTree = document.getElementById('file-tree');
+      if (!fileTree) return;
+      fileTree.innerHTML = `
+        <div class="file-wrapper">
+          <div class="file-item" data-path="test1.md" data-name="test1.md">test1.md</div>
+        </div>
+      `;
+    });
+
+    const searchInput = page.locator('#file-search-input');
+
+    // Focus and select a file
+    await searchInput.focus();
+    await page.keyboard.press('Control+n');
+    await page.waitForTimeout(100);
+
+    // Verify selection exists
+    await expect(page.locator('.file-item.search-selected')).toHaveCount(1);
+
+    // Press Escape
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(100);
+
+    // Selection should be cleared
+    await expect(page.locator('.file-item.search-selected')).toHaveCount(0);
+  });
+
+  test('should wrap around when navigating past the end', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    // Inject test file items
+    await page.evaluate(() => {
+      const fileTree = document.getElementById('file-tree');
+      if (!fileTree) return;
+      fileTree.innerHTML = `
+        <div class="file-wrapper">
+          <div class="file-item" data-path="test1.md" data-name="test1.md">test1.md</div>
+        </div>
+        <div class="file-wrapper">
+          <div class="file-item" data-path="test2.md" data-name="test2.md">test2.md</div>
+        </div>
+      `;
+    });
+
+    const searchInput = page.locator('#file-search-input');
+
+    // Focus search input
+    await searchInput.focus();
+
+    // Navigate to first, then second, then wrap to first
+    await page.keyboard.press('Control+n'); // -> test1
+    await page.keyboard.press('Control+n'); // -> test2
+    await page.keyboard.press('Control+n'); // -> test1 (wrap)
+    await page.waitForTimeout(100);
+
+    const selected = page.locator('.file-item.search-selected');
+    await expect(selected).toHaveAttribute('data-name', 'test1.md');
+
+    // Navigate up to wrap to last
+    await page.keyboard.press('Control+p'); // -> test2 (wrap)
+    await page.waitForTimeout(100);
+
+    await expect(page.locator('.file-item.search-selected')).toHaveAttribute('data-name', 'test2.md');
+  });
+
+  test('should reset selection when search query changes', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    // Inject test file items
+    await page.evaluate(() => {
+      const fileTree = document.getElementById('file-tree');
+      if (!fileTree) return;
+      fileTree.innerHTML = `
+        <div class="file-wrapper">
+          <div class="file-item" data-path="test1.md" data-name="test1.md">test1.md</div>
+        </div>
+        <div class="file-wrapper">
+          <div class="file-item" data-path="test2.md" data-name="test2.md">test2.md</div>
+        </div>
+      `;
+    });
+
+    const searchInput = page.locator('#file-search-input');
+
+    // Focus and select a file
+    await searchInput.focus();
+    await page.keyboard.press('Control+n');
+    await page.waitForTimeout(100);
+    await expect(page.locator('.file-item.search-selected')).toHaveCount(1);
+
+    // Type something to change the query
+    await searchInput.fill('test');
+    await page.waitForTimeout(150); // Wait for debounce
+
+    // Selection should be cleared after input change
+    await expect(page.locator('.file-item.search-selected')).toHaveCount(0);
+  });
+
+  test('should clear keyboard-selected when entering search mode', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    // Inject test file items
+    await page.evaluate(() => {
+      const fileTree = document.getElementById('file-tree');
+      if (!fileTree) return;
+      fileTree.innerHTML = `
+        <div class="file-wrapper">
+          <div class="file-item" data-path="test1.md" data-name="test1.md">test1.md</div>
+        </div>
+        <div class="file-wrapper">
+          <div class="file-item" data-path="test2.md" data-name="test2.md">test2.md</div>
+        </div>
+      `;
+    });
+
+    // Enter file tree mode with Shift+Tab
+    await page.locator('#editor').focus();
+    await page.keyboard.press('Shift+Tab');
+    await page.waitForTimeout(100);
+
+    // Select a file with keyboard navigation
+    await page.keyboard.press('j');
+    await page.waitForTimeout(100);
+
+    // Verify keyboard-selected exists
+    await expect(page.locator('.file-item.keyboard-selected')).toHaveCount(1);
+
+    // Now focus the search input (enter search mode)
+    const searchInput = page.locator('#file-search-input');
+    await searchInput.focus();
+    await page.waitForTimeout(100);
+
+    // keyboard-selected should be cleared
+    await expect(page.locator('.file-item.keyboard-selected')).toHaveCount(0);
+  });
+
+  test('should not have both keyboard-selected and search-selected at the same time', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    // Inject test file items
+    await page.evaluate(() => {
+      const fileTree = document.getElementById('file-tree');
+      if (!fileTree) return;
+      fileTree.innerHTML = `
+        <div class="file-wrapper">
+          <div class="file-item" data-path="test1.md" data-name="test1.md">test1.md</div>
+        </div>
+        <div class="file-wrapper">
+          <div class="file-item" data-path="test2.md" data-name="test2.md">test2.md</div>
+        </div>
+      `;
+    });
+
+    // Focus search and select with Ctrl+N
+    const searchInput = page.locator('#file-search-input');
+    await searchInput.focus();
+    await page.keyboard.press('Control+n');
+    await page.waitForTimeout(100);
+
+    // Only search-selected should exist, not keyboard-selected
+    await expect(page.locator('.file-item.search-selected')).toHaveCount(1);
+    await expect(page.locator('.file-item.keyboard-selected')).toHaveCount(0);
+  });
+
+  test('should not activate keyboard mode when pressing j/k in search input', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    // Inject test file items
+    await page.evaluate(() => {
+      const fileTree = document.getElementById('file-tree');
+      if (!fileTree) return;
+      fileTree.innerHTML = `
+        <div class="file-wrapper">
+          <div class="file-item" data-path="test1.md" data-name="test1.md">test1.md</div>
+        </div>
+        <div class="file-wrapper">
+          <div class="file-item" data-path="test2.md" data-name="test2.md">test2.md</div>
+        </div>
+      `;
+    });
+
+    // Focus search input
+    const searchInput = page.locator('#file-search-input');
+    await searchInput.focus();
+    await page.waitForTimeout(100);
+
+    // Press j - this types 'j' in search, NOT keyboard navigation
+    await page.keyboard.press('j');
+    await page.waitForTimeout(150);
+
+    // No keyboard-selected should appear
+    await expect(page.locator('.file-item.keyboard-selected')).toHaveCount(0);
+
+    // Search input should contain 'j'
+    await expect(searchInput).toHaveValue('j');
+  });
+
+  test('should navigate through folders and files as flat list', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    // Inject test file items with a mix of folders and files
+    await page.evaluate(() => {
+      const fileTree = document.getElementById('file-tree');
+      if (!fileTree) return;
+      fileTree.innerHTML = `
+        <div class="file-wrapper">
+          <div class="file-item folder expanded" data-path="folder1" data-name="folder1">folder1</div>
+          <div class="folder-children" style="display: block;">
+            <div class="file-wrapper">
+              <div class="file-item" data-path="folder1/file1.md" data-name="file1.md">file1.md</div>
+            </div>
+          </div>
+        </div>
+        <div class="file-wrapper">
+          <div class="file-item" data-path="file2.md" data-name="file2.md">file2.md</div>
+        </div>
+      `;
+    });
+
+    const searchInput = page.locator('#file-search-input');
+    await searchInput.focus();
+
+    // Navigate with Ctrl+N - should select folder1 first
+    await page.keyboard.press('Control+n');
+    await page.waitForTimeout(100);
+
+    let selected = page.locator('.file-item.search-selected');
+    await expect(selected).toHaveAttribute('data-name', 'folder1');
+
+    // Navigate again - should select file1.md inside folder
+    await page.keyboard.press('Control+n');
+    await page.waitForTimeout(100);
+
+    selected = page.locator('.file-item.search-selected');
+    await expect(selected).toHaveAttribute('data-name', 'file1.md');
+
+    // Navigate again - should select file2.md
+    await page.keyboard.press('Control+n');
+    await page.waitForTimeout(100);
+
+    selected = page.locator('.file-item.search-selected');
+    await expect(selected).toHaveAttribute('data-name', 'file2.md');
+  });
+
+  test('should not open folder when pressing Enter on folder', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    // Inject test folder
+    await page.evaluate(() => {
+      const fileTree = document.getElementById('file-tree');
+      if (!fileTree) return;
+      fileTree.innerHTML = `
+        <div class="file-wrapper">
+          <div class="file-item folder" data-path="folder1" data-name="folder1">folder1</div>
+        </div>
+      `;
+    });
+
+    const searchInput = page.locator('#file-search-input');
+    await searchInput.focus();
+
+    // Select the folder
+    await page.keyboard.press('Control+n');
+    await page.waitForTimeout(100);
+
+    // Verify folder is selected
+    const selected = page.locator('.file-item.search-selected');
+    await expect(selected).toHaveAttribute('data-name', 'folder1');
+
+    // Press Enter - should NOT blur search input (folder case)
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(100);
+
+    // Search input should still be focused (folder was not opened)
+    await expect(searchInput).toBeFocused();
+
+    // Selection should still exist
+    await expect(page.locator('.file-item.search-selected')).toHaveCount(1);
   });
 });

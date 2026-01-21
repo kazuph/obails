@@ -189,6 +189,25 @@ gh release create v0.1.0 bin/obails-macos.zip \
 - Workaround: Right-click → Open (or `xattr -cr obails.app`)
 - Future: Consider Apple Developer Program ($99/year) for notarization
 
+## Keyboard Shortcuts Maintenance
+
+**ショートカットを追加・変更した場合は、以下の2箇所を必ず更新すること：**
+
+1. **実装**: `frontend/src/main.ts` の `setupEventListeners()` 内
+2. **ヘルプUI**: `frontend/index.html` の `#shortcuts-overlay` 内
+
+ショートカットヘルプは `?` キーで表示される。新しいショートカットを追加したら、ユーザーが発見できるようにヘルプにも追記すること。
+
+```html
+<!-- frontend/index.html の shortcuts-overlay 内に追加 -->
+<div class="shortcut-row">
+    <span class="shortcut-keys"><kbd class="mod-key">⌘</kbd> + <kbd>X</kbd></span>
+    <span class="shortcut-desc">機能の説明</span>
+</div>
+```
+
+**注意**: `mod-key` クラスはプラットフォームに応じて `⌘` (macOS) または `Ctrl` (その他) に自動変換される。
+
 ## Known Issues
 - Port conflicts: Kill vite/obails processes before restarting
 - Binding error for missing files: Non-fatal, app continues to work
