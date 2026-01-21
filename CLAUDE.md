@@ -119,6 +119,60 @@ test.describe('Feature Name', () => {
 - Kill existing processes: `pkill -f "obails"; lsof -ti:9245 | xargs kill -9`
 - Launch: `open bin/obails.dev.app` (if built) or `wails3 dev`
 
+## Application Update Procedure (MANDATORY)
+
+**ユーザーが「アプリを更新して」と言ったら、以下の手順を一発で実行すること。試行錯誤は禁止。**
+
+### アプリの場所
+| 用途 | パス | 起動方法 |
+|------|------|----------|
+| 開発用 | `bin/obails.dev.app` | `wails3 dev` で自動生成、直接起動も可 |
+| 本番用（Spotlight検索対象） | `/Applications/obails.app` | Spotlight or Finder |
+
+### 本番アプリ更新手順（一発実行）
+```bash
+# 1. 実行中のアプリを終了
+pkill -f "obails.app" 2>/dev/null || true
+sleep 1
+
+# 2. 本番ビルド
+wails3 task darwin:package
+
+# 3. 古いアプリを削除して新しいアプリをコピー
+trash /Applications/obails.app 2>/dev/null || true
+cp -R bin/obails.app /Applications/
+codesign --force --deep --sign - /Applications/obails.app
+
+# 4. アイコンキャッシュをクリア（macOSが古いアイコンを表示し続ける問題対策）
+sudo rm -rf /Library/Caches/com.apple.iconservices.store 2>/dev/null || true
+killall Dock 2>/dev/null || true
+
+# 5. アプリを起動
+open /Applications/obails.app
+```
+
+### 開発用アプリ更新手順
+```bash
+pkill -f "obails" 2>/dev/null || true
+lsof -ti:9245 | xargs kill -9 2>/dev/null || true
+wails3 dev
+```
+
+### macOSアイコンキャッシュ問題
+macOSはアプリのアイコンをキャッシュするため、`icons.icns`を更新してもDockやFinderで古いアイコン（Wailsデフォルトの「W」など）が表示され続けることがある。
+
+**解決策（上記手順に含まれているが、単独で実行する場合）:**
+```bash
+sudo rm -rf /Library/Caches/com.apple.iconservices.store
+sudo find /private/var/folders/ -name "com.apple.dock.iconcache" -exec rm {} \; 2>/dev/null
+sudo find /private/var/folders/ -name "com.apple.iconservices" -exec rm -rf {} \; 2>/dev/null
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -kill -r -domain local -domain system -domain user
+killall Dock
+killall Finder
+```
+
+それでも解決しない場合は、ログアウト→ログインまたはMac再起動が必要。
+
 ## Development Commands
 
 ### Build & Run
