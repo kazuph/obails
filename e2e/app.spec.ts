@@ -1158,3 +1158,55 @@ test.describe('File Search Navigation', () => {
     await expect(page.locator('.file-item.search-selected')).toHaveCount(1);
   });
 });
+
+test.describe('Title Editing', () => {
+  test('should not allow editing when no file is open', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    // Title should show default text when no file is open
+    const editorTitle = page.locator('#editor-title');
+    await expect(editorTitle).toHaveText('Select a note...');
+
+    // Click on title - should not enter edit mode
+    await editorTitle.click();
+    await page.waitForTimeout(200);
+
+    // No input should appear since no file is open
+    const titleInput = page.locator('.title-edit-input');
+    await expect(titleInput).toHaveCount(0);
+  });
+
+  test('should have clickable title with cursor pointer style', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    // Title should exist
+    const editorTitle = page.locator('#editor-title');
+    await expect(editorTitle).toBeVisible();
+
+    // Check cursor style is pointer (clickable)
+    const cursor = await editorTitle.evaluate(el => getComputedStyle(el).cursor);
+    expect(cursor).toBe('pointer');
+  });
+});
+
+test.describe('Refresh Button', () => {
+  test('should have refresh button visible and clickable', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    // Verify refresh button exists and is visible
+    const refreshBtn = page.locator('#refresh-btn');
+    await expect(refreshBtn).toBeVisible();
+    await expect(refreshBtn).toHaveAttribute('title', 'Refresh');
+
+    // Clicking should not cause errors (basic functionality test)
+    await refreshBtn.click();
+    await page.waitForTimeout(300);
+
+    // App should still be functional after refresh
+    await expect(page.locator('.sidebar')).toBeVisible();
+    await expect(page.locator('.editor-container')).toBeVisible();
+  });
+});

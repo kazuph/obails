@@ -250,6 +250,9 @@ function setupEventListeners() {
     document.getElementById("image-fullscreen")!.addEventListener("click", openImageFullscreen);
     document.getElementById("image-fs-close")!.addEventListener("click", closeImageFullscreen);
 
+    // Title editing (click to rename file)
+    document.getElementById("editor-title")!.addEventListener("click", startTitleEdit);
+
     // Handle external links in preview - open in external browser
     preview.addEventListener("click", async (e) => {
         const target = e.target as HTMLElement;
@@ -963,17 +966,42 @@ function setupContextMenu() {
         hideContextMenu();
         await deleteTargetPathWithArgs(targetPath, isDir);
     });
+
+    // Handle "Rename" click
+    const ctxRename = document.getElementById("ctx-rename")!;
+    ctxRename.addEventListener("click", async () => {
+        const targetPath = contextMenuTargetPath;
+        const isDir = contextMenuTargetIsDir;
+        hideContextMenu();
+
+        // Only rename files, not directories (for now)
+        if (isDir) return;
+
+        // Open the file first if not already open
+        if (currentFilePath !== targetPath) {
+            await openNote(targetPath);
+        }
+
+        // Start title editing mode
+        setTimeout(() => {
+            startTitleEdit();
+        }, 100);
+    });
 }
 
 function showContextMenu(x: number, y: number, path: string, isDir: boolean) {
     const contextMenu = document.getElementById("context-menu")!;
     const ctxNewFile = document.getElementById("ctx-new-file")!;
+    const ctxRename = document.getElementById("ctx-rename")!;
 
     contextMenuTargetPath = path;
     contextMenuTargetIsDir = isDir;
 
     // Show/hide "New File" based on whether it's a directory
     ctxNewFile.style.display = isDir ? "flex" : "none";
+
+    // Show/hide "Rename" based on whether it's a file (not directory)
+    ctxRename.style.display = isDir ? "none" : "flex";
 
     contextMenu.style.display = "block";
     contextMenu.style.left = x + "px";
@@ -1770,6 +1798,168 @@ function updatePaneTitles(title: string) {
     const previewTitle = document.getElementById("preview-title");
     if (editorTitle) editorTitle.textContent = title;
     if (previewTitle) previewTitle.textContent = title;
+}
+
+// Title editing state
+let isTitleEditing = false;
+
+// Start title editing mode
+function startTitleEdit() {
+    // Only allow editing if a file is open
+    if (!currentFilePath) return;
+
+    // Prevent multiple edit modes
+    if (isTitleEditing) return;
+    isTitleEditing = true;
+
+    const editorTitle = document.getElementById("editor-title")!;
+    const currentTitle = editorTitle.textContent || "";
+
+    // Create input element
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "title-edit-input";
+    input.value = currentTitle;
+
+    // Get file extension from currentFilePath
+    const ext = currentFilePath.substring(currentFilePath.lastIndexOf(".")) || "";
+
+    // Replace title span with input
+    editorTitle.textContent = "";
+    editorTitle.appendChild(input);
+
+    // Add extension hint
+    const extHint = document.createElement("span");
+    extHint.className = "title-edit-ext";
+    extHint.textContent = ext;
+    editorTitle.appendChild(extHint);
+
+    // Add Save button
+    const saveBtn = document.createElement("button");
+    saveBtn.className = "title-edit-save";
+    saveBtn.textContent = "Save";
+    saveBtn.type = "button";
+    editorTitle.appendChild(saveBtn);
+
+    // Focus and select
+    input.focus();
+    input.select();
+
+    // Track IME composition state (for Japanese/Chinese/Korean input)
+    let isComposing = false;
+    input.addEventListener("compositionstart", () => {
+        isComposing = true;
+    });
+    input.addEventListener("compositionend", () => {
+        isComposing = false;
+    });
+
+    // Handle keydown (⌘+Enter or Ctrl+Enter to save, Escape to cancel)
+    input.addEventListener("keydown", async (e) => {
+        if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !isComposing) {
+            e.preventDefault();
+            await finishTitleEdit(input.value.trim(), ext);
+        } else if (e.key === "Escape") {
+            e.preventDefault();
+            cancelTitleEdit(currentTitle);
+        }
+    });
+
+    // Handle Save button click
+    saveBtn.addEventListener("click", async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        await finishTitleEdit(input.value.trim(), ext);
+    });
+
+    // Handle blur (click outside) - but not when clicking Save button
+    input.addEventListener("blur", (e) => {
+        // Check if the related target is the save button
+        const relatedTarget = e.relatedTarget as HTMLElement;
+        if (relatedTarget === saveBtn) {
+            return; // Don't cancel if clicking Save button
+        }
+        // Small delay to allow button click to process first
+        setTimeout(() => {
+            if (isTitleEditing) {
+                cancelTitleEdit(currentTitle);
+            }
+        }, 150);
+    });
+}
+
+// Finish title editing and rename file
+async function finishTitleEdit(newName: string, ext: string) {
+    if (!currentFilePath || !newName) {
+        cancelTitleEdit(document.getElementById("editor-title")?.textContent || "");
+        return;
+    }
+
+    // Validate new name
+    if (newName.includes("/") || newName.includes("\\")) {
+        alert("ファイル名に / や \\ は使えません");
+        cancelTitleEdit(document.getElementById("editor-title")?.textContent || "");
+        return;
+    }
+
+    // Build new path
+    const dir = currentFilePath.substring(0, currentFilePath.lastIndexOf("/"));
+    const newFileName = newName + ext;
+    const newPath = dir ? `${dir}/${newFileName}` : newFileName;
+
+    // If same path, just cancel
+    if (newPath === currentFilePath) {
+        const currentTitle = currentFilePath.split("/").pop()?.replace(/\.[^/.]+$/, "") || "";
+        cancelTitleEdit(currentTitle);
+        return;
+    }
+
+    try {
+        // Move (rename) the file
+        await FileService.MoveFile(currentFilePath, newPath);
+
+        // Update state
+        const oldPath = currentFilePath;
+        currentFilePath = newPath;
+
+        // Update currentNote if it's a markdown file
+        if (currentNote && currentNote.path === oldPath) {
+            currentNote.path = newPath;
+        }
+
+        // Update title display
+        isTitleEditing = false;
+        updatePaneTitles(newName);
+
+        // Refresh file tree
+        await loadFileTree();
+
+        // Update selection in file tree
+        updateFileTreeSelection(newPath);
+
+        // Rebuild link index to update any references
+        await LinkService.RebuildIndex();
+
+        console.log(`Renamed file: ${oldPath} -> ${newPath}`);
+    } catch (err) {
+        console.error("Failed to rename file:", err);
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        if (errorMsg.includes("exist")) {
+            alert("同じ名前のファイルがすでに存在します");
+        } else {
+            alert(`ファイル名の変更に失敗しました: ${errorMsg}`);
+        }
+        // Restore original title
+        const currentTitle = currentFilePath.split("/").pop()?.replace(/\.[^/.]+$/, "") || "";
+        cancelTitleEdit(currentTitle);
+    }
+}
+
+// Cancel title editing
+function cancelTitleEdit(originalTitle: string) {
+    isTitleEditing = false;
+    const editorTitle = document.getElementById("editor-title")!;
+    editorTitle.textContent = originalTitle;
 }
 
 async function saveCurrentNote() {
