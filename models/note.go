@@ -17,6 +17,7 @@ type Timeline struct {
 	Content string `json:"content"` // The memo content
 	IsTodo  bool   `json:"isTodo"`  // true if [ ] or [x]
 	Done    bool   `json:"done"`    // true if [x]
+	Date    string `json:"date"`    // "Today", "Yesterday", or "MM/DD"
 }
 
 // FileType constants

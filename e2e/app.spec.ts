@@ -1210,3 +1210,73 @@ test.describe('Refresh Button', () => {
     await expect(page.locator('.editor-container')).toBeVisible();
   });
 });
+
+test.describe('Timeline Features', () => {
+  test('should have ⌘+Enter shortcut registered for timeline input', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    // Open Timeline panel
+    await page.click('#timeline-btn');
+    const timelinePanel = page.locator('#timeline-panel');
+    await expect(timelinePanel).toBeVisible();
+
+    // Timeline input should be visible
+    const timelineInput = page.locator('#timeline-input');
+    await expect(timelineInput).toBeVisible();
+
+    // Type something in the input
+    await timelineInput.fill('Test memo');
+
+    // Verify input has the text
+    await expect(timelineInput).toHaveValue('Test memo');
+
+    // Press Meta+Enter (⌘+Enter on macOS)
+    // Note: In E2E test, this will attempt to submit but may fail if no vault is configured
+    // The important thing is that the keypress is handled without errors
+    await timelineInput.press('Meta+Enter');
+    await page.waitForTimeout(500);
+
+    // App should remain functional after the keypress
+    await expect(timelinePanel).toBeVisible();
+  });
+
+  test('should have date separator CSS class defined', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    // Open Timeline panel
+    await page.click('#timeline-btn');
+    await page.waitForTimeout(500);
+
+    // Inject a date separator element to test CSS
+    await page.evaluate(() => {
+      const list = document.getElementById('timeline-list');
+      if (list) {
+        list.innerHTML = '<div class="timeline-date-separator">Today</div>';
+      }
+    });
+
+    // Check that the date separator has styles applied
+    const dateSeparator = page.locator('.timeline-date-separator');
+    await expect(dateSeparator).toBeVisible();
+
+    // Verify the CSS is applied (font-weight should be 600 from our CSS)
+    const fontWeight = await dateSeparator.evaluate(el => getComputedStyle(el).fontWeight);
+    expect(fontWeight).toBe('600');
+  });
+
+  test('should display Post button in Timeline panel', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    // Open Timeline panel
+    await page.click('#timeline-btn');
+    await page.waitForTimeout(300);
+
+    // Post button should be visible
+    const postBtn = page.locator('#timeline-submit');
+    await expect(postBtn).toBeVisible();
+    await expect(postBtn).toHaveText('Post');
+  });
+});

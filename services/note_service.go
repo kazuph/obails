@@ -139,6 +139,40 @@ func (s *NoteService) GetTodayTimelines() ([]models.Timeline, error) {
 	return s.GetTimelines(today)
 }
 
+// GetRecentTimelines gets Timeline entries from the last N days
+func (s *NoteService) GetRecentTimelines(days int) ([]models.Timeline, error) {
+	var allTimelines []models.Timeline
+
+	for i := 0; i < days; i++ {
+		date := time.Now().AddDate(0, 0, -i)
+		dateStr := date.Format("2006-01-02")
+
+		timelines, err := s.GetTimelines(dateStr)
+		if err != nil {
+			// Skip if daily note doesn't exist for that day
+			continue
+		}
+
+		// Add date prefix to each timeline for display
+		for j := range timelines {
+			if i == 0 {
+				// Today - just show time
+				timelines[j].Date = "Today"
+			} else if i == 1 {
+				// Yesterday
+				timelines[j].Date = "Yesterday"
+			} else {
+				// Other days - show date
+				timelines[j].Date = date.Format("01/02")
+			}
+		}
+
+		allTimelines = append(allTimelines, timelines...)
+	}
+
+	return allTimelines, nil
+}
+
 // Helper functions
 
 func (s *NoteService) extractTitle(content string, path string) string {

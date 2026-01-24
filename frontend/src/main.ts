@@ -67,7 +67,7 @@ const preview = document.getElementById("preview")!;
 const timelinePanel = document.getElementById("timeline-panel")!;
 const editorContainer = document.querySelector(".editor-container") as HTMLElement;
 const timelineInput = document.getElementById("timeline-input") as HTMLTextAreaElement;
-const timelineTimeline = document.getElementById("timeline-timeline")!;
+const timelineTimeline = document.getElementById("timeline-list")!;
 const backlinksList = document.getElementById("backlinks-list")!;
 const outgoingLinksList = document.getElementById("outgoing-links-list")!;
 const outlineList = document.getElementById("outline-list")!;
@@ -204,6 +204,14 @@ function setupEventListeners() {
     document.getElementById("graph-btn")!.addEventListener("click", toggleGraphView);
     document.getElementById("refresh-btn")!.addEventListener("click", refresh);
     document.getElementById("timeline-submit")!.addEventListener("click", submitTimeline);
+
+    // Timeline input: ⌘+Enter to submit
+    timelineInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+            e.preventDefault();
+            submitTimeline();
+        }
+    });
 
     // Vault setup dialog
     document.getElementById("vault-setup-btn")!.addEventListener("click", handleVaultFolderSelection);
@@ -2072,18 +2080,30 @@ function toggleTimeline() {
 
 async function loadTimelines() {
     try {
-        const timelines = await NoteService.GetTodayTimelines();
+        // Get timelines from the last 7 days
+        const timelines = await NoteService.GetRecentTimelines(7);
         renderTimelines(timelines);
     } catch (err) {
         console.error("Failed to load timelines:", err);
-        timelineTimeline.innerHTML = '<div class="error">No timelines for today</div>';
+        timelineTimeline.innerHTML = '<div class="error">No memos yet</div>';
     }
 }
 
 function renderTimelines(timelines: Timeline[]) {
     timelineTimeline.innerHTML = "";
 
-    for (const timeline of [...timelines].reverse()) {
+    let currentDate = "";
+
+    for (const timeline of timelines) {
+        // Add date separator if date changed
+        if (timeline.date && timeline.date !== currentDate) {
+            currentDate = timeline.date;
+            const dateSeparator = document.createElement("div");
+            dateSeparator.className = "timeline-date-separator";
+            dateSeparator.textContent = currentDate;
+            timelineTimeline.appendChild(dateSeparator);
+        }
+
         const el = document.createElement("div");
         el.className = "timeline-item";
         el.innerHTML = `
