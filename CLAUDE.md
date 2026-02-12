@@ -268,6 +268,35 @@ gh release create v0.1.0 bin/obails-macos.zip \
 
 **注意**: `mod-key` クラスはプラットフォームに応じて `⌘` (macOS) または `Ctrl` (その他) に自動変換される。
 
+## Claude Code Plugin Update Procedure (MANDATORY)
+
+**プラグイン関連ファイルを変更してpushする場合は、必ずバージョンを上げること。**
+
+### バージョン更新が必要なファイル
+- `.claude-plugin/plugin.json` の `version`
+- `.claude-plugin/marketplace.json` の plugins[0].`version`
+
+### 更新手順
+```bash
+# 1. plugin.json と marketplace.json のバージョンを上げる（patch bump）
+# 2. コミット＆プッシュ
+git add .claude-plugin/ skills/ hooks/
+git commit -m "Bump plugin version to X.Y.Z"
+git push origin main
+
+# 3. マーケットプレイスを更新
+claude plugin marketplace update obails
+
+# 4. プラグインを再インストール
+claude plugin install ob@obails
+```
+
+### 対象となる変更
+- `skills/ob/SKILL.md` の変更
+- `hooks/hooks.json` の変更
+- `.claude-plugin/plugin.json` のメタデータ変更
+- コマンドのヘルプテキスト変更など、プラグイン体験に影響する変更
+
 ## Known Issues
 - Port conflicts: Kill vite/obails processes before restarting
 - Binding error for missing files: Non-fatal, app continues to work
