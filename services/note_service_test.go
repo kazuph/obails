@@ -221,6 +221,68 @@ func TestNoteService_Timeline(t *testing.T) {
 	})
 }
 
+func TestNoteService_AddTimelineWithOptions(t *testing.T) {
+	ns, fs, tmpDir := newTestNoteService(t)
+	defer os.RemoveAll(tmpDir)
+
+	fs.CreateDirectory("dailynotes")
+
+	t.Run("add todo timeline entry", func(t *testing.T) {
+		err := ns.AddTimelineWithOptions("Buy groceries", true)
+		if err != nil {
+			t.Fatalf("AddTimelineWithOptions failed: %v", err)
+		}
+
+		timelines, err := ns.GetTodayTimelines()
+		if err != nil {
+			t.Fatalf("GetTodayTimelines failed: %v", err)
+		}
+
+		found := false
+		for _, tl := range timelines {
+			if tl.Content == "Buy groceries" {
+				found = true
+				if !tl.IsTodo {
+					t.Error("Expected timeline entry to be a todo")
+				}
+				if tl.Done {
+					t.Error("Expected timeline entry to not be done")
+				}
+				break
+			}
+		}
+		if !found {
+			t.Error("Todo timeline entry not found")
+		}
+	})
+
+	t.Run("add regular timeline entry via AddTimelineWithOptions", func(t *testing.T) {
+		err := ns.AddTimelineWithOptions("Regular note", false)
+		if err != nil {
+			t.Fatalf("AddTimelineWithOptions failed: %v", err)
+		}
+
+		timelines, err := ns.GetTodayTimelines()
+		if err != nil {
+			t.Fatalf("GetTodayTimelines failed: %v", err)
+		}
+
+		found := false
+		for _, tl := range timelines {
+			if tl.Content == "Regular note" {
+				found = true
+				if tl.IsTodo {
+					t.Error("Expected timeline entry to not be a todo")
+				}
+				break
+			}
+		}
+		if !found {
+			t.Error("Regular timeline entry not found")
+		}
+	})
+}
+
 func TestNoteService_ParseTimelines(t *testing.T) {
 	ns, _, tmpDir := newTestNoteService(t)
 	defer os.RemoveAll(tmpDir)

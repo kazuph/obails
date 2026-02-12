@@ -107,6 +107,13 @@ func (s *NoteService) GetTodayDailyNote() (*models.Note, error) {
 
 // AddTimeline adds a memo to the current daily note's Memos section
 func (s *NoteService) AddTimeline(content string) error {
+	return s.AddTimelineWithOptions(content, false)
+}
+
+// AddTimelineWithOptions adds a timeline entry with optional todo checkbox.
+// If isTodo is true, the entry will be formatted as "- [ ] HH:MM content".
+// Otherwise, it will be formatted as "- HH:MM content".
+func (s *NoteService) AddTimelineWithOptions(content string, isTodo bool) error {
 	note, err := s.GetTodayDailyNote()
 	if err != nil {
 		return err
@@ -114,7 +121,12 @@ func (s *NoteService) AddTimeline(content string) error {
 
 	// Format the timeline entry
 	timeStr := time.Now().Format(s.configService.GetTimelineTimeFormat())
-	timelineEntry := fmt.Sprintf("- %s %s", timeStr, content)
+	var timelineEntry string
+	if isTodo {
+		timelineEntry = fmt.Sprintf("- [ ] %s %s", timeStr, content)
+	} else {
+		timelineEntry = fmt.Sprintf("- %s %s", timeStr, content)
+	}
 
 	// Find the Memos section and insert the new entry
 	section := s.configService.GetTimelineSection()

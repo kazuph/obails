@@ -280,6 +280,70 @@ func (s *FileService) SearchFiles(pattern string) ([]models.FileInfo, error) {
 	return results, err
 }
 
+// SearchFileContents searches for a query string within the content of all markdown files in the vault.
+// It returns matching lines with their file path, line number, and context.
+func (s *FileService) SearchFileContents(query string, limit int, caseSensitive bool) ([]models.SearchResult, error) {
+	vaultPath := s.configService.GetVaultPath()
+	var results []models.SearchResult
+
+	filepath.Walk(vaultPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			if info != nil && info.IsDir() && strings.HasPrefix(info.Name(), ".") {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if strings.HasPrefix(info.Name(), ".") {
+			return nil
+		}
+		if !strings.HasSuffix(info.Name(), ".md") {
+			return nil
+		}
+
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return nil
+		}
+
+		text := string(content)
+		searchText := text
+		searchQuery := query
+		if !caseSensitive {
+			searchText = strings.ToLower(text)
+			searchQuery = strings.ToLower(query)
+		}
+
+		lines := strings.Split(text, "\n")
+		searchLines := strings.Split(searchText, "\n")
+
+		relPath, _ := filepath.Rel(vaultPath, path)
+		for i, line := range searchLines {
+			if strings.Contains(line, searchQuery) {
+				// Extract context (the matching line, trimmed)
+				context := strings.TrimSpace(lines[i])
+				if len(context) > 200 {
+					context = context[:200] + "..."
+				}
+
+				title := strings.TrimSuffix(info.Name(), ".md")
+				results = append(results, models.SearchResult{
+					Path:    relPath,
+					Title:   title,
+					Line:    i + 1,
+					Context: context,
+				})
+
+				if limit > 0 && len(results) >= limit {
+					return filepath.SkipAll
+				}
+			}
+		}
+		return nil
+	})
+
+	return results, nil
+}
+
 func (s *FileService) getFullPath(relativePath string) string {
 	vaultPath := s.configService.GetVaultPath()
 	if relativePath == "" {
