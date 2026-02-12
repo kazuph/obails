@@ -22,14 +22,15 @@ Subcommands:
   timeline  Add a timestamped entry to the timeline section
 
 Examples:
-  obails-cli daily
-  obails-cli daily read
-  obails-cli daily read --date 2025-01-15
-  obails-cli daily append content="New entry"
-  obails-cli daily append content="Notes item" section="## Notes"
-  obails-cli daily prepend content="Important"
-  obails-cli daily timeline content="Started working on CLI"
-  obails-cli daily timeline content="Review PR" --todo`,
+  ob daily
+  ob daily read
+  ob daily read --date 2025-01-15
+  ob daily append content="New entry"
+  ob daily append content="Notes item" section="## Notes"
+  ob daily prepend content="Important"
+  ob daily timeline content="Started working on CLI"
+  ob daily timeline content="Review PR" --todo`,
+	Args: cobra.NoArgs,
 	RunE: runDailyRead,
 }
 
