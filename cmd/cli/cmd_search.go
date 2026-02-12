@@ -17,9 +17,9 @@ var searchCmd = &cobra.Command{
 By default, searches file names. Use the 'matches' flag to search file contents.
 
 Examples:
-  obails-cli search query=meeting
-  obails-cli search query="project plan" matches
-  obails-cli search query=TODO matches limit=10 case`,
+  ob search query=meeting
+  ob search query="project plan" matches
+  ob search query=TODO matches limit=10 case`,
 	RunE: runSearch,
 }
 

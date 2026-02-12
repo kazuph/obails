@@ -41,8 +41,8 @@ var dailyReadCmd = &cobra.Command{
 Use --date to read a specific date's note.
 
 Examples:
-  obails-cli daily read
-  obails-cli daily read --date 2025-01-15`,
+  ob daily read
+  ob daily read --date 2025-01-15`,
 	RunE: runDailyRead,
 }
 
@@ -53,9 +53,9 @@ var dailyAppendCmd = &cobra.Command{
 Use section= to append to a specific section.
 
 Examples:
-  obails-cli daily append content="New entry"
-  obails-cli daily append content="Notes item" section="## Notes"
-  obails-cli daily append content="inline text" inline=true`,
+  ob daily append content="New entry"
+  ob daily append content="Notes item" section="## Notes"
+  ob daily append content="inline text" inline=true`,
 	RunE: runDailyAppend,
 }
 
@@ -66,7 +66,7 @@ var dailyPrependCmd = &cobra.Command{
 The note is created if it doesn't exist.
 
 Examples:
-  obails-cli daily prepend content="Important notice"`,
+  ob daily prepend content="Important notice"`,
 	RunE: runDailyPrepend,
 }
 
@@ -79,8 +79,8 @@ The note is created if it doesn't exist.
 Use --todo to add the entry as a checkbox item.
 
 Examples:
-  obails-cli daily timeline content="Started working"
-  obails-cli daily timeline content="Review PR" --todo`,
+  ob daily timeline content="Started working"
+  ob daily timeline content="Review PR" --todo`,
 	RunE: runDailyTimeline,
 }
 

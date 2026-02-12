@@ -16,9 +16,9 @@ var openCmd = &cobra.Command{
 Updates the vault state so the app opens the specified file on launch.
 
 Examples:
-  obails-cli open file="MyNote"
-  obails-cli open path="02_dailynotes/2026-01-15.md"
-  obails-cli open                    # Just launch the app`,
+  ob open file="MyNote"
+  ob open path="02_dailynotes/2026-01-15.md"
+  ob open                    # Just launch the app`,
 	Args: cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := initServices(); err != nil {

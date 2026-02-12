@@ -21,9 +21,9 @@ If the file doesn't exist, behaves like create (with optional template= support)
 then appends content if provided.
 
 Examples:
-  obails-cli upsert file=MyNote content="New entry"
-  obails-cli upsert file=MyNote template=meeting content="## Agenda"
-  obails-cli upsert file=MyNote content="Section item" section="## Notes"`,
+  ob upsert file=MyNote content="New entry"
+  ob upsert file=MyNote template=meeting content="## Agenda"
+  ob upsert file=MyNote content="Section item" section="## Notes"`,
 	RunE: runUpsert,
 }
 

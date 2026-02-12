@@ -9,10 +9,10 @@ import (
 )
 
 // parseKeyValueArgs parses key=value arguments and maps them to cobra flags.
-// This provides Obsidian CLI compatible syntax: obails-cli read file=MyNote
-// in addition to standard flag syntax: obails-cli read --file MyNote
+// This provides Obsidian CLI compatible syntax: ob read file=MyNote
+// in addition to standard flag syntax: ob read --file MyNote
 //
-// It also supports bare words as boolean flags: obails-cli search query=test matches
+// It also supports bare words as boolean flags: ob search query=test matches
 // A bare word (no "=") that matches a boolean flag name will set that flag to true.
 func parseKeyValueArgs(cmd *cobra.Command, args []string) error {
 	for _, arg := range args {

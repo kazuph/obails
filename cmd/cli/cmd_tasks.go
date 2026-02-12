@@ -19,11 +19,11 @@ By default, lists tasks from a specific file. Use 'all' for vault-wide,
 or 'daily' for today's daily note.
 
 Examples:
-  obails-cli tasks file=MyProject
-  obails-cli tasks daily
-  obails-cli tasks all todo
-  obails-cli tasks all done total
-  obails-cli tasks file=Todo.md verbose`,
+  ob tasks file=MyProject
+  ob tasks daily
+  ob tasks all todo
+  ob tasks all done total
+  ob tasks file=Todo.md verbose`,
 	RunE: runTasks,
 }
 
@@ -33,11 +33,11 @@ var taskCmd = &cobra.Command{
 	Long: `Toggle or set the status of a specific task by file and line number.
 
 Examples:
-  obails-cli task ref=Todo.md:5 toggle
-  obails-cli task ref=Todo.md:5 done
-  obails-cli task ref=Todo.md:5 todo
-  obails-cli task ref=Todo.md:5 status=/
-  obails-cli task file=Todo.md line=5 toggle`,
+  ob task ref=Todo.md:5 toggle
+  ob task ref=Todo.md:5 done
+  ob task ref=Todo.md:5 todo
+  ob task ref=Todo.md:5 status=/
+  ob task file=Todo.md line=5 toggle`,
 	RunE: runTask,
 }
 

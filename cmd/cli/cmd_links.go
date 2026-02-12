@@ -17,9 +17,9 @@ var backlinksCmd = &cobra.Command{
 Requires link index (automatically built).
 
 Examples:
-  obails-cli backlinks file=MyNote
-  obails-cli backlinks path=notes/MyNote.md counts
-  obails-cli backlinks file=MyNote total`,
+  ob backlinks file=MyNote
+  ob backlinks path=notes/MyNote.md counts
+  ob backlinks file=MyNote total`,
 	RunE: runBacklinks,
 }
 
@@ -29,8 +29,8 @@ var linksCmd = &cobra.Command{
 	Long: `Show all wiki-links found in a file, with resolution status.
 
 Examples:
-  obails-cli links file=MyNote
-  obails-cli links path=notes/MyNote.md total`,
+  ob links file=MyNote
+  ob links path=notes/MyNote.md total`,
 	RunE: runLinks,
 }
 
@@ -40,8 +40,8 @@ var orphansCmd = &cobra.Command{
 	Long: `Show files that are not linked to from any other file (orphan notes).
 
 Examples:
-  obails-cli orphans
-  obails-cli orphans total`,
+  ob orphans
+  ob orphans total`,
 	RunE: runOrphans,
 }
 
@@ -51,8 +51,8 @@ var deadendsCmd = &cobra.Command{
 	Long: `Show files that don't link to any other file (dead-end notes).
 
 Examples:
-  obails-cli deadends
-  obails-cli deadends total`,
+  ob deadends
+  ob deadends total`,
 	RunE: runDeadends,
 }
 
@@ -62,9 +62,9 @@ var unresolvedCmd = &cobra.Command{
 	Long: `Show wiki-links that point to non-existent files.
 
 Examples:
-  obails-cli unresolved
-  obails-cli unresolved total
-  obails-cli unresolved verbose`,
+  ob unresolved
+  ob unresolved total
+  ob unresolved verbose`,
 	RunE: runUnresolved,
 }
 

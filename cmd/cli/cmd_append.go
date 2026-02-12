@@ -18,10 +18,10 @@ With section= specified, appends at the end of that section (before the next
 heading of the same or higher level).
 
 Examples:
-  obails-cli append file=MyNote content="New paragraph"
-  obails-cli append path=folder/note.md content="Added text"
-  obails-cli append file=MyNote content="Section content" section="## Notes"
-  obails-cli append file=MyNote content="inline text" inline=true`,
+  ob append file=MyNote content="New paragraph"
+  ob append path=folder/note.md content="Added text"
+  ob append file=MyNote content="Section content" section="## Notes"
+  ob append file=MyNote content="inline text" inline=true`,
 	RunE: runAppend,
 }
 

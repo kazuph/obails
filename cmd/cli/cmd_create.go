@@ -17,11 +17,11 @@ var createCmd = &cobra.Command{
 	Long: `Create a new note in the vault.
 
 Examples:
-  obails-cli create name=MyNote
-  obails-cli create name=MyNote content="Hello world"
-  obails-cli create name=MyNote template=daily_note
-  obails-cli create name=MyNote folder=subfolder
-  obails-cli create name=MyNote overwrite=true`,
+  ob create name=MyNote
+  ob create name=MyNote content="Hello world"
+  ob create name=MyNote template=daily_note
+  ob create name=MyNote folder=subfolder
+  ob create name=MyNote overwrite=true`,
 	RunE: runCreate,
 }
 

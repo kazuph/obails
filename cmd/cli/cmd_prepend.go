@@ -17,9 +17,9 @@ var prependCmd = &cobra.Command{
 Otherwise it is inserted at the very beginning.
 
 Examples:
-  obails-cli prepend file=MyNote content="Important notice"
-  obails-cli prepend path=folder/note.md content="Top of file"
-  obails-cli prepend file=MyNote content="inline" inline=true`,
+  ob prepend file=MyNote content="Important notice"
+  ob prepend path=folder/note.md content="Top of file"
+  ob prepend file=MyNote content="inline" inline=true`,
 	RunE: runPrepend,
 }
 
