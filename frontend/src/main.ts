@@ -1155,7 +1155,11 @@ async function openFile(path: string, fileType: string): Promise<void> {
 
     // Save last opened file to vault state (for all supported types)
     if (fileType === "markdown" || fileType === "image" || fileType === "pdf" || fileType === "html") {
-        await StateService.SetLastOpenedFile(path, fileType);
+        try {
+            await StateService.SetLastOpenedFile(path, fileType);
+        } catch (err) {
+            console.warn("Failed to persist last opened file:", err);
+        }
     }
 
     // Clear outline for non-markdown files (outline is only relevant for markdown)
@@ -1768,6 +1772,10 @@ function createFileElement(file: FileInfo): HTMLElement {
 
 // Note Operations
 async function openNote(path: string) {
+    showTimeline = false;
+    hideAllViewers();
+    editorContainer.style.display = "flex";
+
     try {
         currentNote = await NoteService.GetNote(path);
         if (currentNote) {
@@ -1781,17 +1789,16 @@ async function openNote(path: string) {
             await loadOutgoingLinks(path);
 
             // Save to vault state (also saves when called directly from backlinks/outgoing links/graph)
-            await StateService.SetLastOpenedFile(path, "markdown");
+            try {
+                await StateService.SetLastOpenedFile(path, "markdown");
+            } catch (err) {
+                console.warn("Failed to persist last opened file:", err);
+            }
 
             // Update pane titles (remove .md extension)
             const filename = path.split("/").pop()?.replace(/\.md$/i, "") || path;
             updatePaneTitles(filename);
         }
-
-        // Hide all viewers, show markdown editor
-        showTimeline = false;
-        hideAllViewers();
-        editorContainer.style.display = "flex";
 
         // Update file tree selection
         updateFileTreeSelection(path);
@@ -1982,6 +1989,10 @@ async function saveCurrentNote() {
 }
 
 async function openTodayNote() {
+    showTimeline = false;
+    hideAllViewers();
+    editorContainer.style.display = "flex";
+
     try {
         const note = await NoteService.GetTodayDailyNote();
         if (note) {
@@ -2002,10 +2013,6 @@ async function openTodayNote() {
             // Update file tree selection
             updateFileTreeSelection(note.path);
         }
-
-        showTimeline = false;
-        hideAllViewers();
-        editorContainer.style.display = "flex";
     } catch (err) {
         console.error("Failed to open today's note:", err);
     }
