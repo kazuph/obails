@@ -11,7 +11,7 @@
       "name": "ob",
       "source": "./",
       "description": "CLI for Obsidian-compatible vaults. Read, write, search, and manage notes from the command line. Designed for AI Agent integration with JSON output.",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "author": {
         "name": "kazuph"
       },
