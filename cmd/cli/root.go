@@ -18,7 +18,7 @@ var (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "obails-cli",
+	Use:   "ob",
 	Short: "Obails CLI - A command-line interface for your Obsidian-compatible vault",
 	Long: `Obails CLI provides command-line access to your vault.
 It supports both standard flags (--file MyNote) and Obsidian-compatible
@@ -46,5 +46,5 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&outputFormat, "format", "json", "Output format: json or text")
 	rootCmd.PersistentFlags().StringVar(&vaultPath, "vault", "", "Path to the vault (overrides config)")
 
-	rootCmd.SetVersionTemplate(fmt.Sprintf("obails-cli version %s\n", version))
+	rootCmd.SetVersionTemplate(fmt.Sprintf("ob version %s\n", version))
 }

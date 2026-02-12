@@ -37,14 +37,14 @@ tasks:
   cli:build:
     summary: Builds the CLI binary
     cmds:
-      - go build -tags cli -o {{.BIN_DIR}}/obails-cli ./cmd/cli
+      - go build -tags cli -o {{.BIN_DIR}}/ob ./cmd/cli
 
   cli:install:
     summary: Installs CLI to /usr/local/bin
     deps: [cli:build]
     cmds:
-      - cp {{.BIN_DIR}}/obails-cli /usr/local/bin/obails-cli
-      - echo "Installed obails-cli to /usr/local/bin/obails-cli"
+      - cp {{.BIN_DIR}}/ob /usr/local/bin/ob
+      - echo "Installed ob to /usr/local/bin/ob"
 
   cli:test:
     summary: Runs CLI and service tests

@@ -187,7 +187,7 @@ open bin/obails.dev.app
 wails3 build
 
 # CLI build
-wails3 task cli:build    # builds bin/obails-cli
+wails3 task cli:build    # builds bin/ob
 wails3 task cli:install  # installs to /usr/local/bin
 ```
 
