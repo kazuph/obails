@@ -96,6 +96,7 @@ func runUpsert(cmd *cobra.Command, args []string) error {
 				return nil
 			}
 		} else {
+			updateLastOpenedFile(resolvedPath)
 			created = true
 		}
 	}
@@ -124,6 +125,7 @@ func runUpsert(cmd *cobra.Command, args []string) error {
 			return nil
 		}
 
+		updateLastOpenedFile(resolvedPath)
 		appended = true
 	}
 

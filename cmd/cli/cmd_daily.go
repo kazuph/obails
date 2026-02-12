@@ -209,6 +209,8 @@ func runDailyAppend(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
+	updateLastOpenedFile(note.Path)
+
 	if !silent {
 		result := map[string]any{
 			"path":     note.Path,
@@ -256,6 +258,8 @@ func runDailyPrepend(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
+	updateLastOpenedFile(note.Path)
+
 	if !silent {
 		result := map[string]any{
 			"path":      note.Path,
@@ -289,6 +293,11 @@ func runDailyTimeline(cmd *cobra.Command, args []string) error {
 	if err := noteService.AddTimelineWithOptions(content, isTodo); err != nil {
 		outputError(fmt.Errorf("failed to add timeline entry: %w", err))
 		return nil
+	}
+
+	// Update state so app opens today's daily note
+	if todayNote, err := noteService.GetTodayDailyNote(); err == nil {
+		updateLastOpenedFile(todayNote.Path)
 	}
 
 	if !silent {

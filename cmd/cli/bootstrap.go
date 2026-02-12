@@ -15,6 +15,7 @@ var (
 	linkService   *services.LinkService
 	graphService  *services.GraphService
 	taskService   *services.TaskService
+	stateService  *services.StateService
 )
 
 // initServices initializes the core services needed for most commands.
@@ -44,7 +45,20 @@ func initServices() error {
 	graphService = services.NewGraphService(linkService, fileService, configService)
 	taskService = services.NewTaskService(fileService, noteService, configService)
 
+	stateService = services.NewStateService(configService)
+	if err := stateService.Load(); err != nil {
+		// Non-fatal: state is optional
+		stateService = services.NewStateService(configService)
+	}
+
 	return nil
+}
+
+// updateLastOpenedFile updates the vault state so the app opens this file on next launch.
+func updateLastOpenedFile(relativePath string) {
+	if stateService != nil {
+		_ = stateService.SetLastOpenedFile(relativePath, "markdown")
+	}
 }
 
 // initServicesWithIndex initializes all services and rebuilds the link index.

@@ -78,6 +78,8 @@ func runPrepend(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
+	updateLastOpenedFile(relativePath)
+
 	if !silent {
 		result := map[string]any{
 			"path":      relativePath,
