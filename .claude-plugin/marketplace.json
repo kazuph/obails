@@ -1,0 +1,25 @@
+{
+  "name": "obails",
+  "owner": {
+    "name": "kazuph"
+  },
+  "metadata": {
+    "description": "Obsidian-compatible vault CLI tools for AI Agent integration"
+  },
+  "plugins": [
+    {
+      "name": "ob",
+      "source": "./",
+      "description": "CLI for Obsidian-compatible vaults. Read, write, search, and manage notes from the command line. Designed for AI Agent integration with JSON output.",
+      "version": "0.1.0",
+      "author": {
+        "name": "kazuph"
+      },
+      "homepage": "https://github.com/kazuph/obails",
+      "repository": "https://github.com/kazuph/obails",
+      "license": "MIT",
+      "keywords": ["obsidian", "notes", "vault", "cli", "markdown", "daily-notes", "wiki-links"],
+      "category": "productivity"
+    }
+  ]
+}
