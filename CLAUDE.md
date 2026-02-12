@@ -185,12 +185,18 @@ open bin/obails.dev.app
 
 # Production build
 wails3 build
+
+# CLI build
+wails3 task cli:build    # builds bin/obails-cli
+wails3 task cli:install  # installs to /usr/local/bin
 ```
 
 ### Testing
 ```bash
-# 1. バックエンド結合テスト (Go)
+# 1. バックエンド結合テスト (Go) ※サービス + CLI
 go test ./... -v
+go test -tags cli ./cmd/cli/... -v    # CLI専用テスト
+wails3 task cli:test                   # 上記2つを一括実行
 
 # 2. フロントエンド単体テスト (Vitest)
 cd frontend && pnpm test

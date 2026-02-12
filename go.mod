@@ -4,7 +4,9 @@ go 1.25
 
 require (
 	github.com/BurntSushi/toml v1.6.0
+	github.com/spf13/cobra v1.10.2
 	github.com/wailsapp/wails/v3 v3.0.0-alpha.60
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
@@ -24,6 +26,7 @@ require (
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
 	github.com/google/uuid v1.6.0 // indirect
+	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 // indirect
 	github.com/jchv/go-winloader v0.0.0-20210711035445-715c2860da7e // indirect
 	github.com/kevinburke/ssh_config v1.2.0 // indirect
@@ -38,6 +41,7 @@ require (
 	github.com/samber/lo v1.49.1 // indirect
 	github.com/sergi/go-diff v1.3.2-0.20230802210424-5b0b94c5c0d3 // indirect
 	github.com/skeema/knownhosts v1.3.1 // indirect
+	github.com/spf13/pflag v1.0.9 // indirect
 	github.com/wailsapp/go-webview2 v1.0.22 // indirect
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
 	golang.org/x/crypto v0.36.0 // indirect

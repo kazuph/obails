@@ -339,6 +339,94 @@ func TestFileService_SearchFiles(t *testing.T) {
 	})
 }
 
+func TestFileService_SearchFileContents(t *testing.T) {
+	cs, tmpDir := newTestConfigService(t)
+	defer os.RemoveAll(tmpDir)
+
+	fs := NewFileService(cs)
+
+	// Setup test files with content
+	fs.WriteFile("note-a.md", "# Note A\n\nThis has some important content.\nAnother line here.\n")
+	fs.WriteFile("note-b.md", "# Note B\n\nThis also has Important stuff.\nNothing else.\n")
+	fs.WriteFile("folder/note-c.md", "# Note C\n\nCompletely different text.\nimportant discovery.\n")
+	fs.WriteFile("no-match.md", "# No Match\n\nNothing relevant here.\n")
+
+	t.Run("basic case-insensitive search", func(t *testing.T) {
+		results, err := fs.SearchFileContents("important", 0, false)
+		if err != nil {
+			t.Fatalf("SearchFileContents failed: %v", err)
+		}
+
+		if len(results) != 3 {
+			t.Errorf("Expected 3 results, got %d", len(results))
+			for _, r := range results {
+				t.Logf("  %s:%d %s", r.Path, r.Line, r.Context)
+			}
+		}
+	})
+
+	t.Run("case-sensitive search", func(t *testing.T) {
+		results, err := fs.SearchFileContents("Important", 0, true)
+		if err != nil {
+			t.Fatalf("SearchFileContents failed: %v", err)
+		}
+
+		if len(results) != 1 {
+			t.Errorf("Expected 1 result for case-sensitive 'Important', got %d", len(results))
+			for _, r := range results {
+				t.Logf("  %s:%d %s", r.Path, r.Line, r.Context)
+			}
+		}
+	})
+
+	t.Run("search with limit", func(t *testing.T) {
+		results, err := fs.SearchFileContents("important", 2, false)
+		if err != nil {
+			t.Fatalf("SearchFileContents failed: %v", err)
+		}
+
+		if len(results) != 2 {
+			t.Errorf("Expected 2 results (limited), got %d", len(results))
+		}
+	})
+
+	t.Run("no results", func(t *testing.T) {
+		results, err := fs.SearchFileContents("zzzznotfound", 0, false)
+		if err != nil {
+			t.Fatalf("SearchFileContents failed: %v", err)
+		}
+
+		if len(results) != 0 {
+			t.Errorf("Expected 0 results, got %d", len(results))
+		}
+	})
+
+	t.Run("result has correct fields", func(t *testing.T) {
+		results, err := fs.SearchFileContents("important content", 0, false)
+		if err != nil {
+			t.Fatalf("SearchFileContents failed: %v", err)
+		}
+
+		if len(results) != 1 {
+			t.Fatalf("Expected 1 result, got %d", len(results))
+		}
+
+		r := results[0]
+		if r.Path != "note-a.md" {
+			t.Errorf("Expected path 'note-a.md', got %q", r.Path)
+		}
+		if r.Title != "note-a" {
+			t.Errorf("Expected title 'note-a', got %q", r.Title)
+		}
+		if r.Line != 3 {
+			t.Errorf("Expected line 3, got %d", r.Line)
+		}
+		if r.Context != "This has some important content." {
+			t.Errorf("Expected context 'This has some important content.', got %q", r.Context)
+		}
+	})
+}
+
 func TestFileService_WriteFile(t *testing.T) {
 	cs, tmpDir := newTestConfigService(t)
 	defer os.RemoveAll(tmpDir)
