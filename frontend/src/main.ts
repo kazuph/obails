@@ -48,6 +48,7 @@ function isModKey(e: KeyboardEvent): boolean {
 // State
 let currentNote: Note | null = null;
 let currentFilePath: string | null = null;  // Tracks any open file (md, image, pdf, html)
+let appThemeFromConfig: string | null = null;
 let showTimeline = false;
 let showGraph = false;
 let contextMenuTargetPath: string = "";
@@ -118,6 +119,7 @@ let currentPdfPath: string | null = null;
 async function init() {
     try {
         const config = await ConfigService.GetConfig();
+        appThemeFromConfig = normalizeThemeValue(config?.UI?.Theme || "");
         if (config?.Vault?.Path) {
             await loadFileTree();
 
@@ -1147,9 +1149,15 @@ function setupThemeSelector() {
     const themeSelect = document.getElementById("theme-select") as HTMLSelectElement;
 
     // Load saved theme
-    const savedTheme = localStorage.getItem("obails-theme") || "github-light";
-    document.documentElement.setAttribute("data-theme", savedTheme);
-    themeSelect.value = savedTheme;
+    const validThemes = Array.from(themeSelect.options).map(option => option.value);
+    const rawStoredTheme = localStorage.getItem("obails-theme");
+    const normalizedStoredTheme = rawStoredTheme ? normalizeThemeValue(rawStoredTheme) : "";
+    const fallbackTheme = validThemes.includes(appThemeFromConfig || "") ? appThemeFromConfig! : "github-light";
+    const selectedTheme = validThemes.includes(normalizedStoredTheme) ? normalizedStoredTheme : fallbackTheme;
+
+    localStorage.setItem("obails-theme", selectedTheme);
+    document.documentElement.setAttribute("data-theme", selectedTheme);
+    themeSelect.value = selectedTheme;
 
     // Handle theme change
     themeSelect.addEventListener("change", () => {
@@ -1194,42 +1202,75 @@ function getFileTypeFromPath(path: string): string {
     return 'other';
 }
 
+function normalizeThemeValue(theme: string | undefined | null): string {
+    const normalized = (theme || "").toLowerCase();
+    if (normalized === "dark") return "catppuccin";
+    if (normalized === "light") return "github-light";
+    return normalized;
+}
+
 // Open file based on file type
 async function openFile(path: string, fileType: string): Promise<void> {
     hideAllViewers();
-    currentFilePath = path;  // Track current file for refresh
+    const resolvedType = fileType || getFileTypeFromPath(path);
+    let opened = false;
 
     // Save last opened file to vault state (for all supported types)
-    if (fileType === "markdown" || fileType === "image" || fileType === "pdf" || fileType === "html") {
+    if (resolvedType === "markdown" || resolvedType === "image" || resolvedType === "pdf" || resolvedType === "html") {
         try {
-            await StateService.SetLastOpenedFile(path, fileType);
+            await StateService.SetLastOpenedFile(path, resolvedType);
         } catch (err) {
             console.warn("Failed to persist last opened file:", err);
         }
     }
 
     // Clear outline for non-markdown files (outline is only relevant for markdown)
-    if (fileType !== "markdown") {
+    if (resolvedType !== "markdown") {
         outlineList.innerHTML = '<div class="outline-empty">No outline available</div>';
+        currentNote = null;
     }
 
-    switch (fileType) {
+    switch (resolvedType) {
         case "markdown":
-            await openNote(path);
+            opened = await openNote(path);
+            if (!opened) {
+                currentFilePath = null;
+                await StateService.ClearLastOpenedFile();
+                lastSyncedOpenedFile = "";
+                return;
+            }
+            currentFilePath = path;  // Track current file for refresh
             break;
         case "image":
+            currentFilePath = path;
             await openImage(path);
+            opened = true;
             break;
         case "pdf":
+            currentFilePath = path;
             await openPDF(path);
+            opened = true;
             break;
         case "html":
+            currentFilePath = path;
             await openHTML(path);
+            opened = true;
             break;
         default:
+            opened = true;
             // Open with system default app (macOS open command)
+            currentFilePath = path;
             await openExternal(path);
             break;
+    }
+
+    if (!opened) {
+        editorContainer.style.display = "flex";
+        editor.value = "";
+        preview.innerHTML = "";
+        updatePaneTitles("Select a note...");
+        outlineList.innerHTML = '<div class="outline-empty">No outline available</div>';
+        throw new Error("Failed to open file.");
     }
 }
 
@@ -1817,39 +1858,50 @@ function createFileElement(file: FileInfo): HTMLElement {
 }
 
 // Note Operations
-async function openNote(path: string) {
+async function openNote(path: string): Promise<boolean> {
     showTimeline = false;
     hideAllViewers();
     editorContainer.style.display = "flex";
 
     try {
         currentNote = await NoteService.GetNote(path);
-        if (currentNote) {
-            editor.value = currentNote.content;
-            // Reset cursor position and scroll to the top
-            editor.selectionStart = 0;
-            editor.selectionEnd = 0;
-            editor.scrollTop = 0;
-            updatePreview();
-            await loadBacklinks(path);
-            await loadOutgoingLinks(path);
-
-            // Save to vault state (also saves when called directly from backlinks/outgoing links/graph)
-            try {
-                await StateService.SetLastOpenedFile(path, "markdown");
-            } catch (err) {
-                console.warn("Failed to persist last opened file:", err);
-            }
-
-            // Update pane titles (remove .md extension)
-            const filename = path.split("/").pop()?.replace(/\.md$/i, "") || path;
-            updatePaneTitles(filename);
+        if (!currentNote) {
+            throw new Error(`note not found: ${path}`);
         }
+
+        currentFilePath = path;
+        editor.value = currentNote.content;
+        // Reset cursor position and scroll to the top
+        editor.selectionStart = 0;
+        editor.selectionEnd = 0;
+        editor.scrollTop = 0;
+        updatePreview();
+        await loadBacklinks(path);
+        await loadOutgoingLinks(path);
+
+        // Save to vault state (also saves when called directly from backlinks/outgoing links/graph)
+        try {
+            await StateService.SetLastOpenedFile(path, "markdown");
+        } catch (err) {
+            console.warn("Failed to persist last opened file:", err);
+        }
+
+        // Update pane titles (remove .md extension)
+        const filename = path.split("/").pop()?.replace(/\.md$/i, "") || path;
+        updatePaneTitles(filename);
 
         // Update file tree selection
         updateFileTreeSelection(path);
+        return true;
     } catch (err) {
         console.error("Failed to open note:", err);
+        editor.value = "";
+        preview.innerHTML = "";
+        currentNote = null;
+        currentFilePath = null;
+        updatePaneTitles("Select a note...");
+        outlineList.innerHTML = '<div class="outline-empty">No outline available</div>';
+        return false;
     }
 }
 
@@ -2042,6 +2094,7 @@ async function openTodayNote() {
     try {
         const note = await NoteService.GetTodayDailyNote();
         if (note) {
+            currentFilePath = note.path;
             currentNote = note;
             editor.value = note.content;
             // Reset cursor position and scroll to the top
@@ -2058,6 +2111,12 @@ async function openTodayNote() {
 
             // Update file tree selection
             updateFileTreeSelection(note.path);
+
+            try {
+                await StateService.SetLastOpenedFile(note.path, "markdown");
+            } catch (err) {
+                console.warn("Failed to persist last opened file:", err);
+            }
         }
     } catch (err) {
         console.error("Failed to open today's note:", err);
