@@ -33,6 +33,8 @@ tasks:
     summary: Runs the application in development mode
     cmds:
       - wails3 dev -config ./build/config.yml -port {{.VITE_PORT}}
+    env:
+      OBAILS_USE_DEV_CONFIG: true
 
   cli:build:
     summary: Builds the CLI binary

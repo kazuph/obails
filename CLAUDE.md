@@ -183,6 +183,12 @@ wails3 dev
 # Direct app launch (after build)
 open bin/obails.dev.app
 
+# 開発時は ~/.config/obails/config.dev.toml を使う
+# 本番ビルドや /Applications/obails.app では ~/.config/obails/config.toml を使う
+# 任意で強制指定する場合:
+# OBAILS_USE_DEV_CONFIG=true  (開発設定を明示的に使用)
+# OBAILS_CONFIG_FILE=/path/to/file  (任意の設定ファイルを明示指定)
+
 # Production build
 wails3 build
 

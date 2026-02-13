@@ -3,6 +3,7 @@ package services
 import (
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 	"github.com/kazuph/obails/models"
@@ -18,11 +19,31 @@ type ConfigService struct {
 func NewConfigService() *ConfigService {
 	homeDir, _ := os.UserHomeDir()
 	configDir := filepath.Join(homeDir, ".config", "obails")
-	configPath := filepath.Join(configDir, "config.toml")
+
+	configFile := "config.toml"
+	if customConfigPath := strings.TrimSpace(os.Getenv("OBAILS_CONFIG_FILE")); customConfigPath != "" {
+		configFile = customConfigPath
+	} else if isConfigForDevelopmentEnabled() {
+		configFile = "config.dev.toml"
+	}
+
+	configPath := configFile
+	if !filepath.IsAbs(configPath) {
+		configPath = filepath.Join(configDir, configPath)
+	}
 
 	return &ConfigService{
 		configPath: configPath,
 		config:     models.DefaultConfig(),
+	}
+}
+
+func isConfigForDevelopmentEnabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("OBAILS_USE_DEV_CONFIG"))) {
+	case "1", "true", "t", "yes", "y", "on":
+		return true
+	default:
+		return false
 	}
 }
 

@@ -36,7 +36,7 @@ func initServices() error {
 
 	// Verify vault is configured
 	if configService.GetVaultPath() == "" {
-		return fmt.Errorf("vault path is not configured. Use --vault flag or set it in config (~/.config/obails/config.toml)")
+		return fmt.Errorf("vault path is not configured. Use --vault flag or set it in config (%s)", configService.GetConfigPath())
 	}
 
 	fileService = services.NewFileService(configService)
