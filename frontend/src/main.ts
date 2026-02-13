@@ -54,6 +54,8 @@ let contextMenuTargetPath: string = "";
 let contextMenuTargetIsDir: boolean = false;
 let draggedFilePath: string | null = null;
 let graphInstance: ReturnType<typeof ForceGraph> | null = null;
+let lastSyncedOpenedFile: string = "";
+let stateWatchTimerId: ReturnType<typeof window.setInterval> | null = null;
 
 // Keyboard navigation state
 let fileTreeFocused = false;
@@ -124,11 +126,15 @@ async function init() {
             if (lastFile) {
                 try {
                     await openFile(lastFile.path, lastFile.fileType);
+                    lastSyncedOpenedFile = toStateKey(lastFile.path, lastFile.fileType);
                 } catch {
                     // File might have been deleted, clear the state
                     await StateService.ClearLastOpenedFile();
+                    lastSyncedOpenedFile = "";
                 }
             }
+
+            startLastOpenedFileWatcher();
 
             // Prefetch graph data in background (don't block init)
             prefetchGraphData().catch(console.error);
@@ -141,6 +147,46 @@ async function init() {
     }
 
     setupEventListeners();
+}
+
+function toStateKey(path: string, fileType: string): string {
+    return `${path}::${fileType}`;
+}
+
+function startLastOpenedFileWatcher() {
+    if (stateWatchTimerId !== null) {
+        return;
+    }
+
+    stateWatchTimerId = window.setInterval(async () => {
+        try {
+            const lastFile = await StateService.GetLastOpenedFile();
+            const nextKey = lastFile ? toStateKey(lastFile.path, lastFile.fileType) : "";
+            const currentType = currentFilePath ? getFileTypeFromPath(currentFilePath) : "";
+            const targetType = lastFile ? (lastFile.fileType || getFileTypeFromPath(lastFile.path)) : "";
+
+            if (nextKey === lastSyncedOpenedFile) {
+                return;
+            }
+
+            if (!lastFile) {
+                lastSyncedOpenedFile = "";
+                return;
+            }
+
+            const sameFile = lastFile.path === currentFilePath && targetType === currentType;
+            if (!sameFile) {
+                try {
+                    await openFile(lastFile.path, targetType);
+                } catch {
+                    await StateService.ClearLastOpenedFile();
+                }
+            }
+            lastSyncedOpenedFile = toStateKey(lastFile.path, targetType);
+        } catch (err) {
+            console.warn("Failed to sync last opened file from state:", err);
+        }
+    }, 600);
 }
 
 // Show vault setup dialog
