@@ -126,9 +126,10 @@ async function init() {
             // Open last file if exists (from vault state)
             const lastFile = await StateService.GetLastOpenedFile();
             if (lastFile) {
+                const resolvedType = resolveFileType(lastFile.fileType, lastFile.path);
                 try {
-                    await openFile(lastFile.path, lastFile.fileType);
-                    lastSyncedOpenedFile = toStateKey(lastFile.path, lastFile.fileType);
+                    await openFile(lastFile.path, resolvedType);
+                    lastSyncedOpenedFile = toStateKey(lastFile.path, resolvedType);
                 } catch {
                     // File might have been deleted, clear the state
                     await StateService.ClearLastOpenedFile();
@@ -163,9 +164,10 @@ function startLastOpenedFileWatcher() {
     stateWatchTimerId = window.setInterval(async () => {
         try {
             const lastFile = await StateService.GetLastOpenedFile();
-            const nextKey = lastFile ? toStateKey(lastFile.path, lastFile.fileType) : "";
+            const resolvedType = lastFile ? resolveFileType(lastFile.fileType, lastFile.path) : "";
+            const nextKey = lastFile ? toStateKey(lastFile.path, resolvedType) : "";
             const currentType = currentFilePath ? getFileTypeFromPath(currentFilePath) : "";
-            const targetType = lastFile ? (lastFile.fileType || getFileTypeFromPath(lastFile.path)) : "";
+            const targetType = resolvedType;
 
             if (nextKey === lastSyncedOpenedFile) {
                 return;
@@ -1179,6 +1181,16 @@ function setupThemeSelector() {
     });
 }
 
+function showEmptyMainPane() {
+    editorContainer.style.display = "flex";
+    editor.value = "";
+    preview.innerHTML = "Select a note from the file tree.";
+    updatePaneTitles("Select a note...");
+    outlineList.innerHTML = '<div class="outline-empty">No outline available</div>';
+    currentNote = null;
+    currentFilePath = null;
+}
+
 // File Type Helpers
 function getFileIcon(file: FileInfo): string {
     if (file.isDir) return "📁";
@@ -1202,6 +1214,14 @@ function getFileTypeFromPath(path: string): string {
     return 'other';
 }
 
+function resolveFileType(fileType: string, path: string): string {
+    const normalized = (fileType || "").toLowerCase();
+    if (normalized === "markdown" || normalized === "image" || normalized === "pdf" || normalized === "html") {
+        return normalized;
+    }
+    return getFileTypeFromPath(path);
+}
+
 function normalizeThemeValue(theme: string | undefined | null): string {
     const normalized = (theme || "").toLowerCase();
     if (normalized === "dark") return "catppuccin";
@@ -1212,7 +1232,7 @@ function normalizeThemeValue(theme: string | undefined | null): string {
 // Open file based on file type
 async function openFile(path: string, fileType: string): Promise<void> {
     hideAllViewers();
-    const resolvedType = fileType || getFileTypeFromPath(path);
+    const resolvedType = resolveFileType(fileType, path);
     let opened = false;
 
     // Save last opened file to vault state (for all supported types)
@@ -1234,9 +1254,9 @@ async function openFile(path: string, fileType: string): Promise<void> {
         case "markdown":
             opened = await openNote(path);
             if (!opened) {
-                currentFilePath = null;
                 await StateService.ClearLastOpenedFile();
                 lastSyncedOpenedFile = "";
+                showEmptyMainPane();
                 return;
             }
             currentFilePath = path;  // Track current file for refresh
@@ -1265,11 +1285,7 @@ async function openFile(path: string, fileType: string): Promise<void> {
     }
 
     if (!opened) {
-        editorContainer.style.display = "flex";
-        editor.value = "";
-        preview.innerHTML = "";
-        updatePaneTitles("Select a note...");
-        outlineList.innerHTML = '<div class="outline-empty">No outline available</div>';
+        showEmptyMainPane();
         throw new Error("Failed to open file.");
     }
 }
@@ -1876,8 +1892,11 @@ async function openNote(path: string): Promise<boolean> {
         editor.selectionEnd = 0;
         editor.scrollTop = 0;
         updatePreview();
-        await loadBacklinks(path);
-        await loadOutgoingLinks(path);
+
+        await Promise.allSettled([
+            loadBacklinks(path),
+            loadOutgoingLinks(path),
+        ]);
 
         // Save to vault state (also saves when called directly from backlinks/outgoing links/graph)
         try {
@@ -1895,12 +1914,7 @@ async function openNote(path: string): Promise<boolean> {
         return true;
     } catch (err) {
         console.error("Failed to open note:", err);
-        editor.value = "";
-        preview.innerHTML = "";
-        currentNote = null;
-        currentFilePath = null;
-        updatePaneTitles("Select a note...");
-        outlineList.innerHTML = '<div class="outline-empty">No outline available</div>';
+        showEmptyMainPane();
         return false;
     }
 }
