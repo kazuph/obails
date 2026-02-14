@@ -4,13 +4,14 @@
   "version": "0.0.1",
   "type": "module",
   "scripts": {
+    "build:frontend": "pnpm --dir frontend run build",
     "test": "playwright test",
     "test:ui": "playwright test --ui",
     "test:headed": "playwright test --headed",
     "test:report": "playwright show-report",
     "clean:desktop": "if [ \"$(uname -s)\" = \"Darwin\" ]; then rm -rf /Applications/Obails_new.app /Applications/Obails_old.app || true; fi",
-    "package:desktop": "wails3 task darwin:package",
-    "install:desktop": "if [ \"$(uname -s)\" = \"Darwin\" ]; then pkill -x Obails || true; rm -rf /Applications/Obails.app /Applications/Obails_new.app /Applications/Obails_old.app && cp -R bin/obails.app /Applications/Obails.app; fi",
+    "package:desktop": "pnpm run build:frontend && wails3 task darwin:package",
+    "install:desktop": "if [ \"$(uname -s)\" = \"Darwin\" ]; then pkill -x Obails || true; rm -rf /Applications/Obails.app /Applications/Obails_new.app /Applications/Obails_old.app && cp -R bin/obails.app /Applications/Obails.app && touch /Applications/Obails.app && killall -9 Dock >/dev/null 2>&1 || true; killall Finder >/dev/null 2>&1 || true; fi",
     "reinstall:desktop": "pnpm run package:desktop && pnpm run install:desktop"
   },
   "devDependencies": {

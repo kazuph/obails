@@ -17,6 +17,16 @@
             <string>0.1.0</string>
         <key>CFBundleIconFile</key>
             <string>icons</string>
+        <key>CFBundleIcons</key>
+        <dict>
+            <key>CFBundlePrimaryIcon</key>
+            <dict>
+                <key>CFBundleIconFiles</key>
+                <array>
+                    <string>icons</string>
+                </array>
+            </dict>
+        </dict>
         <key>LSMinimumSystemVersion</key>
             <string>10.15.0</string>
         <key>NSHighResolutionCapable</key>

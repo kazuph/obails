@@ -76,4 +76,44 @@ describe("parseMarkdown", () => {
     expect(result).toContain("<pre>");
     expect(result).toContain("<code");
   });
+
+  it("should render YAML frontmatter block and body", () => {
+    const input = `---
+title: 家族会話記録
+tags:
+  - test
+
+---
+
+# 要約
+内容`;
+    const result = parseMarkdown(input);
+    expect(result).toContain('class="frontmatter"');
+    expect(result).toContain("Front Matter");
+    expect(result).toContain("title: 家族会話記録");
+    expect(result).toContain("<h1>要約</h1>");
+    expect(result).toContain("<p>内容</p>");
+  });
+
+  it("should handle UTF-8 BOM before frontmatter", () => {
+    const input = `\uFEFF---
+title: BOM付き
+---
+
+# 見出し`;
+    const result = parseMarkdown(input);
+    expect(result).toContain("BOM付き");
+    expect(result).toContain("<h1>見出し</h1>");
+  });
+
+  it("should handle frontmatter with trailing spaces and CRLF", () => {
+    const input = `--- \r
+title: CRLF\r
+--- \r
+\r
+# 見出し`;
+    const result = parseMarkdown(input);
+    expect(result).toContain("CRLF");
+    expect(result).toContain("<h1>見出し</h1>");
+  });
 });
