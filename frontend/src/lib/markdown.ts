@@ -10,7 +10,7 @@ function escapeHtml(input: string): string {
 }
 
 function extractFrontMatter(content: string): { block: string; body: string } {
-  const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
+  const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
   if (!match || match[0].length === 0) {
     return { block: "", body: content };
   }
@@ -37,7 +37,7 @@ export function convertWikiLinks(html: string): string {
 export function parseMarkdown(content: string): string {
   const { block, body } = extractFrontMatter(content);
   const frontMatterHtml = block
-    ? `<pre><code class=\"language-yaml\">${escapeHtml(block.trim())}</code></pre>`
+    ? `<pre><code class="language-yaml">${escapeHtml(block.trim())}</code></pre>`
     : "";
   const html = `${frontMatterHtml}${toHtml(body)}`;
   return convertWikiLinks(html);
