@@ -4,6 +4,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 
 	"github.com/spf13/cobra"
@@ -40,7 +41,13 @@ Examples:
 		}
 
 		// Launch the app
-		if err := exec.Command("open", "-a", "Obails").Start(); err != nil {
+		appPath := "/Applications/Obails.app"
+		openArgs := []string{"-a", "Obails"}
+		if _, err := os.Stat(appPath); err == nil {
+			openArgs = []string{"-a", appPath}
+		}
+
+		if err := exec.Command("open", openArgs...).Start(); err != nil {
 			outputError(fmt.Errorf("failed to launch obails app: %w", err))
 			return nil
 		}
