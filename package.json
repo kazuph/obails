@@ -8,8 +8,9 @@
     "test:ui": "playwright test --ui",
     "test:headed": "playwright test --headed",
     "test:report": "playwright show-report",
+    "clean:desktop": "if [ \"$(uname -s)\" = \"Darwin\" ]; then rm -rf /Applications/Obails_new.app /Applications/Obails_old.app || true; fi",
     "package:desktop": "wails3 task darwin:package",
-    "install:desktop": "if [ \"$(uname -s)\" = \"Darwin\" ]; then pkill -x Obails || true; rm -rf /Applications/Obails.app && cp -R bin/obails.app /Applications/Obails.app; fi",
+    "install:desktop": "if [ \"$(uname -s)\" = \"Darwin\" ]; then pkill -x Obails || true; rm -rf /Applications/Obails.app /Applications/Obails_new.app /Applications/Obails_old.app && cp -R bin/obails.app /Applications/Obails.app; fi",
     "reinstall:desktop": "pnpm run package:desktop && pnpm run install:desktop"
   },
   "devDependencies": {
