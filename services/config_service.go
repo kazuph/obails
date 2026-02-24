@@ -96,10 +96,16 @@ func (s *ConfigService) GetVaultPath() string {
 	return s.config.Vault.Path
 }
 
-// SetVaultPath sets the vault path and saves
+// SetVaultPath sets the vault path and saves to config file (permanent change).
 func (s *ConfigService) SetVaultPath(path string) error {
 	s.config.Vault.Path = path
 	return s.Save()
+}
+
+// OverrideVaultPath overrides the vault path in memory only (does NOT save to config file).
+// Use this for temporary overrides like the --vault CLI flag.
+func (s *ConfigService) OverrideVaultPath(path string) {
+	s.config.Vault.Path = path
 }
 
 // GetDailyNotesFolder returns the daily notes folder relative path

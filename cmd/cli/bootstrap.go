@@ -27,16 +27,14 @@ func initServices() error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	// Override vault path if --vault flag is specified
+	// Override vault path if --vault flag is specified (temporary, not saved to config)
 	if vaultPath != "" {
-		if err := configService.SetVaultPath(vaultPath); err != nil {
-			return fmt.Errorf("failed to set vault path: %w", err)
-		}
+		configService.OverrideVaultPath(vaultPath)
 	}
 
 	// Verify vault is configured
 	if configService.GetVaultPath() == "" {
-		return fmt.Errorf("vault path is not configured. Use --vault flag or set it in config (%s)", configService.GetConfigPath())
+		return fmt.Errorf("vault path is not configured. Set [vault] path in %s (--vault flag is for manual debugging only)", configService.GetConfigPath())
 	}
 
 	fileService = services.NewFileService(configService)
