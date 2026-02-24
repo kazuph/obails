@@ -235,8 +235,8 @@ func TestFileService_ListDirectory(t *testing.T) {
 	// Setup test structure
 	fs.CreateDirectory("folder-a")
 	fs.CreateDirectory("folder-b")
-	fs.CreateFile("note1.md", "content1")
-	fs.CreateFile("note2.md", "content2")
+	fs.CreateFile("note-b.md", "content-b")
+	fs.CreateFile("note-a.md", "content-a")
 	fs.CreateFile("folder-a/nested.md", "nested")
 
 	t.Run("list root directory", func(t *testing.T) {
@@ -283,6 +283,32 @@ func TestFileService_ListDirectory(t *testing.T) {
 					foundFileBeforeFolder = true
 				}
 			}
+		}
+	})
+
+	t.Run("files are sorted in descending name order", func(t *testing.T) {
+		files, err := fs.ListDirectory("")
+		if err != nil {
+			t.Fatalf("ListDirectory failed: %v", err)
+		}
+
+		expectedFiles := []string{"note-b.md", "note-a.md"}
+		fileIndex := 0
+		for _, f := range files {
+			if f.IsDir {
+				continue
+			}
+			if fileIndex >= len(expectedFiles) {
+				break
+			}
+			if f.Name != expectedFiles[fileIndex] {
+				t.Fatalf("Expected file at index %d to be %q, got %q", fileIndex, expectedFiles[fileIndex], f.Name)
+			}
+			fileIndex++
+		}
+
+		if fileIndex != len(expectedFiles) {
+			t.Fatalf("Expected %d files, got %d", len(expectedFiles), fileIndex)
 		}
 	})
 

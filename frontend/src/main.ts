@@ -57,6 +57,10 @@ let draggedFilePath: string | null = null;
 let graphInstance: ReturnType<typeof ForceGraph> | null = null;
 let lastSyncedOpenedFile: string = "";
 let stateWatchTimerId: ReturnType<typeof window.setInterval> | null = null;
+let fileTreeWatchTimerId: ReturnType<typeof window.setInterval> | null = null;
+let isFileTreeWatchRunning = false;
+let fileTreeSignature = "";
+const FILE_TREE_WATCH_INTERVAL_MS = 2500;
 
 // Keyboard navigation state
 let fileTreeFocused = false;
@@ -138,6 +142,7 @@ async function init() {
             }
 
             startLastOpenedFileWatcher();
+            startFileTreeWatcher();
 
             // Prefetch graph data in background (don't block init)
             prefetchGraphData().catch(console.error);
@@ -193,6 +198,84 @@ function startLastOpenedFileWatcher() {
     }, 600);
 }
 
+function startFileTreeWatcher() {
+    if (fileTreeWatchTimerId !== null) {
+        return;
+    }
+
+    fileTreeWatchTimerId = window.setInterval(async () => {
+        if (isFileTreeWatchRunning) {
+            return;
+        }
+
+        isFileTreeWatchRunning = true;
+        try {
+            const files = normalizeAndSortFileTree(await FileService.ListDirectoryTree());
+            const nextSignature = buildFileTreeSignature(files);
+
+            if (fileTreeSignature === nextSignature) {
+                return;
+            }
+
+            applyFileTreeSnapshot(files);
+        } catch (err) {
+            console.warn("Failed to watch file tree updates:", err);
+        } finally {
+            isFileTreeWatchRunning = false;
+        }
+    }, FILE_TREE_WATCH_INTERVAL_MS);
+}
+
+function compareFileInfoForSort(a: FileInfo, b: FileInfo): number {
+    if (a.isDir !== b.isDir) {
+        return a.isDir ? -1 : 1;
+    }
+    if (a.isDir) {
+        return a.name.localeCompare(b.name);
+    }
+    return b.name.localeCompare(a.name);
+}
+
+function normalizeAndSortFileTree(files: FileInfo[]): FileInfo[] {
+    return files
+        .map((file) => ({
+            ...file,
+            children: file.children?.length ? normalizeAndSortFileTree(file.children) : [],
+        }))
+        .sort(compareFileInfoForSort);
+}
+
+function buildFileTreeSignature(files: FileInfo[]): string {
+    const parts: string[] = [];
+
+    const walk = (nodes: FileInfo[]) => {
+        for (const file of nodes) {
+            const modifiedAt = file.modifiedAt ? JSON.stringify(file.modifiedAt) : "";
+            parts.push(`${file.path}|${file.isDir ? "1" : "0"}|${file.fileType || ""}|${modifiedAt}`);
+
+            if (file.children && file.children.length > 0) {
+                walk(file.children);
+            }
+        }
+    };
+
+    walk(files);
+    return parts.join("\n");
+}
+
+function restoreActiveFileTreeSelection() {
+    if (currentFilePath) {
+        expandParentFolders(currentFilePath);
+        updateFileTreeSelection(currentFilePath);
+    }
+}
+
+function applyFileTreeSnapshot(files: FileInfo[]) {
+    fileTreeSignature = buildFileTreeSignature(files);
+    renderFileTree(files);
+    restoreActiveFileTreeSelection();
+}
+
 // Show vault setup dialog
 function showVaultSetupDialog() {
     const overlay = document.getElementById("vault-setup-overlay")!;
@@ -213,6 +296,8 @@ async function handleVaultFolderSelection() {
             hideVaultSetupDialog();
             // Reload the app to apply the new vault
             await loadFileTree();
+            startLastOpenedFileWatcher();
+            startFileTreeWatcher();
         }
     } catch (err) {
         console.error("Failed to select vault folder:", err);
@@ -1154,8 +1239,9 @@ function setupThemeSelector() {
     const validThemes = Array.from(themeSelect.options).map(option => option.value);
     const rawStoredTheme = localStorage.getItem("obails-theme");
     const normalizedStoredTheme = rawStoredTheme ? normalizeThemeValue(rawStoredTheme) : "";
-    const fallbackTheme = validThemes.includes(appThemeFromConfig || "") ? appThemeFromConfig! : "github-light";
-    const selectedTheme = validThemes.includes(normalizedStoredTheme) ? normalizedStoredTheme : fallbackTheme;
+    const configTheme = validThemes.includes(appThemeFromConfig || "") ? appThemeFromConfig! : "";
+    const fallbackTheme = configTheme || "github-light";
+    const selectedTheme = configTheme || (validThemes.includes(normalizedStoredTheme) ? normalizedStoredTheme : fallbackTheme);
 
     localStorage.setItem("obails-theme", selectedTheme);
     document.documentElement.setAttribute("data-theme", selectedTheme);
@@ -1223,9 +1309,32 @@ function resolveFileType(fileType: string, path: string): string {
 }
 
 function normalizeThemeValue(theme: string | undefined | null): string {
-    const normalized = (theme || "").toLowerCase();
-    if (normalized === "dark") return "catppuccin";
-    if (normalized === "light") return "github-light";
+    const normalized = (theme || "").trim().toLowerCase().replace(/\s+/g, "-");
+
+    if (["dark", "github-dark", "catppuccin-mocha"].includes(normalized)) {
+        return "catppuccin";
+    }
+
+    if (["light", "github-light"].includes(normalized)) {
+        return "github-light";
+    }
+
+    if (["solarized-dark", "solarized"].includes(normalized)) {
+        return "solarized";
+    }
+
+    if (["one-dark", "onedark"].includes(normalized)) {
+        return "onedark";
+    }
+
+    if (["rose-pine-dawn", "rosepine-dawn"].includes(normalized)) {
+        return "rosepine-dawn";
+    }
+
+    if (["tokyo-night", "tokyonight"].includes(normalized)) {
+        return "tokyonight";
+    }
+
     return normalized;
 }
 
@@ -1759,8 +1868,8 @@ function expandParentFolders(path: string) {
 // File Tree
 async function loadFileTree() {
     try {
-        const files = await FileService.ListDirectoryTree();
-        renderFileTree(files);
+        const files = normalizeAndSortFileTree(await FileService.ListDirectoryTree());
+        applyFileTreeSnapshot(files);
     } catch (err) {
         console.error("Failed to load file tree:", err);
         fileTree.innerHTML = '<div class="error">Failed to load files</div>';

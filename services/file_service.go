@@ -189,7 +189,7 @@ func (s *FileService) listDirectoryRecursive(fullPath string, relativePath strin
 		result = append(result, fileInfo)
 	}
 
-	// Sort: folders first (ascending by name), then files (descending by ModifiedAt)
+	// Sort: folders first (ascending by name), then files (descending by name)
 	sort.Slice(result, func(i, j int) bool {
 		// Folders before files
 		if result[i].IsDir != result[j].IsDir {
@@ -199,8 +199,8 @@ func (s *FileService) listDirectoryRecursive(fullPath string, relativePath strin
 		if result[i].IsDir {
 			return result[i].Name < result[j].Name
 		}
-		// Files: descending by ModifiedAt (newest first)
-		return result[i].ModifiedAt.After(result[j].ModifiedAt)
+		// Files: descending by name
+		return result[i].Name > result[j].Name
 	})
 
 	return result, nil
