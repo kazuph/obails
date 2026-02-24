@@ -11,6 +11,8 @@ import (
 
 //go:embed all:frontend/dist
 var assets embed.FS
+//go:embed build/appicon.png
+var appIcon []byte
 
 func main() {
 	// Initialize services
@@ -41,6 +43,7 @@ func main() {
 	app := application.New(application.Options{
 		Name:        "Obails",
 		Description: "A lightweight Obsidian alternative",
+		Icon:        appIcon,
 		Services: []application.Service{
 			application.NewService(configService),
 			application.NewService(stateService),

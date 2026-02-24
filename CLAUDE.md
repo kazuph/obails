@@ -306,3 +306,21 @@ claude plugin install ob@obails
 ## Known Issues
 - Port conflicts: Kill vite/obails processes before restarting
 - Binding error for missing files: Non-fatal, app continues to work
+
+## 起動先取り違え防止（要確認）
+
+- 開発版で確認する場合は、常に `bin/obails.dev.app` を起動対象にする。
+- `/Applications/obails.app` は本番ビルド済みのアプリ。ビルドを行っていない場合に起動すると旧挙動になることがある。
+- 開発時の更新確認手順:
+  - `pkill -f "obails" 2>/dev/null || true`
+  - `lsof -ti:9245 | xargs kill -9 2>/dev/null || true`
+  - `wails3 dev`
+  - `open bin/obails.dev.app`
+- 本番版に反映する場合は、以下を一式実施して置換する:
+  - `pkill -f "obails.app" 2>/dev/null || true`
+  - `wails3 task darwin:package`
+  - `trash /Applications/obails.app 2>/dev/null || true`
+  - `cp -R bin/obails.app /Applications/obails.app`
+  - `codesign --force --deep --sign - /Applications/obails.app`
+- 実行対象を確認する最短チェック:
+  - `stat -f "%Sm %N" -t "%Y-%m-%d %H:%M:%S" /Applications/obails.app/Contents/MacOS/obails bin/obails.dev.app/Contents/MacOS/obails`

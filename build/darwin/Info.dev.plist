@@ -8,7 +8,7 @@
         <key>CFBundleExecutable</key>
             <string>obails</string>
         <key>CFBundleIdentifier</key>
-            <string>com.example.obails</string>
+            <string>com.kazuph.obails</string>
         <key>CFBundleVersion</key>
             <string>0.1.0</string>
         <key>CFBundleGetInfoString</key>
