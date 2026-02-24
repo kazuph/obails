@@ -133,6 +133,12 @@ func (s *ConfigService) GetTemplatesFolder() string {
 	return s.config.Templates.Folder
 }
 
+// SetTheme sets the UI theme and saves to config file.
+func (s *ConfigService) SetTheme(theme string) error {
+	s.config.UI.Theme = theme
+	return s.Save()
+}
+
 // GetConfigPath returns the configuration file path
 func (s *ConfigService) GetConfigPath() string {
 	return s.configPath

@@ -120,6 +120,67 @@ func TestConfigService_SetVaultPath_DoesPersist(t *testing.T) {
 	}
 }
 
+func TestConfigService_SetTheme_DoesPersist(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "obails-config-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	// Write initial config with default theme
+	cfg := models.DefaultConfig()
+	cfg.Vault.Path = "/test/vault"
+	cfg.UI.Theme = "catppuccin"
+	f, err := os.Create(configPath)
+	if err != nil {
+		t.Fatalf("Failed to create config file: %v", err)
+	}
+	if err := toml.NewEncoder(f).Encode(cfg); err != nil {
+		f.Close()
+		t.Fatalf("Failed to write config: %v", err)
+	}
+	f.Close()
+
+	cs := &ConfigService{
+		configPath: configPath,
+		config:     models.DefaultConfig(),
+	}
+	if err := cs.Load(); err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+
+	// Verify initial theme
+	if cs.config.UI.Theme != "catppuccin" {
+		t.Fatalf("Expected initial theme %q, got %q", "catppuccin", cs.config.UI.Theme)
+	}
+
+	// Act: change theme
+	if err := cs.SetTheme("dracula"); err != nil {
+		t.Fatalf("SetTheme failed: %v", err)
+	}
+
+	// Assert: in-memory value changed
+	if cs.config.UI.Theme != "dracula" {
+		t.Errorf("In-memory theme should be %q, got %q", "dracula", cs.config.UI.Theme)
+	}
+
+	// Assert: config file is updated
+	var savedCfg models.Config
+	if _, err := toml.DecodeFile(configPath, &savedCfg); err != nil {
+		t.Fatalf("Failed to read config file: %v", err)
+	}
+	if savedCfg.UI.Theme != "dracula" {
+		t.Errorf("Config file theme should be %q, got %q", "dracula", savedCfg.UI.Theme)
+	}
+
+	// Assert: other config values are preserved
+	if savedCfg.Vault.Path != "/test/vault" {
+		t.Errorf("Vault path should be preserved as %q, got %q", "/test/vault", savedCfg.Vault.Path)
+	}
+}
+
 func TestConfigService_LoadDoesNotSaveExistingConfig(t *testing.T) {
 	// Setup: create a temp dir with a real config.toml
 	tmpDir, err := os.MkdirTemp("", "obails-config-test-*")

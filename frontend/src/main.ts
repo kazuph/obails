@@ -1253,6 +1253,11 @@ function setupThemeSelector() {
         document.documentElement.setAttribute("data-theme", theme);
         localStorage.setItem("obails-theme", theme);
 
+        // Save theme to config file
+        ConfigService.SetTheme(theme).catch((err: unknown) => {
+            console.warn("Failed to save theme to config:", err);
+        });
+
         // Re-initialize mermaid with new theme
         const isDark = !LIGHT_THEMES.includes(theme);
         mermaid.initialize({
