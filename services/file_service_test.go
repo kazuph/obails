@@ -1,9 +1,11 @@
 package services
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/kazuph/obails/models"
 )
@@ -67,6 +69,13 @@ func TestFileService_CreateFile(t *testing.T) {
 		}
 		if err != os.ErrExist {
 			t.Errorf("Expected ErrExist, got: %v", err)
+		}
+	})
+
+	t.Run("reject parent traversal", func(t *testing.T) {
+		err := fs.CreateFile("../escape.md", "bad")
+		if !errors.Is(err, ErrInvalidPath) {
+			t.Fatalf("expected ErrInvalidPath, got %v", err)
 		}
 	})
 }
@@ -224,6 +233,57 @@ func TestFileService_MoveFile(t *testing.T) {
 			t.Error("Should fail for non-existent source")
 		}
 	})
+
+	t.Run("move directory to another location", func(t *testing.T) {
+		err := fs.CreateFile("source-dir/note.md", "dir content")
+		if err != nil {
+			t.Fatalf("Setup failed: %v", err)
+		}
+
+		err = fs.MoveFile("source-dir", "renamed-dir")
+		if err != nil {
+			t.Fatalf("MoveFile for directory failed: %v", err)
+		}
+
+		if fs.FileExists("source-dir/note.md") {
+			t.Error("Source directory should be moved")
+		}
+		if !fs.FileExists("renamed-dir/note.md") {
+			t.Error("Destination directory should exist")
+		}
+	})
+}
+
+func TestFileService_CreateDirectory(t *testing.T) {
+	cs, tmpDir := newTestConfigService(t)
+	defer os.RemoveAll(tmpDir)
+
+	fs := NewFileService(cs)
+
+	t.Run("create nested directory", func(t *testing.T) {
+		err := fs.CreateDirectory("projects/alpha")
+		if err != nil {
+			t.Fatalf("CreateDirectory failed: %v", err)
+		}
+
+		info, err := os.Stat(filepath.Join(tmpDir, "projects", "alpha"))
+		if err != nil {
+			t.Fatalf("expected directory to exist: %v", err)
+		}
+		if !info.IsDir() {
+			t.Fatal("expected created path to be a directory")
+		}
+	})
+
+	t.Run("fail when directory already exists", func(t *testing.T) {
+		err := fs.CreateDirectory("projects/alpha")
+		if err == nil {
+			t.Fatal("expected CreateDirectory to fail for existing path")
+		}
+		if !errors.Is(err, os.ErrExist) {
+			t.Fatalf("expected ErrExist, got %v", err)
+		}
+	})
 }
 
 func TestFileService_ListDirectory(t *testing.T) {
@@ -325,6 +385,46 @@ func TestFileService_ListDirectory(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestFileService_ListDirectoryTree_DeepNesting(t *testing.T) {
+	cs, tmpDir := newTestConfigService(t)
+	defer os.RemoveAll(tmpDir)
+
+	fs := NewFileService(cs)
+
+	if err := fs.CreateFile("level1/level2/level3/level4/deep.md", "# Deep"); err != nil {
+		t.Fatalf("setup failed: %v", err)
+	}
+
+	files, err := fs.ListDirectoryTree()
+	if err != nil {
+		t.Fatalf("ListDirectoryTree failed: %v", err)
+	}
+
+	if len(files) != 1 || !files[0].IsDir || files[0].Path != "level1" {
+		t.Fatalf("unexpected top-level tree: %+v", files)
+	}
+
+	level2 := files[0].Children
+	if len(level2) != 1 || level2[0].Path != "level1/level2" {
+		t.Fatalf("expected level2 folder, got %+v", level2)
+	}
+
+	level3 := level2[0].Children
+	if len(level3) != 1 || level3[0].Path != "level1/level2/level3" {
+		t.Fatalf("expected level3 folder, got %+v", level3)
+	}
+
+	level4 := level3[0].Children
+	if len(level4) != 1 || level4[0].Path != "level1/level2/level3/level4" {
+		t.Fatalf("expected level4 folder, got %+v", level4)
+	}
+
+	deepFile := level4[0].Children
+	if len(deepFile) != 1 || deepFile[0].Path != "level1/level2/level3/level4/deep.md" {
+		t.Fatalf("expected deep file, got %+v", deepFile)
+	}
 }
 
 func TestFileService_SearchFiles(t *testing.T) {
@@ -480,4 +580,92 @@ func TestFileService_WriteFile(t *testing.T) {
 			t.Errorf("File should be overwritten, got: %q", content)
 		}
 	})
+}
+
+func TestVaultWatchService_GetRevision(t *testing.T) {
+	cs, tmpDir := newTestConfigService(t)
+	defer os.RemoveAll(tmpDir)
+
+	watcher := NewVaultWatchService(cs)
+	if err := watcher.Start(); err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+	defer watcher.Stop()
+
+	waitForRevision := func(previous int64) int64 {
+		t.Helper()
+		deadline := time.Now().Add(3 * time.Second)
+		for time.Now().Before(deadline) {
+			current := watcher.GetRevision()
+			if current > previous {
+				return current
+			}
+			time.Sleep(25 * time.Millisecond)
+		}
+		t.Fatalf("revision did not advance past %d", previous)
+		return previous
+	}
+
+	revision := watcher.GetRevision()
+
+	if err := os.WriteFile(filepath.Join(tmpDir, "created.md"), []byte("# created"), 0644); err != nil {
+		t.Fatalf("write failed: %v", err)
+	}
+	revision = waitForRevision(revision)
+
+	if err := os.Rename(filepath.Join(tmpDir, "created.md"), filepath.Join(tmpDir, "renamed.md")); err != nil {
+		t.Fatalf("rename failed: %v", err)
+	}
+	revision = waitForRevision(revision)
+
+	if err := os.Mkdir(filepath.Join(tmpDir, "nested"), 0755); err != nil {
+		t.Fatalf("mkdir failed: %v", err)
+	}
+	revision = waitForRevision(revision)
+
+	if err := os.WriteFile(filepath.Join(tmpDir, "nested", "inside.md"), []byte("# nested"), 0644); err != nil {
+		t.Fatalf("nested write failed: %v", err)
+	}
+	waitForRevision(revision)
+}
+
+func TestVaultWatchService_SwitchVaultPath(t *testing.T) {
+	cs, tmpDir := newTestConfigService(t)
+	defer os.RemoveAll(tmpDir)
+
+	secondVault, err := os.MkdirTemp("", "obails-watch-switch-*")
+	if err != nil {
+		t.Fatalf("failed to create second vault: %v", err)
+	}
+	defer os.RemoveAll(secondVault)
+
+	watcher := NewVaultWatchService(cs)
+	if err := watcher.Start(); err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+	defer watcher.Stop()
+
+	waitForRevision := func(previous int64) int64 {
+		t.Helper()
+		deadline := time.Now().Add(3 * time.Second)
+		for time.Now().Before(deadline) {
+			current := watcher.GetRevision()
+			if current > previous {
+				return current
+			}
+			time.Sleep(25 * time.Millisecond)
+		}
+		t.Fatalf("revision did not advance past %d", previous)
+		return previous
+	}
+
+	revision := watcher.GetRevision()
+	cs.OverrideVaultPath(secondVault)
+	revision = watcher.GetRevision()
+
+	if err := os.WriteFile(filepath.Join(secondVault, "switched.md"), []byte("# switched"), 0644); err != nil {
+		t.Fatalf("write failed: %v", err)
+	}
+
+	waitForRevision(revision)
 }

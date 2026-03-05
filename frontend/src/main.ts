@@ -29,6 +29,13 @@ import {
   loadCache,
   clearCache,
 } from "./lib/graph-cache";
+import {
+  buildChildPath,
+  buildRenamePath,
+  getDisplayName,
+  shouldIgnoreTreeClick,
+  type ItemKind,
+} from "./lib/file-tree-ops";
 import * as pdfjsLib from "pdfjs-dist";
 
 // Setup PDF.js worker
@@ -60,7 +67,15 @@ let stateWatchTimerId: ReturnType<typeof window.setInterval> | null = null;
 let fileTreeWatchTimerId: ReturnType<typeof window.setInterval> | null = null;
 let isFileTreeWatchRunning = false;
 let fileTreeSignature = "";
-const FILE_TREE_WATCH_INTERVAL_MS = 2500;
+let suppressFileTreeClickUntil = 0;
+let suppressFileTreeClickPath = "";
+let itemFormMode: "create" | "rename" = "create";
+let itemFormKind: ItemKind = "file";
+let itemFormTargetPath = "";
+let itemFormTargetFolder = "";
+let lastLoadedMarkdownContent = "";
+let lastLoadedHtmlContent = "";
+const FILE_TREE_WATCH_INTERVAL_MS = 350;
 
 // Keyboard navigation state
 let fileTreeFocused = false;
@@ -214,10 +229,17 @@ function startFileTreeWatcher() {
             const nextSignature = buildFileTreeSignature(files);
 
             if (fileTreeSignature === nextSignature) {
+                await syncOpenFileWithVault();
                 return;
             }
 
             applyFileTreeSnapshot(files);
+            await LinkService.RebuildIndex();
+            await syncOpenFileWithVault();
+
+            if (showGraph) {
+                await refreshGraphData();
+            }
         } catch (err) {
             console.warn("Failed to watch file tree updates:", err);
         } finally {
@@ -294,7 +316,6 @@ async function handleVaultFolderSelection() {
         const path = await ConfigService.SelectVaultFolder();
         if (path) {
             hideVaultSetupDialog();
-            // Reload the app to apply the new vault
             await loadFileTree();
             startLastOpenedFileWatcher();
             startFileTreeWatcher();
@@ -339,6 +360,7 @@ function setupEventListeners() {
     document.getElementById("graph-btn")!.addEventListener("click", toggleGraphView);
     document.getElementById("refresh-btn")!.addEventListener("click", refresh);
     document.getElementById("timeline-submit")!.addEventListener("click", submitTimeline);
+    setupWindowDoubleClickMaximise();
 
     // Timeline input: ⌘+Enter to submit
     timelineInput.addEventListener("keydown", (e) => {
@@ -394,7 +416,11 @@ function setupEventListeners() {
     document.getElementById("image-fs-close")!.addEventListener("click", closeImageFullscreen);
 
     // Title editing (click to rename file)
-    document.getElementById("editor-title")!.addEventListener("click", startTitleEdit);
+    document.getElementById("editor-title")!.addEventListener("click", () => {
+        if (currentFilePath) {
+            showRenameForm(currentFilePath, false);
+        }
+    });
 
     // Handle external links in preview - open in external browser
     preview.addEventListener("click", async (e) => {
@@ -1017,50 +1043,132 @@ async function openSettings() {
 
 // New Note Creation
 function showNewNoteForm() {
-    const form = document.getElementById("new-note-form")!;
-    const input = document.getElementById("new-note-input") as HTMLInputElement;
-    form.style.display = "block";
-    input.value = "";
-    input.focus();
+    showItemForm({
+        mode: "create",
+        kind: "file",
+        targetFolder: "",
+    });
 }
 
 function hideNewNoteForm() {
     const form = document.getElementById("new-note-form")!;
+    const input = document.getElementById("new-note-input") as HTMLInputElement;
     form.style.display = "none";
+    input.value = "";
+    input.placeholder = "Enter filename (without .md)";
+    delete input.dataset.targetFolder;
+    itemFormMode = "create";
+    itemFormKind = "file";
+    itemFormTargetPath = "";
+    itemFormTargetFolder = "";
+}
+
+function showNewFolderForm(folderPath: string) {
+    showItemForm({
+        mode: "create",
+        kind: "folder",
+        targetFolder: folderPath,
+    });
+}
+
+function showRenameForm(targetPath: string, isDir: boolean) {
+    showItemForm({
+        mode: "rename",
+        kind: isDir ? "folder" : "file",
+        targetPath,
+    });
+}
+
+function showItemForm(options: {
+    mode: "create" | "rename";
+    kind: ItemKind;
+    targetFolder?: string;
+    targetPath?: string;
+}) {
+    const form = document.getElementById("new-note-form")!;
+    const input = document.getElementById("new-note-input") as HTMLInputElement;
+    const icon = document.getElementById("new-note-icon")!;
+    const extension = document.getElementById("new-note-extension")!;
+    const createButton = document.getElementById("new-note-create")!;
+
+    itemFormMode = options.mode;
+    itemFormKind = options.kind;
+    itemFormTargetFolder = options.targetFolder || "";
+    itemFormTargetPath = options.targetPath || "";
+
+    icon.textContent = options.kind === "folder" ? "📁" : "📄";
+    extension.textContent = options.kind === "folder" ? "" : ".md";
+    extension.style.display = options.kind === "folder" ? "none" : "inline";
+    createButton.textContent = options.mode === "rename" ? "Rename" : "Create";
+
+    if (options.mode === "rename" && options.targetPath) {
+        input.value = getDisplayName(options.targetPath, options.kind);
+        input.placeholder = options.kind === "folder" ? "Rename folder" : "Rename file";
+    } else if (options.kind === "folder") {
+        input.value = "";
+        input.placeholder = `New folder in ${itemFormTargetFolder || "root"}`;
+    } else {
+        input.value = "";
+        input.placeholder = `New file in ${itemFormTargetFolder || "root"}`;
+    }
+
+    form.style.display = "block";
+    input.focus();
+    input.select();
 }
 
 async function createNewNote() {
     const input = document.getElementById("new-note-input") as HTMLInputElement;
-    const filename = input.value.trim();
+    const enteredName = input.value;
 
-    if (!filename) {
+    if (!enteredName.trim()) {
         input.focus();
         return;
     }
-
-    // Sanitize filename (remove invalid characters)
-    const sanitized = filename.replace(/[<>:"/\\|?*]/g, "").trim();
-    if (!sanitized) {
-        input.focus();
-        return;
-    }
-
-    // Get target folder from input data attribute (if coming from folder context menu)
-    const targetFolder = input.dataset.targetFolder || "";
-    const relativePath = targetFolder ? `${targetFolder}/${sanitized}.md` : `${sanitized}.md`;
-    const initialContent = `# ${sanitized}\n\n`;
 
     try {
-        await FileService.CreateFile(relativePath, initialContent);
+        if (itemFormMode === "create") {
+            const relativePath = buildChildPath(itemFormTargetFolder, enteredName, itemFormKind);
+            if (itemFormKind === "folder") {
+                await FileService.CreateDirectory(relativePath);
+                hideNewNoteForm();
+                await loadFileTree();
+                expandParentFolders(relativePath);
+                updateFileTreeSelection(relativePath);
+                return;
+            }
+
+            const initialTitle = getDisplayName(relativePath, "file");
+            const initialContent = `# ${initialTitle}\n\n`;
+            await FileService.CreateFile(relativePath, initialContent);
+            hideNewNoteForm();
+            await loadFileTree();
+            await openNote(relativePath);
+            return;
+        }
+
+        const nextPath = buildRenamePath(itemFormTargetPath, enteredName, itemFormKind);
+        if (nextPath === itemFormTargetPath) {
+            hideNewNoteForm();
+            return;
+        }
+
+        const previousPath = itemFormTargetPath;
+        await FileService.MoveFile(previousPath, nextPath);
         hideNewNoteForm();
-        // Reset input state
-        delete input.dataset.targetFolder;
-        input.placeholder = "Enter filename (without .md)";
+
+        updateCurrentPathsAfterMove(previousPath, nextPath, itemFormKind === "folder");
         await loadFileTree();
-        await openNote(relativePath);
+        updateFileTreeSelection(currentFilePath || nextPath);
+        await LinkService.RebuildIndex();
     } catch (err) {
-        console.error("Failed to create note:", err);
-        alert(`Failed to create note: ${err}`);
+        console.error("Failed to submit item form:", err);
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        if (errorMsg.includes("exist")) {
+            alert("同じ名前の項目がすでに存在します");
+        } else {
+            alert(errorMsg);
+        }
     }
 }
 
@@ -1068,6 +1176,8 @@ async function createNewNote() {
 function setupContextMenu() {
     const contextMenu = document.getElementById("context-menu")!;
     const ctxNewFile = document.getElementById("ctx-new-file")!;
+    const ctxNewFolder = document.getElementById("ctx-new-folder")!;
+    const ctxRename = document.getElementById("ctx-rename")!;
     const ctxDelete = document.getElementById("ctx-delete")!;
 
     // Hide context menu on any interaction elsewhere
@@ -1088,6 +1198,14 @@ function setupContextMenu() {
         }
     }, true); // capture phase
 
+    fileTree.addEventListener("contextmenu", (e) => {
+        if ((e.target as HTMLElement).closest(".file-item")) {
+            return;
+        }
+        e.preventDefault();
+        showContextMenu(e.clientX, e.clientY, "", true);
+    });
+
     // Handle "New File" click
     ctxNewFile.addEventListener("click", () => {
         // Save path before hiding (hideContextMenu clears these)
@@ -1095,10 +1213,17 @@ function setupContextMenu() {
         const isDir = contextMenuTargetIsDir;
         hideContextMenu();
         if (isDir) {
-            showNewNoteFormInFolder(targetPath);
+            showItemForm({ mode: "create", kind: "file", targetFolder: targetPath });
         } else {
             showNewNoteForm();
         }
+    });
+
+    ctxNewFolder.addEventListener("click", () => {
+        const targetPath = contextMenuTargetPath;
+        const isDir = contextMenuTargetIsDir;
+        hideContextMenu();
+        showNewFolderForm(isDir ? targetPath : "");
     });
 
     // Handle "Delete" click
@@ -1110,41 +1235,33 @@ function setupContextMenu() {
         await deleteTargetPathWithArgs(targetPath, isDir);
     });
 
-    // Handle "Rename" click
-    const ctxRename = document.getElementById("ctx-rename")!;
     ctxRename.addEventListener("click", async () => {
         const targetPath = contextMenuTargetPath;
         const isDir = contextMenuTargetIsDir;
         hideContextMenu();
 
-        // Only rename files, not directories (for now)
-        if (isDir) return;
-
-        // Open the file first if not already open
-        if (currentFilePath !== targetPath) {
+        if (!isDir && currentFilePath !== targetPath) {
             await openNote(targetPath);
         }
-
-        // Start title editing mode
-        setTimeout(() => {
-            startTitleEdit();
-        }, 100);
+        showRenameForm(targetPath, isDir);
     });
 }
 
 function showContextMenu(x: number, y: number, path: string, isDir: boolean) {
     const contextMenu = document.getElementById("context-menu")!;
     const ctxNewFile = document.getElementById("ctx-new-file")!;
+    const ctxNewFolder = document.getElementById("ctx-new-folder")!;
     const ctxRename = document.getElementById("ctx-rename")!;
+    const ctxDelete = document.getElementById("ctx-delete")!;
+    const isRoot = path === "";
 
     contextMenuTargetPath = path;
     contextMenuTargetIsDir = isDir;
 
-    // Show/hide "New File" based on whether it's a directory
     ctxNewFile.style.display = isDir ? "flex" : "none";
-
-    // Show/hide "Rename" based on whether it's a file (not directory)
-    ctxRename.style.display = isDir ? "none" : "flex";
+    ctxNewFolder.style.display = isDir ? "flex" : "none";
+    ctxRename.style.display = isRoot ? "none" : "flex";
+    ctxDelete.style.display = isRoot ? "none" : "flex";
 
     contextMenu.style.display = "block";
     contextMenu.style.left = x + "px";
@@ -1177,11 +1294,7 @@ async function moveFileToFolder(sourcePath: string, targetFolder: string) {
         await FileService.MoveFile(sourcePath, newPath!);
         await loadFileTree();
 
-        // Update current note path if the moved file was open
-        if (currentNote && currentNote.path === sourcePath) {
-            currentNote.path = newPath!;
-            await StateService.SetLastOpenedFile(newPath!, "markdown");
-        }
+        updateCurrentPathsAfterMove(sourcePath, newPath!, false);
     } catch (err) {
         console.error("Failed to move file:", err);
         alert(`Failed to move file: ${err}`);
@@ -1201,16 +1314,8 @@ async function deleteTargetPathWithArgs(targetPath: string, isDir: boolean) {
         await loadFileTree();
 
         // If deleted file was currently open, clear editor
-        if (currentNote && currentNote.path === targetPath) {
-            currentNote = null;
-            editor.value = "";
-            // Reset cursor position and scroll to the top
-            editor.selectionStart = 0;
-            editor.selectionEnd = 0;
-            editor.scrollTop = 0;
-            updatePreview();
-            clearBacklinks();
-            clearOutgoingLinks();
+        if (currentFilePath && (currentFilePath === targetPath || currentFilePath.startsWith(`${targetPath}/`))) {
+            clearCurrentSelection();
             await StateService.ClearLastOpenedFile();
         }
     } catch (err) {
@@ -1220,15 +1325,11 @@ async function deleteTargetPathWithArgs(targetPath: string, isDir: boolean) {
 }
 
 function showNewNoteFormInFolder(folderPath: string) {
-    const form = document.getElementById("new-note-form")!;
-    const input = document.getElementById("new-note-input") as HTMLInputElement;
-
-    // Store target folder path for creation
-    input.dataset.targetFolder = folderPath;
-    form.style.display = "block";
-    input.value = "";
-    input.placeholder = `New file in ${folderPath || "root"}`;
-    input.focus();
+    showItemForm({
+        mode: "create",
+        kind: "file",
+        targetFolder: folderPath,
+    });
 }
 
 // Theme
@@ -1280,6 +1381,9 @@ function showEmptyMainPane() {
     outlineList.innerHTML = '<div class="outline-empty">No outline available</div>';
     currentNote = null;
     currentFilePath = null;
+    currentHtmlPath = null;
+    lastLoadedMarkdownContent = "";
+    lastLoadedHtmlContent = "";
 }
 
 // File Type Helpers
@@ -1756,6 +1860,7 @@ async function openHTML(path: string): Promise<void> {
     try {
         const content = await FileService.ReadFile(path);
         currentHtmlPath = path;
+        lastLoadedHtmlContent = content;
 
         htmlEditor.value = content;
         htmlEditorTitle.textContent = path.split('/').pop() || 'HTML';
@@ -1788,7 +1893,8 @@ async function saveHtmlFile() {
     if (!currentHtmlPath) return;
 
     try {
-        await FileService.CreateFile(currentHtmlPath, htmlEditor.value);
+        await FileService.WriteFile(currentHtmlPath, htmlEditor.value);
+        lastLoadedHtmlContent = htmlEditor.value;
     } catch (err) {
         console.error("Failed to save HTML:", err);
     }
@@ -1933,6 +2039,17 @@ function createFileElement(file: FileInfo): HTMLElement {
         }
 
         el.addEventListener("click", (e) => {
+            if (shouldIgnoreTreeClick(
+                e.button,
+                e.ctrlKey,
+                e.metaKey,
+                file.path,
+                suppressFileTreeClickPath,
+                suppressFileTreeClickUntil,
+                Date.now(),
+            )) {
+                return;
+            }
             e.stopPropagation();
             el.classList.toggle("expanded");
             const iconSpan = el.querySelector(".folder-icon");
@@ -1949,6 +2066,8 @@ function createFileElement(file: FileInfo): HTMLElement {
         el.addEventListener("contextmenu", (e) => {
             e.preventDefault();
             e.stopPropagation();
+            suppressFileTreeClickPath = file.path;
+            suppressFileTreeClickUntil = Date.now() + 300;
             showContextMenu(e.clientX, e.clientY, file.path, true);
         });
 
@@ -1972,6 +2091,17 @@ function createFileElement(file: FileInfo): HTMLElement {
     } else {
         // Handle file click based on file type
         el.addEventListener("click", (e) => {
+            if (shouldIgnoreTreeClick(
+                e.button,
+                e.ctrlKey,
+                e.metaKey,
+                file.path,
+                suppressFileTreeClickPath,
+                suppressFileTreeClickUntil,
+                Date.now(),
+            )) {
+                return;
+            }
             e.stopPropagation();
             openFile(file.path, file.fileType || "other");
         });
@@ -1980,6 +2110,8 @@ function createFileElement(file: FileInfo): HTMLElement {
         el.addEventListener("contextmenu", (e) => {
             e.preventDefault();
             e.stopPropagation();
+            suppressFileTreeClickPath = file.path;
+            suppressFileTreeClickUntil = Date.now() + 300;
             showContextMenu(e.clientX, e.clientY, file.path, false);
         });
     }
@@ -2001,6 +2133,7 @@ async function openNote(path: string): Promise<boolean> {
 
         currentFilePath = path;
         editor.value = currentNote.content;
+        lastLoadedMarkdownContent = currentNote.content;
         // Reset cursor position and scroll to the top
         editor.selectionStart = 0;
         editor.selectionEnd = 0;
@@ -2041,166 +2174,55 @@ function updatePaneTitles(title: string) {
     if (previewTitle) previewTitle.textContent = title;
 }
 
-// Title editing state
-let isTitleEditing = false;
-
-// Start title editing mode
-function startTitleEdit() {
-    // Only allow editing if a file is open
-    if (!currentFilePath) return;
-
-    // Prevent multiple edit modes
-    if (isTitleEditing) return;
-    isTitleEditing = true;
-
-    const editorTitle = document.getElementById("editor-title")!;
-    const currentTitle = editorTitle.textContent || "";
-
-    // Create input element
-    const input = document.createElement("input");
-    input.type = "text";
-    input.className = "title-edit-input";
-    input.value = currentTitle;
-
-    // Get file extension from currentFilePath
-    const ext = currentFilePath.substring(currentFilePath.lastIndexOf(".")) || "";
-
-    // Replace title span with input
-    editorTitle.textContent = "";
-    editorTitle.appendChild(input);
-
-    // Add extension hint
-    const extHint = document.createElement("span");
-    extHint.className = "title-edit-ext";
-    extHint.textContent = ext;
-    editorTitle.appendChild(extHint);
-
-    // Add Save button
-    const saveBtn = document.createElement("button");
-    saveBtn.className = "title-edit-save";
-    saveBtn.textContent = "Save";
-    saveBtn.type = "button";
-    editorTitle.appendChild(saveBtn);
-
-    // Focus and select
-    input.focus();
-    input.select();
-
-    // Track IME composition state (for Japanese/Chinese/Korean input)
-    let isComposing = false;
-    input.addEventListener("compositionstart", () => {
-        isComposing = true;
-    });
-    input.addEventListener("compositionend", () => {
-        isComposing = false;
-    });
-
-    // Handle keydown (⌘+Enter or Ctrl+Enter to save, Escape to cancel)
-    input.addEventListener("keydown", async (e) => {
-        if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !isComposing) {
-            e.preventDefault();
-            await finishTitleEdit(input.value.trim(), ext);
-        } else if (e.key === "Escape") {
-            e.preventDefault();
-            cancelTitleEdit(currentTitle);
+function updateCurrentPathsAfterMove(previousPath: string, nextPath: string, isDir: boolean) {
+    const rewritePath = (path: string | null): string | null => {
+        if (!path) return path;
+        if (path === previousPath) {
+            return nextPath;
         }
-    });
-
-    // Handle Save button click
-    saveBtn.addEventListener("click", async (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        await finishTitleEdit(input.value.trim(), ext);
-    });
-
-    // Handle blur (click outside) - but not when clicking Save button
-    input.addEventListener("blur", (e) => {
-        // Check if the related target is the save button
-        const relatedTarget = e.relatedTarget as HTMLElement;
-        if (relatedTarget === saveBtn) {
-            return; // Don't cancel if clicking Save button
+        if (isDir && path.startsWith(`${previousPath}/`)) {
+            return `${nextPath}${path.slice(previousPath.length)}`;
         }
-        // Small delay to allow button click to process first
-        setTimeout(() => {
-            if (isTitleEditing) {
-                cancelTitleEdit(currentTitle);
-            }
-        }, 150);
-    });
-}
+        return path;
+    };
 
-// Finish title editing and rename file
-async function finishTitleEdit(newName: string, ext: string) {
-    if (!currentFilePath || !newName) {
-        cancelTitleEdit(document.getElementById("editor-title")?.textContent || "");
-        return;
+    currentFilePath = rewritePath(currentFilePath);
+    currentHtmlPath = rewritePath(currentHtmlPath);
+    if (currentNote?.path) {
+        currentNote.path = rewritePath(currentNote.path) || currentNote.path;
     }
 
-    // Validate new name
-    if (newName.includes("/") || newName.includes("\\")) {
-        alert("ファイル名に / や \\ は使えません");
-        cancelTitleEdit(document.getElementById("editor-title")?.textContent || "");
-        return;
-    }
-
-    // Build new path
-    const dir = currentFilePath.substring(0, currentFilePath.lastIndexOf("/"));
-    const newFileName = newName + ext;
-    const newPath = dir ? `${dir}/${newFileName}` : newFileName;
-
-    // If same path, just cancel
-    if (newPath === currentFilePath) {
-        const currentTitle = currentFilePath.split("/").pop()?.replace(/\.[^/.]+$/, "") || "";
-        cancelTitleEdit(currentTitle);
-        return;
-    }
-
-    try {
-        // Move (rename) the file
-        await FileService.MoveFile(currentFilePath, newPath);
-
-        // Update state
-        const oldPath = currentFilePath;
-        currentFilePath = newPath;
-
-        // Update currentNote if it's a markdown file
-        if (currentNote && currentNote.path === oldPath) {
-            currentNote.path = newPath;
+    if (currentFilePath) {
+        const fileType = getFileTypeFromPath(currentFilePath);
+        lastSyncedOpenedFile = toStateKey(currentFilePath, fileType);
+        void StateService.SetLastOpenedFile(currentFilePath, fileType).catch((err) => {
+            console.warn("Failed to persist moved path:", err);
+        });
+        if (fileType === "markdown") {
+            updatePaneTitles(getDisplayName(currentFilePath, "file"));
+        } else if (fileType === "html") {
+            htmlEditorTitle.textContent = currentFilePath.split("/").pop() || "HTML";
         }
-
-        // Update title display
-        isTitleEditing = false;
-        updatePaneTitles(newName);
-
-        // Refresh file tree
-        await loadFileTree();
-
-        // Update selection in file tree
-        updateFileTreeSelection(newPath);
-
-        // Rebuild link index to update any references
-        await LinkService.RebuildIndex();
-
-        console.log(`Renamed file: ${oldPath} -> ${newPath}`);
-    } catch (err) {
-        console.error("Failed to rename file:", err);
-        const errorMsg = err instanceof Error ? err.message : String(err);
-        if (errorMsg.includes("exist")) {
-            alert("同じ名前のファイルがすでに存在します");
-        } else {
-            alert(`ファイル名の変更に失敗しました: ${errorMsg}`);
-        }
-        // Restore original title
-        const currentTitle = currentFilePath.split("/").pop()?.replace(/\.[^/.]+$/, "") || "";
-        cancelTitleEdit(currentTitle);
     }
 }
 
-// Cancel title editing
-function cancelTitleEdit(originalTitle: string) {
-    isTitleEditing = false;
-    const editorTitle = document.getElementById("editor-title")!;
-    editorTitle.textContent = originalTitle;
+function clearCurrentSelection() {
+    hideAllViewers();
+    editorContainer.style.display = "flex";
+    currentNote = null;
+    currentFilePath = null;
+    currentHtmlPath = null;
+    lastLoadedMarkdownContent = "";
+    lastLoadedHtmlContent = "";
+    lastSyncedOpenedFile = "";
+    editor.value = "";
+    editor.selectionStart = 0;
+    editor.selectionEnd = 0;
+    editor.scrollTop = 0;
+    updatePreview();
+    clearBacklinks();
+    clearOutgoingLinks();
+    updatePaneTitles("Select a note...");
 }
 
 async function saveCurrentNote() {
@@ -2209,8 +2231,90 @@ async function saveCurrentNote() {
     try {
         await NoteService.SaveNote(currentNote.path, editor.value);
         currentNote.content = editor.value;
+        lastLoadedMarkdownContent = editor.value;
+        const refreshedNote = await NoteService.GetNote(currentNote.path);
+        if (refreshedNote) {
+            currentNote = refreshedNote;
+        }
     } catch (err) {
         console.error("Failed to save note:", err);
+    }
+}
+
+async function syncOpenFileWithVault() {
+    if (!currentFilePath) {
+        return;
+    }
+
+    const fileType = getFileTypeFromPath(currentFilePath);
+
+    if (fileType === "markdown") {
+        if (!currentNote) {
+            return;
+        }
+        if (editor.value !== currentNote.content) {
+            return;
+        }
+
+        try {
+            const note = await NoteService.GetNote(currentFilePath);
+            if (!note) {
+                return;
+            }
+
+            if (note.content === currentNote.content) {
+                await Promise.allSettled([
+                    loadBacklinks(note.path),
+                    loadOutgoingLinks(note.path),
+                ]);
+                return;
+            }
+
+            currentNote = note;
+            lastLoadedMarkdownContent = note.content;
+            editor.value = note.content;
+            editor.selectionStart = 0;
+            editor.selectionEnd = 0;
+            editor.scrollTop = 0;
+            updatePreview();
+            await Promise.allSettled([
+                loadBacklinks(note.path),
+                loadOutgoingLinks(note.path),
+            ]);
+            updatePaneTitles(getDisplayName(note.path, "file"));
+            updateFileTreeSelection(note.path);
+        } catch (err) {
+            console.warn("Failed to refresh markdown note from vault:", err);
+            clearCurrentSelection();
+            await StateService.ClearLastOpenedFile();
+        }
+        return;
+    }
+
+    if (fileType === "html") {
+        if (htmlEditor.value !== lastLoadedHtmlContent) {
+            return;
+        }
+        try {
+            const nextContent = await FileService.ReadFile(currentFilePath);
+            if (htmlEditor.value !== nextContent) {
+                lastLoadedHtmlContent = nextContent;
+                htmlEditor.value = nextContent;
+                updateHtmlPreview();
+            }
+        } catch (err) {
+            console.warn("Failed to refresh HTML file from vault:", err);
+            clearCurrentSelection();
+        }
+        return;
+    }
+
+    if (fileType === "image" || fileType === "pdf" || fileType === "other") {
+        try {
+            await openFile(currentFilePath, fileType);
+        } catch (err) {
+            console.warn("Failed to reopen current file after vault sync:", err);
+        }
     }
 }
 
@@ -2544,6 +2648,25 @@ async function refresh() {
     // If graph view is showing, refresh the graph data
     if (showGraph) {
         await refreshGraphData();
+    }
+}
+
+function setupWindowDoubleClickMaximise() {
+    const selectors = [".toolbar", ".sidebar-header"];
+
+    for (const selector of selectors) {
+        const element = document.querySelector(selector);
+        element?.addEventListener("dblclick", async (e) => {
+            const target = e.target as HTMLElement | null;
+            if (target?.closest("button, input, select, textarea, a, label")) {
+                return;
+            }
+            try {
+                await WindowService.ToggleMaximise();
+            } catch (err) {
+                console.error("Failed to toggle maximize from double click:", err);
+            }
+        });
     }
 }
 

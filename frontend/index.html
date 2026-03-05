@@ -54,12 +54,12 @@
                 </div>
             </div>
 
-            <!-- New Note Input Form -->
+            <!-- Item Input Form -->
             <div class="new-note-form" id="new-note-form" style="display: none;">
                 <div class="new-note-input-container">
-                    <span class="new-note-icon">📄</span>
+                    <span class="new-note-icon" id="new-note-icon">📄</span>
                     <input type="text" id="new-note-input" placeholder="Enter filename (without .md)" autocomplete="off">
-                    <span class="new-note-extension">.md</span>
+                    <span class="new-note-extension" id="new-note-extension">.md</span>
                     <button id="new-note-create" class="new-note-btn create">Create</button>
                     <button id="new-note-cancel" class="new-note-btn cancel">Cancel</button>
                 </div>
@@ -234,6 +234,7 @@
     <!-- Context Menu -->
     <div class="context-menu" id="context-menu" style="display: none;">
         <div class="context-menu-item" id="ctx-new-file">📄 New File</div>
+        <div class="context-menu-item" id="ctx-new-folder">📁 New Folder</div>
         <div class="context-menu-item" id="ctx-rename">✏️ Rename</div>
         <div class="context-menu-item danger" id="ctx-delete">🗑️ Delete</div>
     </div>

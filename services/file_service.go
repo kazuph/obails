@@ -2,6 +2,7 @@ package services
 
 import (
 	"encoding/base64"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,6 +17,8 @@ var imageExtensions = map[string]bool{
 	".png": true, ".jpg": true, ".jpeg": true, ".gif": true,
 	".webp": true, ".svg": true, ".bmp": true, ".ico": true,
 }
+
+var ErrInvalidPath = errors.New("invalid vault path")
 
 // GetFileType determines the file type based on extension
 func GetFileType(filename string) string {
@@ -48,7 +51,10 @@ func NewFileService(configService *ConfigService) *FileService {
 
 // ReadFile reads the content of a file
 func (s *FileService) ReadFile(relativePath string) (string, error) {
-	fullPath := s.getFullPath(relativePath)
+	fullPath, err := s.resolveFullPath(relativePath, false)
+	if err != nil {
+		return "", err
+	}
 	content, err := os.ReadFile(fullPath)
 	if err != nil {
 		return "", err
@@ -58,7 +64,10 @@ func (s *FileService) ReadFile(relativePath string) (string, error) {
 
 // WriteFile writes content to a file
 func (s *FileService) WriteFile(relativePath string, content string) error {
-	fullPath := s.getFullPath(relativePath)
+	fullPath, err := s.resolveFullPath(relativePath, false)
+	if err != nil {
+		return err
+	}
 
 	// Ensure directory exists
 	dir := filepath.Dir(fullPath)
@@ -71,7 +80,10 @@ func (s *FileService) WriteFile(relativePath string, content string) error {
 
 // CreateFile creates a new file with content (fails if file exists)
 func (s *FileService) CreateFile(relativePath string, content string) error {
-	fullPath := s.getFullPath(relativePath)
+	fullPath, err := s.resolveFullPath(relativePath, false)
+	if err != nil {
+		return err
+	}
 
 	// Check if file already exists
 	if _, err := os.Stat(fullPath); err == nil {
@@ -89,7 +101,10 @@ func (s *FileService) CreateFile(relativePath string, content string) error {
 
 // DeletePath deletes a file or directory (moves to trash on macOS)
 func (s *FileService) DeletePath(relativePath string) error {
-	fullPath := s.getFullPath(relativePath)
+	fullPath, err := s.resolveFullPath(relativePath, false)
+	if err != nil {
+		return err
+	}
 
 	// Check if path exists
 	info, err := os.Stat(fullPath)
@@ -107,8 +122,14 @@ func (s *FileService) DeletePath(relativePath string) error {
 
 // MoveFile moves a file from one location to another
 func (s *FileService) MoveFile(sourcePath string, destPath string) error {
-	sourceFullPath := s.getFullPath(sourcePath)
-	destFullPath := s.getFullPath(destPath)
+	sourceFullPath, err := s.resolveFullPath(sourcePath, false)
+	if err != nil {
+		return err
+	}
+	destFullPath, err := s.resolveFullPath(destPath, false)
+	if err != nil {
+		return err
+	}
 
 	// Check if source exists
 	if _, err := os.Stat(sourceFullPath); err != nil {
@@ -131,18 +152,25 @@ func (s *FileService) MoveFile(sourcePath string, destPath string) error {
 
 // ListDirectory lists files and directories
 func (s *FileService) ListDirectory(relativePath string) ([]models.FileInfo, error) {
-	fullPath := s.getFullPath(relativePath)
-	return s.listDirectoryRecursive(fullPath, relativePath, 1)
+	cleanPath, err := s.cleanRelativePath(relativePath, true)
+	if err != nil {
+		return nil, err
+	}
+	fullPath, err := s.resolveFullPath(cleanPath, true)
+	if err != nil {
+		return nil, err
+	}
+	return s.listDirectoryRecursive(fullPath, cleanPath, 1)
 }
 
 // ListDirectoryTree lists the entire directory tree
 func (s *FileService) ListDirectoryTree() ([]models.FileInfo, error) {
 	vaultPath := s.configService.GetVaultPath()
-	return s.listDirectoryRecursive(vaultPath, "", 3) // 3 levels deep
+	return s.listDirectoryRecursive(vaultPath, "", -1)
 }
 
 func (s *FileService) listDirectoryRecursive(fullPath string, relativePath string, maxDepth int) ([]models.FileInfo, error) {
-	if maxDepth <= 0 {
+	if maxDepth == 0 {
 		return nil, nil
 	}
 
@@ -175,11 +203,15 @@ func (s *FileService) listDirectoryRecursive(fullPath string, relativePath strin
 			fileInfo.FileType = "" // Directories don't have a file type
 		}
 
-		if entry.IsDir() && maxDepth > 1 {
+		if entry.IsDir() && maxDepth != 1 {
+			nextDepth := maxDepth
+			if nextDepth > 0 {
+				nextDepth--
+			}
 			children, err := s.listDirectoryRecursive(
 				filepath.Join(fullPath, entry.Name()),
 				entryRelPath,
-				maxDepth-1,
+				nextDepth,
 			)
 			if err == nil {
 				fileInfo.Children = children
@@ -208,34 +240,56 @@ func (s *FileService) listDirectoryRecursive(fullPath string, relativePath strin
 
 // CreateDirectory creates a new directory
 func (s *FileService) CreateDirectory(relativePath string) error {
-	fullPath := s.getFullPath(relativePath)
-	return os.MkdirAll(fullPath, 0755)
+	fullPath, err := s.resolveFullPath(relativePath, false)
+	if err != nil {
+		return err
+	}
+
+	parentDir := filepath.Dir(fullPath)
+	if err := os.MkdirAll(parentDir, 0755); err != nil {
+		return err
+	}
+
+	return os.Mkdir(fullPath, 0755)
 }
 
 // DeleteFile deletes a file or empty directory
 func (s *FileService) DeleteFile(relativePath string) error {
-	fullPath := s.getFullPath(relativePath)
+	fullPath, err := s.resolveFullPath(relativePath, false)
+	if err != nil {
+		return err
+	}
 	return os.Remove(fullPath)
 }
 
 // FileExists checks if a file exists
 func (s *FileService) FileExists(relativePath string) bool {
-	fullPath := s.getFullPath(relativePath)
-	_, err := os.Stat(fullPath)
+	fullPath, err := s.resolveFullPath(relativePath, false)
+	if err != nil {
+		return false
+	}
+	_, err = os.Stat(fullPath)
 	return err == nil
 }
 
 // GetFileInfo returns information about a file
 func (s *FileService) GetFileInfo(relativePath string) (*models.FileInfo, error) {
-	fullPath := s.getFullPath(relativePath)
+	cleanPath, err := s.cleanRelativePath(relativePath, false)
+	if err != nil {
+		return nil, err
+	}
+	fullPath, err := s.resolveFullPath(cleanPath, false)
+	if err != nil {
+		return nil, err
+	}
 	info, err := os.Stat(fullPath)
 	if err != nil {
 		return nil, err
 	}
 
 	return &models.FileInfo{
-		Name:       filepath.Base(relativePath),
-		Path:       relativePath,
+		Name:       filepath.Base(cleanPath),
+		Path:       cleanPath,
 		IsDir:      info.IsDir(),
 		ModifiedAt: info.ModTime(),
 	}, nil
@@ -344,18 +398,55 @@ func (s *FileService) SearchFileContents(query string, limit int, caseSensitive 
 	return results, nil
 }
 
-func (s *FileService) getFullPath(relativePath string) string {
-	vaultPath := s.configService.GetVaultPath()
-	if relativePath == "" {
-		return vaultPath
+func (s *FileService) resolveFullPath(relativePath string, allowRoot bool) (string, error) {
+	cleanPath, err := s.cleanRelativePath(relativePath, allowRoot)
+	if err != nil {
+		return "", err
 	}
-	return filepath.Join(vaultPath, relativePath)
+
+	vaultPath := s.configService.GetVaultPath()
+	if cleanPath == "" {
+		return vaultPath, nil
+	}
+
+	return filepath.Join(vaultPath, filepath.FromSlash(cleanPath)), nil
+}
+
+func (s *FileService) cleanRelativePath(relativePath string, allowRoot bool) (string, error) {
+	trimmed := strings.TrimSpace(relativePath)
+	if trimmed == "" {
+		if allowRoot {
+			return "", nil
+		}
+		return "", ErrInvalidPath
+	}
+
+	if filepath.IsAbs(trimmed) {
+		return "", ErrInvalidPath
+	}
+
+	cleaned := filepath.Clean(filepath.FromSlash(trimmed))
+	if cleaned == "." {
+		if allowRoot {
+			return "", nil
+		}
+		return "", ErrInvalidPath
+	}
+
+	if cleaned == ".." || strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) {
+		return "", ErrInvalidPath
+	}
+
+	return filepath.ToSlash(cleaned), nil
 }
 
 // ReadBinaryFile reads a binary file and returns it as base64 encoded string
 // Used for images and PDFs that need to be displayed in the frontend
 func (s *FileService) ReadBinaryFile(relativePath string) (string, error) {
-	fullPath := s.getFullPath(relativePath)
+	fullPath, err := s.resolveFullPath(relativePath, false)
+	if err != nil {
+		return "", err
+	}
 	content, err := os.ReadFile(fullPath)
 	if err != nil {
 		return "", err
@@ -388,7 +479,10 @@ func GetMimeType(filename string) string {
 // OpenExternal opens a file with the system's default application
 // Uses macOS 'open' command
 func (s *FileService) OpenExternal(relativePath string) error {
-	fullPath := s.getFullPath(relativePath)
+	fullPath, err := s.resolveFullPath(relativePath, false)
+	if err != nil {
+		return err
+	}
 
 	// Verify the file exists
 	if _, err := os.Stat(fullPath); err != nil {

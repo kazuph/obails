@@ -89,8 +89,9 @@ tags:
 内容`;
     const result = parseMarkdown(input);
     expect(result).toContain('class="frontmatter"');
-    expect(result).toContain("Front Matter");
-    expect(result).toContain("title: 家族会話記録");
+    expect(result).toContain("Metadata");
+    expect(result).toContain("frontmatter-key");
+    expect(result).toContain("家族会話記録");
     expect(result).toContain("<h1>要約</h1>");
     expect(result).toContain("<p>内容</p>");
   });

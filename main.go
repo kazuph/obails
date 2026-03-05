@@ -11,6 +11,7 @@ import (
 
 //go:embed all:frontend/dist
 var assets embed.FS
+
 //go:embed build/appicon.png
 var appIcon []byte
 
@@ -31,6 +32,7 @@ func main() {
 	linkService := services.NewLinkService(fileService, configService)
 	graphService := services.NewGraphService(linkService, fileService, configService)
 	windowService := services.NewWindowService()
+	vaultWatchService := services.NewVaultWatchService(configService)
 
 	// Build link index on startup
 	go func() {
@@ -38,6 +40,10 @@ func main() {
 			log.Printf("Warning: Failed to build link index: %v", err)
 		}
 	}()
+
+	if err := vaultWatchService.Start(); err != nil {
+		log.Printf("Warning: Failed to start vault watcher: %v", err)
+	}
 
 	// Create the application
 	app := application.New(application.Options{
@@ -51,6 +57,7 @@ func main() {
 			application.NewService(noteService),
 			application.NewService(linkService),
 			application.NewService(graphService),
+			application.NewService(vaultWatchService),
 			application.NewService(windowService),
 		},
 		Assets: application.AssetOptions{
@@ -80,6 +87,12 @@ func main() {
 
 	// Set app reference for config service (for dialogs)
 	configService.SetApp(app)
+
+	app.OnShutdown(func() {
+		if err := vaultWatchService.Stop(); err != nil {
+			log.Printf("Warning: Failed to stop vault watcher: %v", err)
+		}
+	})
 
 	// Run the application
 	if err := app.Run(); err != nil {
