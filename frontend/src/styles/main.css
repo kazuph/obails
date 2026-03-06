@@ -1985,6 +1985,42 @@ body {
     transform: translateY(0);
 }
 
+.secondary-btn,
+.danger-btn {
+    border: none;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s;
+}
+
+.secondary-btn {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.secondary-btn:hover {
+    background: var(--border);
+    transform: translateY(-1px);
+}
+
+.danger-btn {
+    background: #dc3545;
+    color: white;
+}
+
+.danger-btn:hover {
+    background: #b3261e;
+    transform: translateY(-1px);
+}
+
+.secondary-btn:active,
+.danger-btn:active {
+    transform: translateY(0);
+}
+
 /* ========== SHORTCUTS HELP OVERLAY ========== */
 
 .shortcuts-overlay {

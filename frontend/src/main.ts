@@ -78,6 +78,8 @@ let suppressFileTreeClickPath = "";
 let suppressContextMenuDismissUntil = 0;
 let lastContextMenuX = 0;
 let lastContextMenuY = 0;
+let pendingDeleteTargetPath = "";
+let pendingDeleteIsDir = false;
 let itemFormMode: "create" | "rename" = "create";
 let itemFormKind: ItemKind = "file";
 let itemFormTargetPath = "";
@@ -381,6 +383,7 @@ function setupEventListeners() {
 
     // Vault setup dialog
     document.getElementById("vault-setup-btn")!.addEventListener("click", handleVaultFolderSelection);
+    setupDeleteConfirmDialog();
 
     // Graph overlay close button
     document.getElementById("graph-close")!.addEventListener("click", hideGraphView);
@@ -472,8 +475,11 @@ function setupEventListeners() {
         // ESC to close overlays (skip if file tree is focused - handled separately)
         if (e.key === "Escape" && !fileTreeFocused) {
             const shortcutsOverlay = document.getElementById("shortcuts-overlay");
+            const deleteConfirmOverlay = document.getElementById("delete-confirm-overlay");
             if (shortcutsOverlay?.classList.contains("visible")) {
                 hideShortcutsHelp();
+            } else if (deleteConfirmOverlay?.style.display !== "none") {
+                hideDeleteConfirmDialog();
             } else if (pdfIsFullscreen) {
                 closePdfFullscreen();
             } else if (imageFullscreenOverlay.style.display !== "none") {
@@ -1255,18 +1261,18 @@ function setupContextMenu() {
         const targetPath = contextMenuTargetPath;
         const isDir = contextMenuTargetIsDir;
         hideContextMenu();
-        if (isDir) {
-            showItemForm({ mode: "create", kind: "file", targetFolder: targetPath });
-        } else {
-            showNewNoteForm();
-        }
+        showItemForm({
+            mode: "create",
+            kind: "file",
+            targetFolder: resolveContextMenuTargetFolder(targetPath, isDir),
+        });
     });
 
     ctxNewFolder.addEventListener("click", () => {
         const targetPath = contextMenuTargetPath;
         const isDir = contextMenuTargetIsDir;
         hideContextMenu();
-        showNewFolderForm(isDir ? targetPath : "");
+        showNewFolderForm(resolveContextMenuTargetFolder(targetPath, isDir));
     });
 
     // Handle "Delete" click
@@ -1304,8 +1310,8 @@ function showContextMenu(x: number, y: number, path: string, isDir: boolean) {
     lastContextMenuX = x;
     lastContextMenuY = y;
 
-    ctxNewFile.style.display = isDir ? "flex" : "none";
-    ctxNewFolder.style.display = isDir ? "flex" : "none";
+    ctxNewFile.style.display = "flex";
+    ctxNewFolder.style.display = "flex";
     ctxRename.style.display = isRoot ? "none" : "flex";
     ctxDelete.style.display = isRoot ? "none" : "flex";
 
@@ -1338,6 +1344,14 @@ function isContextMenuVisible(): boolean {
     return contextMenu.style.display !== "none";
 }
 
+function resolveContextMenuTargetFolder(path: string, isDir: boolean): string {
+    if (isDir) {
+        return path;
+    }
+    const lastSlash = path.lastIndexOf("/");
+    return lastSlash >= 0 ? path.slice(0, lastSlash) : "";
+}
+
 async function moveFileToFolder(sourcePath: string, targetFolder: string) {
     const fileName = sourcePath.split("/").pop();
     const newPath = targetFolder ? `${targetFolder}/${fileName}` : fileName;
@@ -1358,16 +1372,90 @@ async function moveFileToFolder(sourcePath: string, targetFolder: string) {
 async function deleteTargetPathWithArgs(targetPath: string, isDir: boolean) {
     if (!targetPath) return;
 
-    const itemType = isDir ? "folder" : "file";
-    const confirmed = confirm(`Are you sure you want to delete this ${itemType}?\n\n${targetPath}`);
-
-    if (!confirmed) return;
+    const confirmed = await showDeleteConfirmDialog(targetPath, isDir);
+    if (!confirmed) {
+        return;
+    }
 
     try {
         await FileService.DeletePath(targetPath);
         await loadFileTree();
 
         // If deleted file was currently open, clear editor
+        if (currentFilePath && (currentFilePath === targetPath || currentFilePath.startsWith(`${targetPath}/`))) {
+            clearCurrentSelection();
+            await StateService.ClearLastOpenedFile();
+        }
+    } catch (err) {
+        console.error("Failed to delete:", err);
+        alert(`Failed to delete: ${err}`);
+    }
+}
+
+function setupDeleteConfirmDialog() {
+    const overlay = document.getElementById("delete-confirm-overlay")!;
+    const cancelButton = document.getElementById("delete-confirm-cancel")!;
+    const confirmButton = document.getElementById("delete-confirm-submit")!;
+
+    cancelButton.addEventListener("click", hideDeleteConfirmDialog);
+    confirmButton.addEventListener("click", async () => {
+        const targetPath = pendingDeleteTargetPath;
+        const isDir = pendingDeleteIsDir;
+        hideDeleteConfirmDialog(true);
+        await performDeleteTargetPath(targetPath, isDir);
+    });
+
+    overlay.addEventListener("click", (e) => {
+        if (e.target === overlay) {
+            hideDeleteConfirmDialog();
+        }
+    });
+}
+
+function showDeleteConfirmDialog(targetPath: string, isDir: boolean): Promise<boolean> {
+    pendingDeleteTargetPath = targetPath;
+    pendingDeleteIsDir = isDir;
+
+    const overlay = document.getElementById("delete-confirm-overlay")!;
+    const message = document.getElementById("delete-confirm-message")!;
+    const confirmButton = document.getElementById("delete-confirm-submit") as HTMLButtonElement;
+
+    const itemType = isDir ? "folder" : "file";
+    message.textContent = `Delete this ${itemType}? ${targetPath}`;
+    confirmButton.focus();
+    overlay.style.display = "flex";
+
+    return new Promise<boolean>((resolve) => {
+        const cleanup = () => {
+            overlay.removeEventListener("delete-confirm:resolve", onResolve as EventListener);
+        };
+
+        const onResolve = ((event: CustomEvent<boolean>) => {
+            cleanup();
+            resolve(event.detail);
+        }) as EventListener;
+
+        overlay.addEventListener("delete-confirm:resolve", onResolve);
+    });
+}
+
+function hideDeleteConfirmDialog(confirmed = false) {
+    const overlay = document.getElementById("delete-confirm-overlay")!;
+    overlay.style.display = "none";
+    overlay.dispatchEvent(new CustomEvent("delete-confirm:resolve", { detail: confirmed }));
+    pendingDeleteTargetPath = "";
+    pendingDeleteIsDir = false;
+}
+
+async function performDeleteTargetPath(targetPath: string, isDir: boolean) {
+    if (!targetPath) {
+        return;
+    }
+
+    try {
+        await FileService.DeletePath(targetPath);
+        await loadFileTree();
+
         if (currentFilePath && (currentFilePath === targetPath || currentFilePath.startsWith(`${targetPath}/`))) {
             clearCurrentSelection();
             await StateService.ClearLastOpenedFile();

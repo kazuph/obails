@@ -51,6 +51,24 @@ test.describe('Obails App', () => {
     await expect(contextMenu).toBeHidden();
   });
 
+  test('should show and dismiss the delete confirmation dialog for a file', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    const fileItem = page.locator('.file-item:not(.folder)').first();
+    test.skip((await fileItem.count()) === 0, 'No file item available in this vault');
+
+    await fileItem.click({ button: 'right' });
+    await page.locator('#ctx-delete').click();
+
+    const deleteDialog = page.locator('#delete-confirm-overlay');
+    await expect(deleteDialog).toBeVisible();
+    await expect(page.locator('#delete-confirm-submit')).toBeVisible();
+
+    await page.locator('#delete-confirm-cancel').click();
+    await expect(deleteDialog).toBeHidden();
+  });
+
   test('should load the app', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
