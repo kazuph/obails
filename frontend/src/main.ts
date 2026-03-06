@@ -11,7 +11,13 @@ import hljs from "highlight.js";
 import "highlight.js/styles/github-dark.css";
 import ForceGraph from "force-graph";
 import { debounce } from "./lib/utils";
-import { LIGHT_THEMES, isDarkTheme } from "./lib/theme";
+import {
+  DEFAULT_THEME,
+  getAppliedTheme,
+  isDarkTheme,
+  normalizeThemeValue,
+  resolveThemeSelection,
+} from "./lib/theme";
 import { parseMarkdown } from "./lib/markdown";
 import { extractHeadings, renderOutlineHTML } from "./lib/headings";
 import {
@@ -69,6 +75,9 @@ let isFileTreeWatchRunning = false;
 let fileTreeSignature = "";
 let suppressFileTreeClickUntil = 0;
 let suppressFileTreeClickPath = "";
+let suppressContextMenuDismissUntil = 0;
+let lastContextMenuX = 0;
+let lastContextMenuY = 0;
 let itemFormMode: "create" | "rename" = "create";
 let itemFormKind: ItemKind = "file";
 let itemFormTargetPath = "";
@@ -1180,23 +1189,57 @@ function setupContextMenu() {
     const ctxRename = document.getElementById("ctx-rename")!;
     const ctxDelete = document.getElementById("ctx-delete")!;
 
-    // Hide context menu on any interaction elsewhere
-    // Use capture phase (true) to catch events before stopPropagation() is called
-    document.addEventListener("mousedown", (e) => {
-        // Don't hide if clicking inside context menu
-        if (!contextMenu.contains(e.target as Node)) {
-            hideContextMenu();
+    const hideContextMenuOnOutsideInteraction = (event: Event) => {
+        if (!isContextMenuVisible()) {
+            return;
         }
-    }, true); // capture phase
+        const target = event.target;
+        if (
+            Date.now() < suppressContextMenuDismissUntil &&
+            event instanceof MouseEvent &&
+            Math.abs(event.clientX - lastContextMenuX) < 4 &&
+            Math.abs(event.clientY - lastContextMenuY) < 4
+        ) {
+            return;
+        }
+        if (target instanceof Node && contextMenu.contains(target)) {
+            return;
+        }
+        hideContextMenu();
+    };
+
+    // Hide context menu on any interaction elsewhere.
+    // Use capture phase to catch events before stopPropagation() is called.
+    document.addEventListener("pointerdown", (e) => {
+        hideContextMenuOnOutsideInteraction(e);
+    }, true);
+
+    document.addEventListener("click", (e) => {
+        hideContextMenuOnOutsideInteraction(e);
+    }, true);
 
     // Also hide on right-click elsewhere (contextmenu event)
     document.addEventListener("contextmenu", (e) => {
-        // If right-clicking outside the context menu, hide it first
-        // (the new context menu will be shown by the file item's handler after)
-        if (!contextMenu.contains(e.target as Node)) {
+        hideContextMenuOnOutsideInteraction(e);
+    }, true); // capture phase
+
+    document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") {
             hideContextMenu();
         }
-    }, true); // capture phase
+    }, true);
+
+    document.addEventListener("scroll", () => {
+        hideContextMenu();
+    }, true);
+
+    window.addEventListener("blur", () => {
+        hideContextMenu();
+    });
+
+    window.addEventListener("resize", () => {
+        hideContextMenu();
+    });
 
     fileTree.addEventListener("contextmenu", (e) => {
         if ((e.target as HTMLElement).closest(".file-item")) {
@@ -1257,6 +1300,9 @@ function showContextMenu(x: number, y: number, path: string, isDir: boolean) {
 
     contextMenuTargetPath = path;
     contextMenuTargetIsDir = isDir;
+    suppressContextMenuDismissUntil = Date.now() + 250;
+    lastContextMenuX = x;
+    lastContextMenuY = y;
 
     ctxNewFile.style.display = isDir ? "flex" : "none";
     ctxNewFolder.style.display = isDir ? "flex" : "none";
@@ -1282,6 +1328,14 @@ function hideContextMenu() {
     contextMenu.style.display = "none";
     contextMenuTargetPath = "";
     contextMenuTargetIsDir = false;
+    suppressContextMenuDismissUntil = 0;
+    lastContextMenuX = 0;
+    lastContextMenuY = 0;
+}
+
+function isContextMenuVisible(): boolean {
+    const contextMenu = document.getElementById("context-menu")!;
+    return contextMenu.style.display !== "none";
 }
 
 async function moveFileToFolder(sourcePath: string, targetFolder: string) {
@@ -1336,13 +1390,13 @@ function showNewNoteFormInFolder(folderPath: string) {
 function setupThemeSelector() {
     const themeSelect = document.getElementById("theme-select") as HTMLSelectElement;
 
-    // Load saved theme
     const validThemes = Array.from(themeSelect.options).map(option => option.value);
-    const rawStoredTheme = localStorage.getItem("obails-theme");
-    const normalizedStoredTheme = rawStoredTheme ? normalizeThemeValue(rawStoredTheme) : "";
-    const configTheme = validThemes.includes(appThemeFromConfig || "") ? appThemeFromConfig! : "";
-    const fallbackTheme = configTheme || "github-light";
-    const selectedTheme = configTheme || (validThemes.includes(normalizedStoredTheme) ? normalizedStoredTheme : fallbackTheme);
+    const selectedTheme = resolveThemeSelection(
+        validThemes,
+        appThemeFromConfig,
+        localStorage.getItem("obails-theme"),
+        DEFAULT_THEME
+    );
 
     localStorage.setItem("obails-theme", selectedTheme);
     document.documentElement.setAttribute("data-theme", selectedTheme);
@@ -1360,7 +1414,7 @@ function setupThemeSelector() {
         });
 
         // Re-initialize mermaid with new theme
-        const isDark = !LIGHT_THEMES.includes(theme);
+        const isDark = isDarkTheme(theme);
         mermaid.initialize({
             startOnLoad: false,
             theme: isDark ? "dark" : "default",
@@ -1415,36 +1469,6 @@ function resolveFileType(fileType: string, path: string): string {
         return normalized;
     }
     return getFileTypeFromPath(path);
-}
-
-function normalizeThemeValue(theme: string | undefined | null): string {
-    const normalized = (theme || "").trim().toLowerCase().replace(/\s+/g, "-");
-
-    if (["dark", "github-dark", "catppuccin-mocha"].includes(normalized)) {
-        return "catppuccin";
-    }
-
-    if (["light", "github-light"].includes(normalized)) {
-        return "github-light";
-    }
-
-    if (["solarized-dark", "solarized"].includes(normalized)) {
-        return "solarized";
-    }
-
-    if (["one-dark", "onedark"].includes(normalized)) {
-        return "onedark";
-    }
-
-    if (["rose-pine-dawn", "rosepine-dawn"].includes(normalized)) {
-        return "rosepine-dawn";
-    }
-
-    if (["tokyo-night", "tokyonight"].includes(normalized)) {
-        return "tokyonight";
-    }
-
-    return normalized;
 }
 
 // Open file based on file type
@@ -2893,8 +2917,7 @@ function renderGraph(
     const height = container.clientHeight;
 
     // Space/cosmic color scheme
-    const savedTheme = localStorage.getItem("obails-theme") || "github-light";
-    const isDark = !LIGHT_THEMES.includes(savedTheme);
+    const isDark = isDarkTheme(getAppliedTheme());
 
     const nodeColor = isDark ? "#9d8cff" : "#6366f1"; // Purple/indigo
     const linkColor = isDark ? "rgba(147, 197, 253, 0.3)" : "rgba(99, 102, 241, 0.4)";
@@ -3003,8 +3026,7 @@ interface GestureEvent extends UIEvent {
 
 // Mermaid Setup
 function setupMermaid() {
-    const savedTheme = localStorage.getItem("obails-theme") || "github-light";
-    const isDark = !LIGHT_THEMES.includes(savedTheme);
+    const isDark = isDarkTheme(getAppliedTheme());
 
     mermaid.initialize({
         startOnLoad: false,

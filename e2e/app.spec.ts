@@ -1,6 +1,56 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('Obails App', () => {
+  test('should close the context menu when clicking elsewhere', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    const fileTree = page.locator('.file-tree');
+    await expect(fileTree).toBeVisible();
+
+    await fileTree.click({ button: 'right' });
+    const contextMenu = page.locator('#context-menu');
+    await expect(contextMenu).toBeVisible();
+
+    await page.locator('.sidebar-header h2').click();
+    await expect(contextMenu).toBeHidden();
+  });
+
+  test('should close the context menu when pressing Escape', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    const fileTree = page.locator('.file-tree');
+    await expect(fileTree).toBeVisible();
+
+    await fileTree.click({ button: 'right' });
+    const contextMenu = page.locator('#context-menu');
+    await expect(contextMenu).toBeVisible();
+
+    await page.keyboard.press('Escape');
+    await expect(contextMenu).toBeHidden();
+  });
+
+  test('should keep the context menu open after Ctrl+click', async ({ page, browserName }) => {
+    test.skip(browserName !== 'chromium', 'Ctrl+click behavior is only verified in Chromium here');
+
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    const fileTree = page.locator('.file-tree');
+    await expect(fileTree).toBeVisible();
+
+    await fileTree.click({ modifiers: ['Control'] });
+    const contextMenu = page.locator('#context-menu');
+    await expect(contextMenu).toBeVisible();
+
+    await page.waitForTimeout(300);
+    await expect(contextMenu).toBeVisible();
+
+    await page.locator('.sidebar-header h2').click();
+    await expect(contextMenu).toBeHidden();
+  });
+
   test('should load the app', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
@@ -86,6 +136,21 @@ test.describe('Obails App', () => {
       getComputedStyle(document.documentElement).getPropertyValue('--bg-primary').trim()
     );
     expect(bgColor).toBe('#282a36');
+  });
+
+  test('should preserve the selected theme after reload', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    const themeSelect = page.locator('#theme-select');
+    await themeSelect.selectOption('dracula');
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dracula');
+
+    await page.reload();
+    await page.waitForLoadState('networkidle');
+
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dracula');
+    await expect(page.locator('#theme-select')).toHaveValue('dracula');
   });
 
   test('should toggle Timeline panel', async ({ page }) => {
