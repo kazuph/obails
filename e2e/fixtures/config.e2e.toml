@@ -1,0 +1,24 @@
+[vault]
+  path = "e2e/fixtures/test-vault"
+
+[daily_notes]
+  folder = "dailynotes"
+  format = "2006-01-02"
+  template = "daily_note"
+
+[timeline]
+  section = "## Memos"
+  time_format = "15:04"
+
+[templates]
+  folder = "templates"
+
+[editor]
+  font_size = 14
+  font_family = "SF Mono"
+  line_numbers = true
+  word_wrap = true
+
+[ui]
+  theme = "github-light"
+  sidebar_width = 250

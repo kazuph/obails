@@ -2364,7 +2364,8 @@ async function syncOpenFileWithVault() {
         if (!currentNote) {
             return;
         }
-        if (editor.value !== currentNote.content) {
+        // Skip external refresh while the user has unsaved local edits.
+        if (editor.value !== lastLoadedMarkdownContent) {
             return;
         }
 
@@ -2374,7 +2375,7 @@ async function syncOpenFileWithVault() {
                 return;
             }
 
-            if (note.content === currentNote.content) {
+            if (note.content === lastLoadedMarkdownContent) {
                 await Promise.allSettled([
                     loadBacklinks(note.path),
                     loadOutgoingLinks(note.path),
@@ -2441,6 +2442,7 @@ async function openTodayNote() {
             currentFilePath = note.path;
             currentNote = note;
             editor.value = note.content;
+            lastLoadedMarkdownContent = note.content;
             // Reset cursor position and scroll to the top
             editor.selectionStart = 0;
             editor.selectionEnd = 0;

@@ -22,7 +22,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'OBAILS_USE_DEV_CONFIG=true wails3 dev -config ./build/config.yml -port 9245',
+    command: 'OBAILS_CONFIG_FILE=./e2e/fixtures/config.e2e.toml wails3 dev -config ./build/config.yml -port 9245',
     url: 'http://localhost:9245',
     reuseExistingServer: !process.env.CI,
     timeout: 180 * 1000,
