@@ -476,6 +476,48 @@ func GetMimeType(filename string) string {
 	return "application/octet-stream"
 }
 
+// ResolveImagePath resolves an image path relative to the current note or vault root.
+// It tries: 1) note-relative path, 2) vault-relative path, 3) filename-only search in vault root.
+// Returns the vault-relative path of the found image, or an error if not found.
+func (s *FileService) ResolveImagePath(imagePath string, notePath string) (string, error) {
+	vaultPath := s.configService.GetVaultPath()
+
+	// Candidates to try
+	var candidates []string
+
+	// 1. Relative to the note's directory
+	if notePath != "" {
+		noteDir := filepath.Dir(notePath)
+		if noteDir != "." {
+			candidates = append(candidates, filepath.Join(noteDir, imagePath))
+		}
+	}
+
+	// 2. Vault-relative (as-is)
+	candidates = append(candidates, imagePath)
+
+	// 3. If just a filename, also check common attachment folders
+	if !strings.Contains(imagePath, "/") && !strings.Contains(imagePath, string(filepath.Separator)) {
+		// Try common Obsidian attachment folder names
+		for _, folder := range []string{"attachments", "assets", "images", "img", "media"} {
+			candidates = append(candidates, filepath.Join(folder, imagePath))
+		}
+	}
+
+	for _, candidate := range candidates {
+		clean := filepath.Clean(filepath.FromSlash(candidate))
+		if clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+			continue
+		}
+		fullPath := filepath.Join(vaultPath, clean)
+		if _, err := os.Stat(fullPath); err == nil {
+			return filepath.ToSlash(clean), nil
+		}
+	}
+
+	return "", errors.New("image not found: " + imagePath)
+}
+
 // OpenExternal opens a file with the system's default application
 // Uses macOS 'open' command
 func (s *FileService) OpenExternal(relativePath string) error {

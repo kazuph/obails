@@ -49,6 +49,60 @@ describe("convertWikiLinks", () => {
   });
 });
 
+describe("convertWikiLinks - image embeds", () => {
+  it("should convert ![[image.png]] to img tag", () => {
+    const input = "Here is ![[photo.png]] inline";
+    const result = convertWikiLinks(input);
+    expect(result).toContain('<img class="vault-image"');
+    expect(result).toContain('data-vault-path="photo.png"');
+    expect(result).toContain('alt="photo.png"');
+  });
+
+  it("should handle ![[image.jpg|alt text]] with alt/size", () => {
+    const input = "![[screenshot.jpg|My Screenshot]]";
+    const result = convertWikiLinks(input);
+    expect(result).toContain('data-vault-path="screenshot.jpg"');
+    expect(result).toContain('alt="My Screenshot"');
+  });
+
+  it("should handle various image extensions", () => {
+    for (const ext of ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp"]) {
+      const input = `![[image.${ext}]]`;
+      const result = convertWikiLinks(input);
+      expect(result).toContain("vault-image");
+      expect(result).toContain(`data-vault-path="image.${ext}"`);
+    }
+  });
+
+  it("should handle image in subfolder", () => {
+    const input = "![[attachments/photo.png]]";
+    const result = convertWikiLinks(input);
+    expect(result).toContain('data-vault-path="attachments/photo.png"');
+  });
+
+  it("should handle image in deep nested path", () => {
+    const input = "![[attachment/runway-chase/ebitengine-2d.png]]";
+    const result = convertWikiLinks(input);
+    expect(result).toContain('class="vault-image"');
+    expect(result).toContain('data-vault-path="attachment/runway-chase/ebitengine-2d.png"');
+  });
+
+  it("should treat non-image ![[embed]] as wiki-link", () => {
+    const input = "![[some-note]]";
+    const result = convertWikiLinks(input);
+    expect(result).toContain('class="wiki-link"');
+    expect(result).toContain('data-link="some-note"');
+    expect(result).not.toContain("vault-image");
+  });
+
+  it("should not confuse ![[image]] with [[image.png]] (no embed)", () => {
+    const input = "[[photo.png]]";
+    const result = convertWikiLinks(input);
+    expect(result).toContain('class="wiki-link"');
+    expect(result).not.toContain("vault-image");
+  });
+});
+
 describe("parseMarkdown", () => {
   it("should convert markdown to HTML", () => {
     const input = "# Hello";
@@ -62,6 +116,15 @@ describe("parseMarkdown", () => {
     const result = parseMarkdown(input);
     expect(result).toContain('class="wiki-link"');
     expect(result).toContain('data-link="my-note"');
+  });
+
+  it("should convert ![[image.png]] embeds to img tags", () => {
+    const input = "# Test\n\n![[attachment/runway-chase/ebitengine-2d.png]]\n\nAfter image";
+    const result = parseMarkdown(input);
+    expect(result).toContain('<img class="vault-image"');
+    expect(result).toContain('data-vault-path="attachment/runway-chase/ebitengine-2d.png"');
+    expect(result).toContain("<h1");
+    expect(result).toContain("After image");
   });
 
   it("should handle paragraphs", () => {

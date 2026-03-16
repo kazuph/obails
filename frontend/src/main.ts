@@ -2481,6 +2481,34 @@ function updatePreview() {
     setTimeout(() => initMermaidDiagrams(), 100);
     // Update outline
     updateOutline(content);
+    // Resolve vault images to base64 data URLs
+    resolvePreviewImages();
+}
+
+async function resolvePreviewImages() {
+    const notePath = currentFilePath || "";
+    const images = preview.querySelectorAll<HTMLImageElement>("img");
+    for (const img of images) {
+        const src = img.getAttribute("src") || "";
+        const vaultPath = img.getAttribute("data-vault-path") || "";
+        const imagePath = vaultPath || src;
+
+        // Skip external URLs and data URIs
+        if (!imagePath || /^(https?:|data:)/i.test(imagePath)) {
+            continue;
+        }
+
+        try {
+            const resolvedPath = await FileService.ResolveImagePath(imagePath, notePath);
+            const base64Data = await FileService.ReadBinaryFile(resolvedPath);
+            const ext = resolvedPath.split(".").pop()?.toLowerCase() || "png";
+            const mimeType = getMimeTypeFromExt(ext);
+            img.src = `data:${mimeType};base64,${base64Data}`;
+        } catch {
+            img.alt = `[Image not found: ${imagePath}]`;
+            img.style.opacity = "0.5";
+        }
+    }
 }
 
 // Outline

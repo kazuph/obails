@@ -96,10 +96,25 @@ function renderFrontMatter(block: string): string {
     </div>`;
 }
 
+const IMAGE_EXTENSIONS = /\.(png|jpg|jpeg|gif|webp|svg|bmp)$/i;
+
 /**
- * Converts wiki-style links [[link]] or [[link|alias]] to HTML spans
+ * Converts wiki-style links [[link]] or [[link|alias]] to HTML spans.
+ * Converts image embeds ![[image.png]] to <img> tags.
  */
 export function convertWikiLinks(html: string): string {
+  // First pass: convert ![[image.png]] embeds to <img> tags
+  html = html.replace(/!\[\[([^\]|]+?)(?:\|([^\]]*))?\]\]/g, (_, path, altOrSize) => {
+    if (IMAGE_EXTENSIONS.test(path)) {
+      const alt = altOrSize || path;
+      return `<img class="vault-image" data-vault-path="${path}" alt="${alt}" />`;
+    }
+    // Non-image embed (transclusion) — leave as wiki-link for now
+    const displayText = altOrSize || path;
+    return `<span class="wiki-link" data-link="${path}">${displayText}</span>`;
+  });
+
+  // Second pass: convert [[link]] and [[link|alias]] to wiki-link spans
   return html.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_, link, alias) => {
     const displayText = alias || link;
     return `<span class="wiki-link" data-link="${link}">${displayText}</span>`;

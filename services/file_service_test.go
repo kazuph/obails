@@ -582,6 +582,75 @@ func TestFileService_WriteFile(t *testing.T) {
 	})
 }
 
+func TestFileService_ResolveImagePath(t *testing.T) {
+	cs, tmpDir := newTestConfigService(t)
+	defer os.RemoveAll(tmpDir)
+
+	fs := NewFileService(cs)
+
+	// Setup test structure: vault root images and attachments folder
+	os.WriteFile(filepath.Join(tmpDir, "root-image.png"), []byte("PNG"), 0644)
+	os.MkdirAll(filepath.Join(tmpDir, "attachments"), 0755)
+	os.WriteFile(filepath.Join(tmpDir, "attachments", "attached.jpg"), []byte("JPG"), 0644)
+	os.MkdirAll(filepath.Join(tmpDir, "notes"), 0755)
+	os.WriteFile(filepath.Join(tmpDir, "notes", "local.png"), []byte("PNG"), 0644)
+	os.WriteFile(filepath.Join(tmpDir, "notes", "my-note.md"), []byte("# Note"), 0644)
+
+	t.Run("resolve vault-relative path", func(t *testing.T) {
+		resolved, err := fs.ResolveImagePath("root-image.png", "")
+		if err != nil {
+			t.Fatalf("ResolveImagePath failed: %v", err)
+		}
+		if resolved != "root-image.png" {
+			t.Errorf("Expected 'root-image.png', got %q", resolved)
+		}
+	})
+
+	t.Run("resolve note-relative path", func(t *testing.T) {
+		resolved, err := fs.ResolveImagePath("local.png", "notes/my-note.md")
+		if err != nil {
+			t.Fatalf("ResolveImagePath failed: %v", err)
+		}
+		if resolved != "notes/local.png" {
+			t.Errorf("Expected 'notes/local.png', got %q", resolved)
+		}
+	})
+
+	t.Run("resolve attachments folder by convention", func(t *testing.T) {
+		resolved, err := fs.ResolveImagePath("attached.jpg", "")
+		if err != nil {
+			t.Fatalf("ResolveImagePath failed: %v", err)
+		}
+		if resolved != "attachments/attached.jpg" {
+			t.Errorf("Expected 'attachments/attached.jpg', got %q", resolved)
+		}
+	})
+
+	t.Run("resolve image with explicit subfolder", func(t *testing.T) {
+		resolved, err := fs.ResolveImagePath("attachments/attached.jpg", "")
+		if err != nil {
+			t.Fatalf("ResolveImagePath failed: %v", err)
+		}
+		if resolved != "attachments/attached.jpg" {
+			t.Errorf("Expected 'attachments/attached.jpg', got %q", resolved)
+		}
+	})
+
+	t.Run("not found returns error", func(t *testing.T) {
+		_, err := fs.ResolveImagePath("nonexistent.png", "")
+		if err == nil {
+			t.Error("Expected error for nonexistent image")
+		}
+	})
+
+	t.Run("reject path traversal", func(t *testing.T) {
+		_, err := fs.ResolveImagePath("../etc/passwd", "")
+		if err == nil {
+			t.Error("Expected error for path traversal")
+		}
+	})
+}
+
 func TestVaultWatchService_GetRevision(t *testing.T) {
 	cs, tmpDir := newTestConfigService(t)
 	defer os.RemoveAll(tmpDir)
