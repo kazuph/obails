@@ -1448,6 +1448,16 @@ body {
 }
 
 /* Context Menu */
+.context-menu-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 1999;
+    background: transparent;
+}
+
 .context-menu {
     position: fixed;
     z-index: 2000;

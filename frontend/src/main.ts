@@ -1247,6 +1247,17 @@ function setupContextMenu() {
         hideContextMenu();
     });
 
+    // Backdrop click/right-click dismisses context menu
+    const backdrop = document.getElementById("context-menu-backdrop")!;
+    backdrop.addEventListener("pointerdown", (e) => {
+        e.preventDefault();
+        hideContextMenu();
+    });
+    backdrop.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        hideContextMenu();
+    });
+
     fileTree.addEventListener("contextmenu", (e) => {
         if ((e.target as HTMLElement).closest(".file-item")) {
             return;
@@ -1298,6 +1309,7 @@ function setupContextMenu() {
 
 function showContextMenu(x: number, y: number, path: string, isDir: boolean) {
     const contextMenu = document.getElementById("context-menu")!;
+    const backdrop = document.getElementById("context-menu-backdrop")!;
     const ctxNewFile = document.getElementById("ctx-new-file")!;
     const ctxNewFolder = document.getElementById("ctx-new-folder")!;
     const ctxRename = document.getElementById("ctx-rename")!;
@@ -1315,6 +1327,7 @@ function showContextMenu(x: number, y: number, path: string, isDir: boolean) {
     ctxRename.style.display = isRoot ? "none" : "flex";
     ctxDelete.style.display = isRoot ? "none" : "flex";
 
+    backdrop.style.display = "block";
     contextMenu.style.display = "block";
     contextMenu.style.left = x + "px";
     contextMenu.style.top = y + "px";
@@ -1331,7 +1344,9 @@ function showContextMenu(x: number, y: number, path: string, isDir: boolean) {
 
 function hideContextMenu() {
     const contextMenu = document.getElementById("context-menu")!;
+    const backdrop = document.getElementById("context-menu-backdrop")!;
     contextMenu.style.display = "none";
+    backdrop.style.display = "none";
     contextMenuTargetPath = "";
     contextMenuTargetIsDir = false;
     suppressContextMenuDismissUntil = 0;
