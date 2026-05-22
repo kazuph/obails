@@ -130,26 +130,51 @@ test.describe('Feature Name', () => {
 | 本番用（Spotlight検索対象） | `/Applications/obails.app` | Spotlight or Finder |
 
 ### 本番アプリ更新手順（一発実行）
+
+**重要**: フロントエンド変更後は `wails3 task darwin:package` だけを信用しないこと。
+`frontend/dist` が古いままでも Wails task が `build:frontend is up to date` と判断し、古い UI を本番アプリに焼くことがある。
+本番更新時は必ず `frontend/dist` を削除して `pnpm --dir frontend run build` を先に実行し、変更に固有の文字列が `/Applications/obails.app` のバイナリに入ったことを `strings` で確認する。
+
 ```bash
 # 1. 実行中のアプリを終了
 pkill -f "obails.app" 2>/dev/null || true
 sleep 1
 
-# 2. 本番ビルド
+# 2. フロントエンドを必ず強制再ビルド
+rm -rf frontend/dist
+pnpm --dir frontend run build
+
+# 3. 本番ビルド
 wails3 task darwin:package
 
-# 3. 古いアプリを削除して新しいアプリをコピー
+# 4. 古いアプリを削除して新しいアプリをコピー
 trash /Applications/obails.app 2>/dev/null || true
 cp -R bin/obails.app /Applications/
 codesign --force --deep --sign - /Applications/obails.app
 
-# 4. アイコンキャッシュをクリア（macOSが古いアイコンを表示し続ける問題対策）
+# 5. 修正済み frontend asset が本番アプリに入ったことを確認
+# <expected-string> は今回の変更に固有の CSS変数名・関数名・画面文言などに置き換える
+strings /Applications/obails.app/Contents/MacOS/obails | rg "<expected-string>"
+
+# 6. アイコンキャッシュをクリア（macOSが古いアイコンを表示し続ける問題対策）
 sudo rm -rf /Library/Caches/com.apple.iconservices.store 2>/dev/null || true
 killall Dock 2>/dev/null || true
 
-# 5. アプリを起動
+# 7. アプリを起動
 open /Applications/obails.app
+
+# 8. 更新時刻を確認
+stat -f "%Sm %N" -t "%Y-%m-%d %H:%M:%S" \
+  /Applications/obails.app/Contents/MacOS/obails \
+  frontend/dist/index.html
 ```
+
+#### 本番更新の完了条件
+- `frontend/dist/index.html` の更新時刻が今回の作業時刻になっていること。
+- `/Applications/obails.app/Contents/MacOS/obails` の更新時刻が今回の作業時刻になっていること。
+- `strings /Applications/obails.app/Contents/MacOS/obails | rg "<expected-string>"` が成功すること。
+- 本番アプリ `/Applications/obails.app` を起動し、修正対象画面で実際に挙動を確認すること。
+- 上記のどれかが未確認なら「アプリ更新完了」と報告してはいけない。
 
 ### 開発用アプリ更新手順
 ```bash
@@ -318,9 +343,12 @@ claude plugin install ob@obails
   - `open bin/obails.dev.app`
 - 本番版に反映する場合は、以下を一式実施して置換する:
   - `pkill -f "obails.app" 2>/dev/null || true`
+  - `rm -rf frontend/dist`
+  - `pnpm --dir frontend run build`
   - `wails3 task darwin:package`
   - `trash /Applications/obails.app 2>/dev/null || true`
   - `cp -R bin/obails.app /Applications/obails.app`
   - `codesign --force --deep --sign - /Applications/obails.app`
+  - `strings /Applications/obails.app/Contents/MacOS/obails | rg "<expected-string>"`
 - 実行対象を確認する最短チェック:
-  - `stat -f "%Sm %N" -t "%Y-%m-%d %H:%M:%S" /Applications/obails.app/Contents/MacOS/obails bin/obails.dev.app/Contents/MacOS/obails`
+  - `stat -f "%Sm %N" -t "%Y-%m-%d %H:%M:%S" /Applications/obails.app/Contents/MacOS/obails frontend/dist/index.html bin/obails.dev.app/Contents/MacOS/obails`
