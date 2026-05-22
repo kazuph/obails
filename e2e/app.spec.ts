@@ -104,7 +104,7 @@ test.describe('Obails App', () => {
 
     await expect(page.locator('#mini-player')).toBeVisible();
     await expect(page.locator('#mini-player-title')).toHaveText('test-tone.wav');
-    await expect(page.locator('#mini-audio-player')).toHaveAttribute('src', /^data:audio\/wav;base64,/);
+    await expect(page.locator('#mini-audio-player')).toHaveAttribute('src', /\/media\/audio\?path=audio%2Ftest-tone\.wav$/);
 
     await expect(page.locator('.editor-container')).toBeVisible();
     await expect(page.locator('#editor-title')).toHaveText('Welcome');

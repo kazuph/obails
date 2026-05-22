@@ -1662,12 +1662,9 @@ function hideAllViewers() {
 async function openAudio(path: string): Promise<void> {
     try {
         currentAudioPath = path;
-        const base64Data = await FileService.ReadBinaryFile(path);
-        const ext = path.split('.').pop()?.toLowerCase() || '';
-        const mimeType = getMimeTypeFromExt(ext);
         const fileName = path.split('/').pop() || 'Audio';
 
-        miniAudioPlayer.src = `data:${mimeType};base64,${base64Data}`;
+        miniAudioPlayer.src = `/media/audio?path=${encodeURIComponent(path)}`;
         miniPlayerTitle.textContent = fileName;
         miniPlayer.style.display = "flex";
         await miniAudioPlayer.play().catch(() => undefined);

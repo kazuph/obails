@@ -3,6 +3,7 @@ package services
 import (
 	"encoding/base64"
 	"errors"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -459,6 +460,43 @@ func (s *FileService) ReadBinaryFile(relativePath string) (string, error) {
 		return "", err
 	}
 	return base64.StdEncoding.EncodeToString(content), nil
+}
+
+// ServeMedia streams vault audio files with HTTP range support.
+func (s *FileService) ServeMedia(w http.ResponseWriter, r *http.Request) bool {
+	if r.URL.Path != "/media/audio" {
+		return false
+	}
+
+	relativePath := r.URL.Query().Get("path")
+	if GetFileType(relativePath) != models.FileTypeAudio {
+		http.Error(w, "unsupported media type", http.StatusUnsupportedMediaType)
+		return true
+	}
+
+	fullPath, err := s.resolveFullPath(relativePath, false)
+	if err != nil {
+		http.Error(w, "invalid media path", http.StatusBadRequest)
+		return true
+	}
+
+	file, err := os.Open(fullPath)
+	if err != nil {
+		http.Error(w, "media not found", http.StatusNotFound)
+		return true
+	}
+	defer file.Close()
+
+	info, err := file.Stat()
+	if err != nil || info.IsDir() {
+		http.Error(w, "media not found", http.StatusNotFound)
+		return true
+	}
+
+	w.Header().Set("Content-Type", GetMimeType(relativePath))
+	w.Header().Set("Accept-Ranges", "bytes")
+	http.ServeContent(w, r, filepath.Base(relativePath), info.ModTime(), file)
+	return true
 }
 
 // GetMimeType returns the MIME type for a file based on extension

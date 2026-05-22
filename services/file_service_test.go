@@ -2,6 +2,9 @@ package services
 
 import (
 	"errors"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -74,6 +77,68 @@ func TestGetMimeType(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestFileService_ServeMedia(t *testing.T) {
+	cs, tmpDir := newTestConfigService(t)
+	defer os.RemoveAll(tmpDir)
+
+	fs := NewFileService(cs)
+	wavPath := filepath.Join(tmpDir, "podcast", "episode.wav")
+	if err := os.MkdirAll(filepath.Dir(wavPath), 0755); err != nil {
+		t.Fatalf("setup dir: %v", err)
+	}
+	content := []byte("0123456789abcdef")
+	if err := os.WriteFile(wavPath, content, 0644); err != nil {
+		t.Fatalf("setup wav: %v", err)
+	}
+
+	t.Run("serves audio with range support", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/media/audio?path=podcast%2Fepisode.wav", nil)
+		req.Header.Set("Range", "bytes=2-5")
+		rec := httptest.NewRecorder()
+
+		if handled := fs.ServeMedia(rec, req); !handled {
+			t.Fatal("ServeMedia should handle /media/audio")
+		}
+
+		res := rec.Result()
+		defer res.Body.Close()
+		if res.StatusCode != http.StatusPartialContent {
+			t.Fatalf("status = %d, want %d", res.StatusCode, http.StatusPartialContent)
+		}
+		if got := res.Header.Get("Content-Type"); got != "audio/wav" {
+			t.Fatalf("Content-Type = %q, want audio/wav", got)
+		}
+		body, err := io.ReadAll(res.Body)
+		if err != nil {
+			t.Fatalf("read body: %v", err)
+		}
+		if string(body) != "2345" {
+			t.Fatalf("body = %q, want %q", body, "2345")
+		}
+	})
+
+	t.Run("rejects non-audio paths", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/media/audio?path=note.md", nil)
+		rec := httptest.NewRecorder()
+
+		if handled := fs.ServeMedia(rec, req); !handled {
+			t.Fatal("ServeMedia should handle /media/audio")
+		}
+		if rec.Result().StatusCode != http.StatusUnsupportedMediaType {
+			t.Fatalf("status = %d, want %d", rec.Result().StatusCode, http.StatusUnsupportedMediaType)
+		}
+	})
+
+	t.Run("ignores other routes", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/index.html", nil)
+		rec := httptest.NewRecorder()
+
+		if handled := fs.ServeMedia(rec, req); handled {
+			t.Fatal("ServeMedia should ignore unrelated routes")
+		}
+	})
 }
 
 func TestFileService_CreateFile(t *testing.T) {

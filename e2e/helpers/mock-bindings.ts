@@ -102,6 +102,17 @@ export async function setupMockBindings(page: Page): Promise<void> {
   const files = loadTestFiles();
   const fileInfos = generateFileInfos();
 
+  await page.route('**/media/audio?**', async (route) => {
+    const requestURL = new URL(route.request().url());
+    const relativePath = requestURL.searchParams.get('path') || '';
+    const body = Buffer.from(files[relativePath] || '', 'base64');
+    await route.fulfill({
+      status: 200,
+      contentType: 'audio/wav',
+      body,
+    });
+  });
+
   await page.route('**/wails/runtime', async (route) => {
     const request = route.request();
     if (request.method() !== 'POST') {

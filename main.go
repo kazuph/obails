@@ -4,6 +4,7 @@ import (
 	"embed"
 	_ "embed"
 	"log"
+	"net/http"
 
 	"github.com/kazuph/obails/services"
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -62,6 +63,14 @@ func main() {
 		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),
+			Middleware: func(next http.Handler) http.Handler {
+				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					if fileService.ServeMedia(w, r) {
+						return
+					}
+					next.ServeHTTP(w, r)
+				})
+			},
 		},
 		Mac: application.MacOptions{
 			ApplicationShouldTerminateAfterLastWindowClosed: true,
