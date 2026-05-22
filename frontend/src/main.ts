@@ -2012,7 +2012,73 @@ function updateHtmlPreview() {
         doc.open();
         doc.write(content);
         doc.close();
+        injectHtmlPreviewReadabilityStyles(doc);
     }
+}
+
+function injectHtmlPreviewReadabilityStyles(doc: Document) {
+    const style = doc.createElement("style");
+    style.id = "obails-html-preview-readability";
+    style.textContent = `
+pre code,
+pre code span,
+pre code .line {
+    color: #334155 !important;
+    opacity: 1 !important;
+}
+
+pre code .hljs-comment,
+pre code .hljs-quote,
+pre code .token.comment,
+pre code .token.prolog,
+pre code .token.doctype,
+pre code .token.cdata {
+    color: #64748b !important;
+}
+
+pre code .hljs-keyword,
+pre code .hljs-selector-tag,
+pre code .token.keyword,
+pre code .token.operator,
+pre code .token.atrule {
+    color: #dc2626 !important;
+}
+
+pre code .hljs-string,
+pre code .hljs-doctag,
+pre code .token.string,
+pre code .token.char,
+pre code .token.attr-value {
+    color: #0369a1 !important;
+}
+
+pre code .hljs-title,
+pre code .hljs-section,
+pre code .token.function,
+pre code .token.class-name {
+    color: #7c3aed !important;
+}
+
+pre code .hljs-attr,
+pre code .hljs-attribute,
+pre code .hljs-name,
+pre code .token.property,
+pre code .token.attr-name,
+pre code .token.variable {
+    color: #0f766e !important;
+}
+
+pre code .hljs-number,
+pre code .hljs-literal,
+pre code .token.number,
+pre code .token.boolean,
+pre code .token.constant {
+    color: #1d4ed8 !important;
+}
+`;
+
+    const head = doc.head || doc.documentElement;
+    head.appendChild(style);
 }
 
 // Save HTML file

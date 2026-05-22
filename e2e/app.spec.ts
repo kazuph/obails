@@ -1363,3 +1363,88 @@ test.describe('Timeline Features', () => {
     await expect(postBtn).toHaveText('Post');
   });
 });
+
+test.describe('HTML Preview', () => {
+  test('should keep inline-styled code readable in the preview iframe', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    await page.locator('#html-editor-container').evaluate((element) => {
+      (element as HTMLElement).style.display = 'flex';
+    });
+
+    const html = `<!doctype html>
+<html>
+  <head>
+    <style>
+      body { background: #fffaf3; color: #575279; }
+      pre { background: #f2e9e1; padding: 24px; border-radius: 12px; }
+      code { font: 20px monospace; }
+    </style>
+  </head>
+  <body>
+    <h1>バグのあったコード (1340-1356行)</h1>
+    <pre><code><span style="color:#ff6b6b">if</span> <span style="color:#cbd5e1">_ai_guard_contains_danger_word</span> <span style="color:#60a5fa">&quot;$cmd_line&quot;</span><span style="color:#ff6b6b">; then</span>
+  <span style="color:#cbd5e1">ai_extreme_confirm</span> <span style="color:#94a3b8"># ← AI session チェックなし!</span>
+  <span style="color:#cbd5e1">...</span>
+<span style="color:#ff6b6b">fi</span></code></pre>
+  </body>
+</html>`;
+
+    await page.locator('#html-editor').fill(html);
+    await page.locator('#html-editor').dispatchEvent('input');
+
+    const iframe = page.frameLocator('#html-preview');
+    await expect(iframe.locator('pre code')).toBeVisible();
+
+    const lowContrastTokens = await page.locator('#html-preview').evaluate((iframeElement) => {
+      const doc = (iframeElement as HTMLIFrameElement).contentDocument;
+      if (!doc) {
+        throw new Error('HTML preview document is not available');
+      }
+
+      function parseRgb(color: string): [number, number, number] {
+        const match = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+        if (!match) {
+          throw new Error(`Unsupported color format: ${color}`);
+        }
+        return [Number(match[1]), Number(match[2]), Number(match[3])];
+      }
+
+      function luminance([r, g, b]: [number, number, number]): number {
+        const channels = [r, g, b].map((value) => {
+          const srgb = value / 255;
+          return srgb <= 0.03928 ? srgb / 12.92 : ((srgb + 0.055) / 1.055) ** 2.4;
+        });
+        return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+      }
+
+      function contrastRatio(foreground: string, background: string): number {
+        const fg = luminance(parseRgb(foreground));
+        const bg = luminance(parseRgb(background));
+        const lighter = Math.max(fg, bg);
+        const darker = Math.min(fg, bg);
+        return (lighter + 0.05) / (darker + 0.05);
+      }
+
+      const pre = doc.querySelector('pre');
+      if (!pre) {
+        throw new Error('Code block container was not rendered');
+      }
+      const background = getComputedStyle(pre).backgroundColor;
+
+      return Array.from(doc.querySelectorAll('pre code span'))
+        .map((element) => {
+          const style = getComputedStyle(element);
+          return {
+            text: element.textContent?.trim() || '',
+            color: style.color,
+            contrast: contrastRatio(style.color, background),
+          };
+        })
+        .filter((token) => token.contrast < 4.5);
+    });
+
+    expect(lowContrastTokens).toEqual([]);
+  });
+});
