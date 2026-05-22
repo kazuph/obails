@@ -15,6 +15,16 @@ const __dirname = path.dirname(__filename);
 
 const TEST_VAULT_PATH = path.resolve(__dirname, '../fixtures/test-vault');
 
+function getFixtureFileType(name: string): string {
+  const ext = path.extname(name).toLowerCase();
+  if (ext === '.md') return 'markdown';
+  if (['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp', '.ico'].includes(ext)) return 'image';
+  if (ext === '.pdf') return 'pdf';
+  if (ext === '.html' || ext === '.htm') return 'html';
+  if (['.mp3', '.m4a', '.wav', '.ogg', '.flac', '.aac', '.opus'].includes(ext)) return 'audio';
+  return 'other';
+}
+
 // テスト用ファイルのコンテンツをロード
 function loadTestFiles(): { [key: string]: string } {
   const files: { [key: string]: string } = {};
@@ -25,8 +35,13 @@ function loadTestFiles(): { [key: string]: string } {
       const relativePath = prefix ? `${prefix}/${entry.name}` : entry.name;
       if (entry.isDirectory()) {
         loadDir(fullPath, relativePath);
-      } else if (entry.name.endsWith('.md')) {
-        files[relativePath] = fs.readFileSync(fullPath, 'utf-8');
+      } else {
+        const fileType = getFixtureFileType(entry.name);
+        if (fileType === 'markdown' || fileType === 'html') {
+          files[relativePath] = fs.readFileSync(fullPath, 'utf-8');
+        } else {
+          files[relativePath] = fs.readFileSync(fullPath).toString('base64');
+        }
       }
     }
   };
@@ -47,20 +62,31 @@ function generateFileInfos(): any[] {
           Name: entry.name,
           Path: relativePath,
           IsDir: true,
+          name: entry.name,
+          path: relativePath,
+          isDir: true,
           ModTime: new Date().toISOString(),
           Size: 0,
           Children: [],
+          modifiedAt: new Date().toISOString(),
+          children: [],
         });
         addDir(fullPath, relativePath);
-      } else if (entry.name.endsWith('.md')) {
+      } else {
         const stats = fs.statSync(fullPath);
         infos.push({
           Name: entry.name,
           Path: relativePath,
           IsDir: false,
+          name: entry.name,
+          path: relativePath,
+          isDir: false,
+          FileType: getFixtureFileType(entry.name),
+          fileType: getFixtureFileType(entry.name),
           ModTime: stats.mtime.toISOString(),
           Size: stats.size,
           Children: null,
+          modifiedAt: stats.mtime.toISOString(),
         });
       }
     }
@@ -75,6 +101,80 @@ function generateFileInfos(): any[] {
 export async function setupMockBindings(page: Page): Promise<void> {
   const files = loadTestFiles();
   const fileInfos = generateFileInfos();
+
+  await page.route('**/wails/runtime', async (route) => {
+    const request = route.request();
+    if (request.method() !== 'POST') {
+      await route.fallback();
+      return;
+    }
+
+    const body = JSON.parse(request.postData() || '{}');
+    const call = body.args || {};
+    const methodID = call.methodID;
+    const args = call.args || [];
+
+    let value: any = null;
+    switch (methodID) {
+      // ConfigService.GetConfig
+      case 1692681084:
+        value = {
+          Vault: { Path: '/test-vault' },
+          DailyNotes: { Folder: 'dailynotes', Format: '2006-01-02', Template: '' },
+          Timeline: { Section: '## Memos', TimeFormat: '15:04' },
+          Templates: { Folder: '' },
+          Editor: { FontSize: 14, FontFamily: 'SF Mono', LineNumbers: true, WordWrap: true },
+          UI: { Theme: 'github-light', SidebarWidth: 250 },
+        };
+        break;
+      // FileService.ListDirectoryTree
+      case 767112173:
+        value = fileInfos;
+        break;
+      // FileService.ReadFile
+      case 1935931844:
+        value = files[args[0]] || '# File not found';
+        break;
+      // FileService.ReadBinaryFile
+      case 797232813:
+        value = files[args[0]] || '';
+        break;
+      // NoteService.GetNote
+      case 591728348: {
+        const notePath = args[0];
+        const content = files[notePath];
+        value = content
+          ? {
+              title: path.basename(notePath).replace(/\.md$/i, ''),
+              path: notePath,
+              content,
+              modifiedAt: new Date().toISOString(),
+            }
+          : null;
+        break;
+      }
+      // LinkService.GetBacklinks
+      case 1256122864:
+      // LinkService.GetLinkInfo
+      case 1099033032:
+        value = [];
+        break;
+      // StateService.GetLastOpenedFile
+      case 235349142:
+        value = null;
+        break;
+      // StateService.SetLastOpenedFile / ClearLastOpenedFile and other void calls
+      default:
+        value = null;
+        break;
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(value),
+    });
+  });
 
   // Wailsランタイムをモック
   await page.addInitScript(({ files, fileInfos }) => {
@@ -99,7 +199,7 @@ export async function setupMockBindings(page: Page): Promise<void> {
           // 各メソッドIDに対応するモックを返す
           switch (id) {
             // ConfigService.GetConfig
-            case 1234567890:
+            case 1692681084:
               return createMockPromise({
                 Vault: { Path: '/test-vault' },
                 DailyNotes: { Folder: 'dailynotes', Format: '2006-01-02', Template: '' },
@@ -110,7 +210,7 @@ export async function setupMockBindings(page: Page): Promise<void> {
               });
 
             // ConfigService.GetVaultPath
-            case 3456789012:
+            case 2348230133:
               return createMockPromise('/test-vault');
 
             // FileService.ListDirectoryTree (ID: 767112173)
@@ -122,31 +222,47 @@ export async function setupMockBindings(page: Page): Promise<void> {
               const filePath = args[0];
               return createMockPromise(files[filePath] || '# File not found');
 
+            // FileService.ReadBinaryFile (ID: 797232813)
+            case 797232813:
+              return createMockPromise(files[args[0]] || '');
+
+            // NoteService.GetNote
+            case 591728348:
+              const notePath = args[0];
+              return createMockPromise(files[notePath]
+                ? {
+                    title: notePath.split('/').pop()?.replace(/\.md$/i, '') || notePath,
+                    path: notePath,
+                    content: files[notePath],
+                    modifiedAt: new Date().toISOString(),
+                  }
+                : null);
+
             // LinkService.GetBacklinks
-            case 5678901234:
+            case 1256122864:
               return createMockPromise([]);
 
-            // LinkService.GetOutgoingLinks
-            case 6789012345:
+            // LinkService.GetLinkInfo
+            case 1099033032:
               return createMockPromise([]);
 
             // StateService.GetLastOpenedFile
-            case 7890123456:
+            case 235349142:
               return createMockPromise(null);
 
             // StateService.SetLastOpenedFile
-            case 8901234567:
+            case 1385456610:
               return createMockPromise(undefined);
 
-            // GraphService.GetGraph
-            case 9012345678:
+            // GraphService.GetFullGraph
+            case 312528985:
               return createMockPromise({
-                Nodes: fileInfos.filter((f: any) => !f.IsDir).map((f: any) => ({
-                  Id: f.Path,
-                  Label: f.Name.replace('.md', ''),
+                nodes: fileInfos.filter((f: any) => !(f.isDir ?? f.IsDir)).map((f: any) => ({
+                  id: f.path ?? f.Path,
+                  label: (f.name ?? f.Name).replace('.md', ''),
                   Val: 1,
                 })),
-                Links: [],
+                links: [],
               });
 
             // WindowService系は空で返す

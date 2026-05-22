@@ -29,6 +29,53 @@ func newTestConfigService(t *testing.T) (*ConfigService, string) {
 	return cs, tmpDir
 }
 
+func TestGetFileType(t *testing.T) {
+	tests := []struct {
+		name     string
+		filename string
+		want     string
+	}{
+		{name: "markdown", filename: "note.md", want: models.FileTypeMarkdown},
+		{name: "image", filename: "cover.png", want: models.FileTypeImage},
+		{name: "pdf", filename: "paper.pdf", want: models.FileTypePDF},
+		{name: "html", filename: "page.html", want: models.FileTypeHTML},
+		{name: "audio mp3", filename: "podcast.mp3", want: models.FileTypeAudio},
+		{name: "audio m4a", filename: "voice.M4A", want: models.FileTypeAudio},
+		{name: "audio wav", filename: "tone.wav", want: models.FileTypeAudio},
+		{name: "other", filename: "archive.zip", want: models.FileTypeOther},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := GetFileType(tt.filename); got != tt.want {
+				t.Fatalf("GetFileType(%q) = %q, want %q", tt.filename, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGetMimeType(t *testing.T) {
+	tests := []struct {
+		name     string
+		filename string
+		want     string
+	}{
+		{name: "mp3", filename: "podcast.mp3", want: "audio/mpeg"},
+		{name: "m4a", filename: "voice.m4a", want: "audio/mp4"},
+		{name: "wav", filename: "tone.wav", want: "audio/wav"},
+		{name: "opus", filename: "episode.opus", want: "audio/ogg"},
+		{name: "unknown", filename: "data.bin", want: "application/octet-stream"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := GetMimeType(tt.filename); got != tt.want {
+				t.Fatalf("GetMimeType(%q) = %q, want %q", tt.filename, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestFileService_CreateFile(t *testing.T) {
 	cs, tmpDir := newTestConfigService(t)
 	defer os.RemoveAll(tmpDir)

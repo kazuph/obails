@@ -60,7 +60,8 @@ function isModKey(e: KeyboardEvent): boolean {
 
 // State
 let currentNote: Note | null = null;
-let currentFilePath: string | null = null;  // Tracks any open file (md, image, pdf, html)
+let currentFilePath: string | null = null;  // Tracks the open main-pane file (md, image, pdf, html)
+let currentAudioPath: string | null = null;
 let appThemeFromConfig: string | null = null;
 let showTimeline = false;
 let showGraph = false;
@@ -106,6 +107,10 @@ const outgoingLinksList = document.getElementById("outgoing-links-list")!;
 const outlineList = document.getElementById("outline-list")!;
 const fileSearchInput = document.getElementById("file-search-input") as HTMLInputElement;
 const fileSearchClear = document.getElementById("file-search-clear")!;
+const miniPlayer = document.getElementById("mini-player") as HTMLElement;
+const miniPlayerTitle = document.getElementById("mini-player-title")!;
+const miniAudioPlayer = document.getElementById("mini-audio-player") as HTMLAudioElement;
+const miniPlayerClose = document.getElementById("mini-player-close") as HTMLButtonElement;
 
 // New viewer elements
 const imageViewer = document.getElementById("image-viewer")!;
@@ -371,6 +376,7 @@ function setupEventListeners() {
     document.getElementById("graph-btn")!.addEventListener("click", toggleGraphView);
     document.getElementById("refresh-btn")!.addEventListener("click", refresh);
     document.getElementById("timeline-submit")!.addEventListener("click", submitTimeline);
+    miniPlayerClose.addEventListener("click", stopAudioPlayback);
     setupWindowDoubleClickMaximise();
 
     // Timeline input: ⌘+Enter to submit
@@ -1553,6 +1559,7 @@ function getFileIcon(file: FileInfo): string {
         case "image": return "🖼️";
         case "pdf": return "📕";
         case "html": return "🌐";
+        case "audio": return "🎧";
         default: return "📄";
     }
 }
@@ -1563,12 +1570,13 @@ function getFileTypeFromPath(path: string): string {
     if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp'].includes(ext)) return 'image';
     if (ext === 'pdf') return 'pdf';
     if (ext === 'html' || ext === 'htm') return 'html';
+    if (['mp3', 'm4a', 'wav', 'ogg', 'flac', 'aac', 'opus'].includes(ext)) return 'audio';
     return 'other';
 }
 
 function resolveFileType(fileType: string, path: string): string {
     const normalized = (fileType || "").toLowerCase();
-    if (normalized === "markdown" || normalized === "image" || normalized === "pdf" || normalized === "html") {
+    if (normalized === "markdown" || normalized === "image" || normalized === "pdf" || normalized === "html" || normalized === "audio") {
         return normalized;
     }
     return getFileTypeFromPath(path);
@@ -1576,9 +1584,12 @@ function resolveFileType(fileType: string, path: string): string {
 
 // Open file based on file type
 async function openFile(path: string, fileType: string): Promise<void> {
-    hideAllViewers();
     const resolvedType = resolveFileType(fileType, path);
     let opened = false;
+
+    if (resolvedType !== "audio") {
+        hideAllViewers();
+    }
 
     // Save last opened file to vault state (for all supported types)
     if (resolvedType === "markdown" || resolvedType === "image" || resolvedType === "pdf" || resolvedType === "html") {
@@ -1590,7 +1601,7 @@ async function openFile(path: string, fileType: string): Promise<void> {
     }
 
     // Clear outline for non-markdown files (outline is only relevant for markdown)
-    if (resolvedType !== "markdown") {
+    if (resolvedType !== "markdown" && resolvedType !== "audio") {
         outlineList.innerHTML = '<div class="outline-empty">No outline available</div>';
         currentNote = null;
     }
@@ -1621,6 +1632,10 @@ async function openFile(path: string, fileType: string): Promise<void> {
             await openHTML(path);
             opened = true;
             break;
+        case "audio":
+            await openAudio(path);
+            opened = true;
+            break;
         default:
             opened = true;
             // Open with system default app (macOS open command)
@@ -1642,6 +1657,36 @@ function hideAllViewers() {
     imageViewer.style.display = "none";
     pdfViewer.style.display = "none";
     htmlEditorContainer.style.display = "none";
+}
+
+async function openAudio(path: string): Promise<void> {
+    try {
+        currentAudioPath = path;
+        const base64Data = await FileService.ReadBinaryFile(path);
+        const ext = path.split('.').pop()?.toLowerCase() || '';
+        const mimeType = getMimeTypeFromExt(ext);
+        const fileName = path.split('/').pop() || 'Audio';
+
+        miniAudioPlayer.src = `data:${mimeType};base64,${base64Data}`;
+        miniPlayerTitle.textContent = fileName;
+        miniPlayer.style.display = "flex";
+        await miniAudioPlayer.play().catch(() => undefined);
+
+        updateFileTreeSelection(path);
+    } catch (err) {
+        console.error("Failed to open audio:", err);
+        alert(`Failed to open audio: ${err}`);
+        throw err;
+    }
+}
+
+function stopAudioPlayback() {
+    miniAudioPlayer.pause();
+    miniAudioPlayer.removeAttribute("src");
+    miniAudioPlayer.load();
+    miniPlayerTitle.textContent = "No audio";
+    miniPlayer.style.display = "none";
+    currentAudioPath = null;
 }
 
 // Open image file
@@ -2114,6 +2159,13 @@ function getMimeTypeFromExt(ext: string): string {
         svg: "image/svg+xml",
         bmp: "image/bmp",
         ico: "image/x-icon",
+        mp3: "audio/mpeg",
+        m4a: "audio/mp4",
+        wav: "audio/wav",
+        ogg: "audio/ogg",
+        flac: "audio/flac",
+        aac: "audio/aac",
+        opus: "audio/ogg",
     };
     return mimeTypes[ext] || "application/octet-stream";
 }
@@ -2381,6 +2433,7 @@ function updateCurrentPathsAfterMove(previousPath: string, nextPath: string, isD
 
     currentFilePath = rewritePath(currentFilePath);
     currentHtmlPath = rewritePath(currentHtmlPath);
+    currentAudioPath = rewritePath(currentAudioPath);
     if (currentNote?.path) {
         currentNote.path = rewritePath(currentNote.path) || currentNote.path;
     }
@@ -2396,6 +2449,9 @@ function updateCurrentPathsAfterMove(previousPath: string, nextPath: string, isD
         } else if (fileType === "html") {
             htmlEditorTitle.textContent = currentFilePath.split("/").pop() || "HTML";
         }
+    }
+    if (currentAudioPath) {
+        miniPlayerTitle.textContent = currentAudioPath.split("/").pop() || "Audio";
     }
 }
 

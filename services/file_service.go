@@ -18,6 +18,11 @@ var imageExtensions = map[string]bool{
 	".webp": true, ".svg": true, ".bmp": true, ".ico": true,
 }
 
+var audioExtensions = map[string]bool{
+	".mp3": true, ".m4a": true, ".wav": true, ".ogg": true,
+	".flac": true, ".aac": true, ".opus": true,
+}
+
 var ErrInvalidPath = errors.New("invalid vault path")
 
 // GetFileType determines the file type based on extension
@@ -32,6 +37,8 @@ func GetFileType(filename string) string {
 		return models.FileTypeHTML
 	case imageExtensions[ext]:
 		return models.FileTypeImage
+	case audioExtensions[ext]:
+		return models.FileTypeAudio
 	default:
 		return models.FileTypeOther
 	}
@@ -469,6 +476,13 @@ func GetMimeType(filename string) string {
 		".pdf":  "application/pdf",
 		".html": "text/html",
 		".htm":  "text/html",
+		".mp3":  "audio/mpeg",
+		".m4a":  "audio/mp4",
+		".wav":  "audio/wav",
+		".ogg":  "audio/ogg",
+		".flac": "audio/flac",
+		".aac":  "audio/aac",
+		".opus": "audio/ogg",
 	}
 	if mime, ok := mimeTypes[ext]; ok {
 		return mime

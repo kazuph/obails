@@ -31,6 +31,12 @@
                 <button id="graph-btn" title="Graph View (⌘G)">🕸️</button>
                 <button id="refresh-btn" title="Refresh">🔄</button>
                 <div class="toolbar-spacer"></div>
+                <div class="mini-player" id="mini-player" style="display: none;">
+                    <span class="mini-player-icon">♪</span>
+                    <span class="mini-player-title" id="mini-player-title">No audio</span>
+                    <audio id="mini-audio-player" controls preload="metadata"></audio>
+                    <button id="mini-player-close" title="Stop audio">✕</button>
+                </div>
                 <div class="theme-selector">
                     <label>Theme:</label>
                     <select id="theme-select">

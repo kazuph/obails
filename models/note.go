@@ -26,6 +26,7 @@ const (
 	FileTypeImage    = "image"
 	FileTypePDF      = "pdf"
 	FileTypeHTML     = "html"
+	FileTypeAudio    = "audio"
 	FileTypeOther    = "other"
 )
 
@@ -34,7 +35,7 @@ type FileInfo struct {
 	Name       string     `json:"name"`
 	Path       string     `json:"path"`
 	IsDir      bool       `json:"isDir"`
-	FileType   string     `json:"fileType,omitempty"` // markdown, image, pdf, html, other
+	FileType   string     `json:"fileType,omitempty"` // markdown, image, pdf, html, audio, other
 	Children   []FileInfo `json:"children,omitempty"`
 	ModifiedAt time.Time  `json:"modifiedAt"`
 }

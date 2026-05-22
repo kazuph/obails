@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { setupMockBindings } from './helpers/mock-bindings';
 
 test.describe('Obails App', () => {
   test('should close the context menu when clicking elsewhere', async ({ page }) => {
@@ -86,6 +87,27 @@ test.describe('Obails App', () => {
 
     // File tree should exist
     await expect(page.locator('.file-tree')).toBeVisible();
+  });
+
+  test('should play audio in the mini player without replacing the current note', async ({ page }) => {
+    await setupMockBindings(page);
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+    await expect(page.locator('.file-item[data-path="Welcome.md"]')).toBeVisible();
+
+    await page.locator('.file-item[data-path="Welcome.md"]').click();
+    await expect(page.locator('.editor-container')).toBeVisible();
+    await expect(page.locator('#editor-title')).toHaveText('Welcome');
+
+    await page.locator('.file-item.folder[data-path="audio"]').click();
+    await page.locator('.file-item.file[data-path="audio/test-tone.wav"]').click();
+
+    await expect(page.locator('#mini-player')).toBeVisible();
+    await expect(page.locator('#mini-player-title')).toHaveText('test-tone.wav');
+    await expect(page.locator('#mini-audio-player')).toHaveAttribute('src', /^data:audio\/wav;base64,/);
+
+    await expect(page.locator('.editor-container')).toBeVisible();
+    await expect(page.locator('#editor-title')).toHaveText('Welcome');
   });
 
   test('should have toolbar buttons', async ({ page }) => {
