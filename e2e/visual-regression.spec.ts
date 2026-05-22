@@ -162,8 +162,53 @@ test.describe('Visual Regression - README Screenshots', () => {
     await switchTheme(page, 'github-light');
 
     // コードブロックのハイライトを待機
-    await page.waitForSelector('.preview-pane pre code', { timeout: 5000 }).catch(() => {});
+    await page.waitForSelector('.preview-pane pre code.hljs .hljs-keyword', { timeout: 5000 });
     await page.waitForTimeout(500);
+
+    const lowContrastTokens = await page.evaluate(() => {
+      function parseRgb(color: string): [number, number, number] {
+        const match = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+        if (!match) {
+          throw new Error(`Unsupported color format: ${color}`);
+        }
+        return [Number(match[1]), Number(match[2]), Number(match[3])];
+      }
+
+      function luminance([r, g, b]: [number, number, number]): number {
+        const channels = [r, g, b].map((value) => {
+          const srgb = value / 255;
+          return srgb <= 0.03928 ? srgb / 12.92 : ((srgb + 0.055) / 1.055) ** 2.4;
+        });
+        return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+      }
+
+      function contrastRatio(foreground: string, background: string): number {
+        const fg = luminance(parseRgb(foreground));
+        const bg = luminance(parseRgb(background));
+        const lighter = Math.max(fg, bg);
+        const darker = Math.min(fg, bg);
+        return (lighter + 0.05) / (darker + 0.05);
+      }
+
+      const pre = document.querySelector('.preview-pane pre');
+      if (!pre) {
+        throw new Error('Code block container was not rendered');
+      }
+      const background = getComputedStyle(pre).backgroundColor;
+
+      return Array.from(document.querySelectorAll('.preview-pane pre code, .preview-pane pre code span'))
+        .map((element) => {
+          const style = getComputedStyle(element);
+          return {
+            className: element.className || element.tagName.toLowerCase(),
+            color: style.color,
+            contrast: contrastRatio(style.color, background),
+          };
+        })
+        .filter((token) => token.contrast < 4.5);
+    });
+
+    expect(lowContrastTokens).toEqual([]);
 
     await page.screenshot({
       path: path.join(SCREENSHOT_DIR, 'code-highlight.png'),
@@ -200,8 +245,14 @@ test.describe('Visual Regression - README Screenshots', () => {
     const overlay = page.locator('#graph-overlay');
     await expect(overlay).toHaveClass(/visible/, { timeout: 5000 });
 
-    // モックのグラフデータを注入
+    // 実アプリの非同期ロードが完了してから、README用の安定したモックグラフを注入する
+    await page.waitForFunction(() => {
+      const stats = document.getElementById('graph-stats')?.textContent || '';
+      return stats !== 'Building index...';
+    }, { timeout: 10000 }).catch(() => {});
     await injectMockGraphData(page);
+    await expect(page.locator('#graph-container svg')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('#graph-stats')).toContainText('files');
     await page.waitForTimeout(500);
 
     await page.screenshot({

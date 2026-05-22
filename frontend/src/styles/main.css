@@ -13,6 +13,15 @@
     --border: #d0d7de;
     --success: #1a7f37;
     --error: #cf222e;
+    --code-bg: #f6f8fa;
+    --code-text: #24292f;
+    --syntax-comment: #57606a;
+    --syntax-keyword: #cf222e;
+    --syntax-string: #0a3069;
+    --syntax-title: #8250df;
+    --syntax-attr: #953800;
+    --syntax-literal: #0550ae;
+    --syntax-meta: #57606a;
     --sidebar-width: 250px;
     --backlinks-width: 250px;
 }
@@ -30,6 +39,15 @@
     --border: #d3cbb7;
     --success: #859900;
     --error: #dc322f;
+    --code-bg: #eee8d5;
+    --code-text: #586e75;
+    --syntax-comment: #6c7f80;
+    --syntax-keyword: #dc322f;
+    --syntax-string: #2a6f9e;
+    --syntax-title: #6c71c4;
+    --syntax-attr: #b58900;
+    --syntax-literal: #268bd2;
+    --syntax-meta: #7f8c8d;
 }
 
 /* One Light */
@@ -45,6 +63,15 @@
     --border: #d3d3d4;
     --success: #50a14f;
     --error: #e45649;
+    --code-bg: #f0f0f0;
+    --code-text: #383a42;
+    --syntax-comment: #696c77;
+    --syntax-keyword: #a626a4;
+    --syntax-string: #0b6b2b;
+    --syntax-title: #4078f2;
+    --syntax-attr: #986801;
+    --syntax-literal: #0184bc;
+    --syntax-meta: #5c6370;
 }
 
 /* Catppuccin Latte */
@@ -60,6 +87,15 @@
     --border: #ccd0da;
     --success: #40a02b;
     --error: #d20f39;
+    --code-bg: #e6e9ef;
+    --code-text: #4c4f69;
+    --syntax-comment: #6c6f85;
+    --syntax-keyword: #8839ef;
+    --syntax-string: #40a02b;
+    --syntax-title: #1e66f5;
+    --syntax-attr: #df8e1d;
+    --syntax-literal: #209fb5;
+    --syntax-meta: #7c7f93;
 }
 
 /* Rosé Pine Dawn */
@@ -75,6 +111,15 @@
     --border: #dfdad9;
     --success: #56949f;
     --error: #b4637a;
+    --code-bg: #f2e9e1;
+    --code-text: #575279;
+    --syntax-comment: #797593;
+    --syntax-keyword: #b4637a;
+    --syntax-string: #286983;
+    --syntax-title: #907aa9;
+    --syntax-attr: #ea9d34;
+    --syntax-literal: #56949f;
+    --syntax-meta: #9893a5;
 }
 
 /* ========== DARK THEMES ========== */
@@ -194,6 +239,15 @@
     [data-theme="gruvbox"],
     [data-theme="tokyonight"]
 ) {
+    --code-bg: #0d1117;
+    --code-text: #c9d1d9;
+    --syntax-comment: #8b949e;
+    --syntax-keyword: #ff7b72;
+    --syntax-string: #a5d6ff;
+    --syntax-title: #d2a8ff;
+    --syntax-attr: #79c0ff;
+    --syntax-literal: #79c0ff;
+    --syntax-meta: #8b949e;
     --graph-bg: #0a0a1a;
     --graph-header-bg: rgba(20, 20, 40, 0.95);
     --graph-border: rgba(100, 100, 255, 0.2);
@@ -757,7 +811,8 @@ body {
 }
 
 .preview-pane code {
-    background: var(--bg-tertiary);
+    background: var(--code-bg);
+    color: var(--code-text);
     padding: 0.2rem 0.4rem;
     border-radius: 4px;
     font-family: 'SF Mono', 'Fira Code', monospace;
@@ -765,11 +820,63 @@ body {
 }
 
 .preview-pane pre {
-    background: var(--bg-tertiary);
+    background: var(--code-bg);
     padding: 1rem;
     border-radius: 8px;
     overflow-x: auto;
     margin: 0.5rem 0;
+}
+
+.preview-pane pre code,
+.preview-pane pre code.hljs {
+    display: block;
+    background: transparent;
+    color: var(--code-text);
+    padding: 0;
+}
+
+.preview-pane pre code.hljs .hljs-comment,
+.preview-pane pre code.hljs .hljs-quote {
+    color: var(--syntax-comment);
+}
+
+.preview-pane pre code.hljs .hljs-keyword,
+.preview-pane pre code.hljs .hljs-selector-tag,
+.preview-pane pre code.hljs .hljs-subst {
+    color: var(--syntax-keyword);
+}
+
+.preview-pane pre code.hljs .hljs-string,
+.preview-pane pre code.hljs .hljs-doctag,
+.preview-pane pre code.hljs .hljs-template-variable {
+    color: var(--syntax-string);
+}
+
+.preview-pane pre code.hljs .hljs-title,
+.preview-pane pre code.hljs .hljs-section,
+.preview-pane pre code.hljs .hljs-selector-id {
+    color: var(--syntax-title);
+}
+
+.preview-pane pre code.hljs .hljs-attr,
+.preview-pane pre code.hljs .hljs-attribute,
+.preview-pane pre code.hljs .hljs-name,
+.preview-pane pre code.hljs .hljs-selector-class {
+    color: var(--syntax-attr);
+}
+
+.preview-pane pre code.hljs .hljs-number,
+.preview-pane pre code.hljs .hljs-literal,
+.preview-pane pre code.hljs .hljs-variable,
+.preview-pane pre code.hljs .hljs-variable.language_,
+.preview-pane pre code.hljs .hljs-tag {
+    color: var(--syntax-literal);
+}
+
+.preview-pane pre code.hljs .hljs-meta,
+.preview-pane pre code.hljs .hljs-built_in,
+.preview-pane pre code.hljs .hljs-type {
+    color: var(--syntax-meta);
 }
 
 .preview-pane .frontmatter {

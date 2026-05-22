@@ -12,7 +12,7 @@ test.describe('Obails App', () => {
     const contextMenu = page.locator('#context-menu');
     await expect(contextMenu).toBeVisible();
 
-    await page.locator('.sidebar-header h2').click();
+    await page.locator('#context-menu-backdrop').click({ position: { x: 10, y: 10 } });
     await expect(contextMenu).toBeHidden();
   });
 
@@ -47,7 +47,7 @@ test.describe('Obails App', () => {
     await page.waitForTimeout(300);
     await expect(contextMenu).toBeVisible();
 
-    await page.locator('.sidebar-header h2').click();
+    await page.locator('#context-menu-backdrop').click({ position: { x: 10, y: 10 } });
     await expect(contextMenu).toBeHidden();
   });
 
