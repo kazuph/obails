@@ -61,17 +61,17 @@ func normalizeThemeValue(theme string) string {
 }
 
 func buildApplicationMenu(app *application.App, selectedTheme string) *application.Menu {
-	menu := application.DefaultApplicationMenu()
+	menu := application.NewMenu()
+	menu.AddRole(application.AppMenu)
+	menu.AddRole(application.FileMenu)
+	menu.AddRole(application.EditMenu)
+	menu.AddRole(application.ViewMenu)
+	menu.AddRole(application.WindowMenu)
 	themeMenu := menu.AddSubmenu("Theme")
+	menu.AddRole(application.HelpMenu)
 	selectedTheme = normalizeThemeValue(selectedTheme)
-	currentGroup := ""
 
 	for _, option := range themeMenuOptions {
-		if currentGroup != "" && currentGroup != option.Group {
-			themeMenu.AddSeparator()
-		}
-		currentGroup = option.Group
-
 		theme := option.Value
 		themeMenu.AddRadio(option.Label, theme == selectedTheme).OnClick(func(ctx *application.Context) {
 			app.Event.Emit("obails:theme-selected", theme)
