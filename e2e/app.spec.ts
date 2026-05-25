@@ -224,6 +224,26 @@ test.describe('Obails App', () => {
     await expect(fileTree).toHaveClass(/drag-over-import/);
   });
 
+  test('should import native files dropped from Finder into the file tree', async ({ page }) => {
+    await setupMockBindings(page);
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+    await expect(page.locator('.file-item[data-path="Welcome.md"]')).toBeVisible();
+
+    await page.evaluate(() => {
+      const wails = (window as any)._wails;
+      wails.dispatchWailsEvent({
+        name: 'obails:files-dropped',
+        data: {
+          files: ['/tmp/finder-drop.md'],
+          targetFolder: '',
+        },
+      });
+    });
+
+    await expect(page.locator('.file-item[data-path="finder-drop.md"]')).toBeVisible();
+  });
+
   test('should hide toolbar theme selector and accept menu theme events', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');

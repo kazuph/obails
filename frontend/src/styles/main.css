@@ -1729,7 +1729,9 @@ body {
 }
 
 #file-tree.drag-over-root,
-.file-tree.drag-over-import {
+.file-tree.drag-over-import,
+.file-tree.file-drop-target-active,
+.file-item.file-drop-target-active {
     background: color-mix(in srgb, var(--accent) 12%, transparent);
     outline: 2px dashed var(--accent);
     outline-offset: -4px;

@@ -1638,6 +1638,12 @@ function setupThemeMenu() {
         const theme = (event as CustomEvent<string>).detail;
         applyTheme(theme, true);
     });
+
+    Events.On("obails:files-dropped", (event) => {
+        const data = event.data as { files?: string[]; targetFolder?: string } | null;
+        const files = Array.isArray(data?.files) ? data.files : [];
+        void importExternalFiles(files, data?.targetFolder || "");
+    });
 }
 
 function applyTheme(themeValue: string, persist: boolean) {
@@ -2357,6 +2363,9 @@ function createFileElement(file: FileInfo): HTMLElement {
     el.className = `file-item ${file.isDir ? "folder" : "file"}`;
     el.setAttribute("data-path", file.path);
     el.setAttribute("data-name", file.name);
+    if (file.isDir) {
+        el.setAttribute("data-file-drop-target", "");
+    }
 
     const icon = getFileIcon(file);
     el.innerHTML = `<span class="folder-icon">${icon}</span><span class="file-name">${file.name}</span>`;

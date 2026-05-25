@@ -9,6 +9,7 @@ import (
 
 	"github.com/kazuph/obails/services"
 	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wailsapp/wails/v3/pkg/events"
 )
 
 //go:embed all:frontend/dist
@@ -145,9 +146,10 @@ func main() {
 
 	// Create the main window
 	mainWindow := app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Title:  "Obails",
-		Width:  1200,
-		Height: 800,
+		Title:          "Obails",
+		Width:          1200,
+		Height:         800,
+		EnableFileDrop: true,
 		Mac: application.MacWindow{
 			InvisibleTitleBarHeight: 50,
 			Backdrop:                application.MacBackdropTranslucent,
@@ -159,6 +161,20 @@ func main() {
 
 	// Set window reference for window service
 	windowService.SetWindow(mainWindow)
+
+	mainWindow.OnWindowEvent(events.Common.WindowFilesDropped, func(event *application.WindowEvent) {
+		details := event.Context().DropTargetDetails()
+		targetFolder := ""
+		if details != nil {
+			if path, ok := details.Attributes["data-path"]; ok {
+				targetFolder = path
+			}
+		}
+		app.Event.Emit("obails:files-dropped", map[string]any{
+			"files":        event.Context().DroppedFiles(),
+			"targetFolder": targetFolder,
+		})
+	})
 
 	// Set app reference for config service (for dialogs)
 	configService.SetApp(app)
