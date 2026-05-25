@@ -38,6 +38,8 @@ func GetFileType(filename string) string {
 		return models.FileTypePDF
 	case ext == ".html" || ext == ".htm":
 		return models.FileTypeHTML
+	case ext == ".txt":
+		return models.FileTypeText
 	case imageExtensions[ext]:
 		return models.FileTypeImage
 	case audioExtensions[ext]:

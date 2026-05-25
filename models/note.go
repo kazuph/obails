@@ -27,6 +27,7 @@ const (
 	FileTypePDF      = "pdf"
 	FileTypeHTML     = "html"
 	FileTypeAudio    = "audio"
+	FileTypeText     = "text"
 	FileTypeOther    = "other"
 )
 

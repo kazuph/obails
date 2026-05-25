@@ -22,6 +22,7 @@ function getFixtureFileType(name: string): string {
   if (ext === '.pdf') return 'pdf';
   if (ext === '.html' || ext === '.htm') return 'html';
   if (['.mp3', '.m4a', '.wav', '.ogg', '.flac', '.aac', '.opus'].includes(ext)) return 'audio';
+  if (ext === '.txt') return 'text';
   return 'other';
 }
 
@@ -37,7 +38,7 @@ function loadTestFiles(): { [key: string]: string } {
         loadDir(fullPath, relativePath);
       } else {
         const fileType = getFixtureFileType(entry.name);
-        if (fileType === 'markdown' || fileType === 'html') {
+        if (fileType === 'markdown' || fileType === 'html' || fileType === 'text') {
           files[relativePath] = fs.readFileSync(fullPath, 'utf-8');
         } else {
           files[relativePath] = fs.readFileSync(fullPath).toString('base64');
@@ -199,6 +200,10 @@ export async function setupMockBindings(page: Page, options: MockBindingOptions 
       case 3963746572:
         value = null;
         break;
+      // FileService.OpenExternal
+      case 1598367945:
+        value = null;
+        break;
       // NoteService.GetNote
       case 591728348: {
         const notePath = args[0];
@@ -252,6 +257,7 @@ export async function setupMockBindings(page: Page, options: MockBindingOptions 
     (window as any).__wails_mock_files = files;
     (window as any).__wails_mock_fileInfos = fileInfos;
     (window as any).__wails_mock_lastOpenedFile = initialLastOpenedFile;
+    (window as any).__wails_mock_openExternalCalls = [];
 
     // CancellablePromise風のオブジェクトを作成
     const createMockPromise = <T>(value: T): Promise<T> & { cancel: () => void } => {
@@ -337,6 +343,11 @@ export async function setupMockBindings(page: Page, options: MockBindingOptions 
 
             // FileService.RevealInFinder
             case 3963746572:
+              return createMockPromise(undefined);
+
+            // FileService.OpenExternal
+            case 1598367945:
+              (window as any).__wails_mock_openExternalCalls.push(String(args[0] || ''));
               return createMockPromise(undefined);
 
             // NoteService.GetNote

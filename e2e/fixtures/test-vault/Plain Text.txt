@@ -1,0 +1,2 @@
+This is a plain text file.
+It should open inside Obails, not in an external editor.

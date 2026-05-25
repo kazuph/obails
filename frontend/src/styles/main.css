@@ -956,6 +956,18 @@ body {
     padding: 0;
 }
 
+.preview-pane .plain-text-preview {
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: var(--text-primary);
+    background: transparent;
+    border: 0;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 0.95rem;
+    line-height: 1.6;
+}
+
 .preview-pane pre code.hljs .hljs-comment,
 .preview-pane pre code.hljs .hljs-quote {
     color: var(--syntax-comment);

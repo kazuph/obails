@@ -91,6 +91,8 @@ let itemFormTargetPath = "";
 let itemFormTargetFolder = "";
 let lastLoadedMarkdownContent = "";
 let lastLoadedHtmlContent = "";
+let currentTextPath: string | null = null;
+let lastLoadedTextContent = "";
 const FILE_TREE_WATCH_INTERVAL_MS = 350;
 
 // Keyboard navigation state
@@ -302,11 +304,33 @@ type FileTreeSnapshotOptions = {
 };
 
 function applyFileTreeSnapshot(files: FileInfo[], options: FileTreeSnapshotOptions = {}) {
+    const expandedFolders = getExpandedFolderPaths();
     fileTreeSignature = buildFileTreeSignature(files);
     renderFileTree(files);
+    restoreExpandedFolders(expandedFolders);
     if (options.revealActiveFile !== false) {
         restoreActiveFileTreeSelection();
     }
+}
+
+function getExpandedFolderPaths(): Set<string> {
+    const paths = new Set<string>();
+    fileTree.querySelectorAll(".file-item.folder.expanded").forEach((folder) => {
+        const path = folder.getAttribute("data-path");
+        if (path) {
+            paths.add(path);
+        }
+    });
+    return paths;
+}
+
+function restoreExpandedFolders(paths: Set<string>) {
+    paths.forEach((path) => {
+        const folder = fileTree.querySelector(`.file-item.folder[data-path="${path}"]`);
+        if (folder instanceof HTMLElement) {
+            setFolderExpanded(folder, true);
+        }
+    });
 }
 
 // Show vault setup dialog
@@ -400,7 +424,7 @@ function setupEventListeners() {
         }
     });
 
-    editor.addEventListener("input", debounce(saveCurrentNote, 500));
+    editor.addEventListener("input", debounce(saveEditorContent, 500));
     editor.addEventListener("input", updatePreview);
 
     // HTML Editor events
@@ -1681,8 +1705,10 @@ function showEmptyMainPane() {
     currentNote = null;
     currentFilePath = null;
     currentHtmlPath = null;
+    currentTextPath = null;
     lastLoadedMarkdownContent = "";
     lastLoadedHtmlContent = "";
+    lastLoadedTextContent = "";
 }
 
 // File Type Helpers
@@ -1696,6 +1722,7 @@ function getFileIcon(file: FileInfo): string {
         case "pdf": return "📕";
         case "html": return "🌐";
         case "audio": return "🎧";
+        case "text": return "📄";
         default: return "📄";
     }
 }
@@ -1707,12 +1734,13 @@ function getFileTypeFromPath(path: string): string {
     if (ext === 'pdf') return 'pdf';
     if (ext === 'html' || ext === 'htm') return 'html';
     if (['mp3', 'm4a', 'wav', 'ogg', 'flac', 'aac', 'opus'].includes(ext)) return 'audio';
+    if (ext === 'txt') return 'text';
     return 'other';
 }
 
 function resolveFileType(fileType: string, path: string): string {
     const normalized = (fileType || "").toLowerCase();
-    if (normalized === "markdown" || normalized === "image" || normalized === "pdf" || normalized === "html" || normalized === "audio") {
+    if (normalized === "markdown" || normalized === "image" || normalized === "pdf" || normalized === "html" || normalized === "audio" || normalized === "text") {
         return normalized;
     }
     return getFileTypeFromPath(path);
@@ -1725,10 +1753,15 @@ async function openFile(path: string, fileType: string): Promise<void> {
 
     if (resolvedType !== "audio") {
         hideAllViewers();
+        currentTextPath = null;
+        lastLoadedTextContent = "";
+        if (resolvedType !== "html") {
+            currentHtmlPath = null;
+        }
     }
 
     // Save last opened file to vault state (for all supported types)
-    if (resolvedType === "markdown" || resolvedType === "image" || resolvedType === "pdf" || resolvedType === "html") {
+    if (resolvedType === "markdown" || resolvedType === "image" || resolvedType === "pdf" || resolvedType === "html" || resolvedType === "text") {
         try {
             await StateService.SetLastOpenedFile(path, resolvedType);
         } catch (err) {
@@ -1766,6 +1799,11 @@ async function openFile(path: string, fileType: string): Promise<void> {
         case "html":
             currentFilePath = path;
             await openHTML(path);
+            opened = true;
+            break;
+        case "text":
+            currentFilePath = path;
+            await openText(path);
             opened = true;
             break;
         case "audio":
@@ -2165,6 +2203,7 @@ async function openHTML(path: string): Promise<void> {
     try {
         const content = await FileService.ReadFile(path);
         currentHtmlPath = path;
+        currentTextPath = null;
         lastLoadedHtmlContent = content;
 
         htmlEditor.value = content;
@@ -2179,6 +2218,32 @@ async function openHTML(path: string): Promise<void> {
     } catch (err) {
         console.error("Failed to open HTML:", err);
         alert(`Failed to open HTML: ${err}`);
+    }
+}
+
+async function openText(path: string): Promise<void> {
+    try {
+        const content = await FileService.ReadFile(path);
+        currentFilePath = path;
+        currentTextPath = path;
+        currentNote = null;
+        currentHtmlPath = null;
+        lastLoadedMarkdownContent = "";
+        lastLoadedTextContent = content;
+
+        editorContainer.style.display = "flex";
+        editor.value = content;
+        editor.selectionStart = 0;
+        editor.selectionEnd = 0;
+        editor.scrollTop = 0;
+        updatePaneTitles(path.split('/').pop() || path);
+        updatePreview();
+        clearBacklinks();
+        clearOutgoingLinks();
+        updateFileTreeSelection(path);
+    } catch (err) {
+        console.error("Failed to open text file:", err);
+        alert(`Failed to open text file: ${err}`);
     }
 }
 
@@ -2268,6 +2333,25 @@ async function saveHtmlFile() {
         lastLoadedHtmlContent = htmlEditor.value;
     } catch (err) {
         console.error("Failed to save HTML:", err);
+    }
+}
+
+async function saveEditorContent() {
+    if (currentTextPath) {
+        await saveCurrentTextFile();
+        return;
+    }
+    await saveCurrentNote();
+}
+
+async function saveCurrentTextFile() {
+    if (!currentTextPath) return;
+
+    try {
+        await FileService.WriteFile(currentTextPath, editor.value);
+        lastLoadedTextContent = editor.value;
+    } catch (err) {
+        console.error("Failed to save text file:", err);
     }
 }
 
@@ -2499,6 +2583,9 @@ async function openNote(path: string): Promise<boolean> {
         }
 
         currentFilePath = path;
+        currentTextPath = null;
+        currentHtmlPath = null;
+        lastLoadedTextContent = "";
         editor.value = currentNote.content;
         lastLoadedMarkdownContent = currentNote.content;
         // Reset cursor position and scroll to the top
@@ -2555,6 +2642,7 @@ function updateCurrentPathsAfterMove(previousPath: string, nextPath: string, isD
 
     currentFilePath = rewritePath(currentFilePath);
     currentHtmlPath = rewritePath(currentHtmlPath);
+    currentTextPath = rewritePath(currentTextPath);
     currentAudioPath = rewritePath(currentAudioPath);
     if (currentNote?.path) {
         currentNote.path = rewritePath(currentNote.path) || currentNote.path;
@@ -2583,8 +2671,10 @@ function clearCurrentSelection() {
     currentNote = null;
     currentFilePath = null;
     currentHtmlPath = null;
+    currentTextPath = null;
     lastLoadedMarkdownContent = "";
     lastLoadedHtmlContent = "";
+    lastLoadedTextContent = "";
     lastSyncedOpenedFile = "";
     editor.value = "";
     editor.selectionStart = 0;
@@ -2681,7 +2771,25 @@ async function syncOpenFileWithVault() {
         return;
     }
 
-    if (fileType === "image" || fileType === "pdf" || fileType === "other") {
+    if (fileType === "text") {
+        if (!currentTextPath || editor.value !== lastLoadedTextContent) {
+            return;
+        }
+        try {
+            const nextContent = await FileService.ReadFile(currentFilePath);
+            if (editor.value !== nextContent) {
+                lastLoadedTextContent = nextContent;
+                editor.value = nextContent;
+                updatePreview();
+            }
+        } catch (err) {
+            console.warn("Failed to refresh text file from vault:", err);
+            clearCurrentSelection();
+        }
+        return;
+    }
+
+    if (fileType === "image" || fileType === "pdf") {
         try {
             await openFile(currentFilePath, fileType);
         } catch (err) {
@@ -2699,6 +2807,9 @@ async function openTodayNote() {
         const note = await NoteService.GetTodayDailyNote();
         if (note) {
             currentFilePath = note.path;
+            currentTextPath = null;
+            currentHtmlPath = null;
+            lastLoadedTextContent = "";
             currentNote = note;
             editor.value = note.content;
             lastLoadedMarkdownContent = note.content;
@@ -2731,6 +2842,12 @@ async function openTodayNote() {
 // Preview
 function updatePreview() {
     const content = editor.value;
+    if (currentTextPath) {
+        preview.innerHTML = `<pre class="plain-text-preview">${escapeHtml(content)}</pre>`;
+        outlineList.innerHTML = '<div class="outline-empty">No outline available</div>';
+        return;
+    }
+
     preview.innerHTML = parseMarkdown(content);
     // Syntax highlighting for code blocks
     preview.querySelectorAll("pre code").forEach((block) => {

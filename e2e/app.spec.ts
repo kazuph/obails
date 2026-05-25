@@ -250,7 +250,11 @@ test.describe('Obails App', () => {
     await page.waitForLoadState('domcontentloaded');
     await expect(page.locator('.file-item[data-path="Welcome.md"]')).toBeVisible();
 
+    const docsFolder = page.locator('.file-item.folder[data-path="docs"]');
     const audioFolder = page.locator('.file-item.folder[data-path="audio"]');
+    await docsFolder.click();
+    await expect(docsFolder).toHaveClass(/expanded/);
+
     await audioFolder.click();
     await page.locator('.file-item.file[data-path="audio/test-tone.wav"]').click();
     await audioFolder.click();
@@ -267,8 +271,24 @@ test.describe('Obails App', () => {
       });
     });
 
+    await expect(docsFolder).toHaveClass(/expanded/);
     await expect(audioFolder).not.toHaveClass(/expanded/);
     await expect(page.locator('.file-item[data-path="root-drop.md"]')).toBeVisible();
+  });
+
+  test('should open txt files inside Obails without launching an external editor', async ({ page }) => {
+    await setupMockBindings(page);
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+
+    await page.locator('.file-item[data-path="Plain Text.txt"]').click();
+
+    await expect(page.locator('#editor-title')).toHaveText('Plain Text.txt');
+    await expect(page.locator('#editor')).toHaveValue(/plain text file/);
+    await expect(page.locator('#preview .plain-text-preview')).toContainText('It should open inside Obails');
+
+    const externalCalls = await page.evaluate(() => (window as any).__wails_mock_openExternalCalls);
+    expect(externalCalls).toEqual([]);
   });
 
   test('should hide toolbar theme selector and accept menu theme events', async ({ page }) => {

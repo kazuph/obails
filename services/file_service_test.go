@@ -42,6 +42,7 @@ func TestGetFileType(t *testing.T) {
 		{name: "image", filename: "cover.png", want: models.FileTypeImage},
 		{name: "pdf", filename: "paper.pdf", want: models.FileTypePDF},
 		{name: "html", filename: "page.html", want: models.FileTypeHTML},
+		{name: "text", filename: "notes.txt", want: models.FileTypeText},
 		{name: "audio mp3", filename: "podcast.mp3", want: models.FileTypeAudio},
 		{name: "audio m4a", filename: "voice.M4A", want: models.FileTypeAudio},
 		{name: "audio wav", filename: "tone.wav", want: models.FileTypeAudio},
