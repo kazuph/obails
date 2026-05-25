@@ -2,9 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   buildChildPath,
   buildRenamePath,
+  extractExternalDropPaths,
+  fileUriToPath,
   getDisplayName,
   getFileExtension,
   getParentPath,
+  hasExternalFileDrop,
+  parseFileUriList,
   shouldIgnoreTreeClick,
   validateItemName,
 } from "../../lib/file-tree-ops";
@@ -37,5 +41,20 @@ describe("file-tree-ops", () => {
     expect(shouldIgnoreTreeClick(2, false, false, "docs", "", 0, Date.now())).toBe(true);
     expect(shouldIgnoreTreeClick(0, false, false, "docs", "docs", Date.now() + 100, Date.now())).toBe(true);
     expect(shouldIgnoreTreeClick(0, false, false, "docs", "other", Date.now() + 100, Date.now())).toBe(false);
+  });
+
+  it("parses file uri lists", () => {
+    expect(parseFileUriList("file:///Users/test/note.md\n#comment")).toEqual(["/Users/test/note.md"]);
+    expect(fileUriToPath("file:///C:/Users/test/note.md")).toBe("C:/Users/test/note.md");
+  });
+
+  it("detects external file drops", () => {
+    const dataTransfer = {
+      getData: () => "file:///tmp/import.md",
+      files: [],
+    } as DataTransfer;
+
+    expect(hasExternalFileDrop(dataTransfer)).toBe(true);
+    expect(extractExternalDropPaths(dataTransfer)).toEqual(["/tmp/import.md"]);
   });
 });

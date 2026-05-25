@@ -95,6 +95,27 @@ function generateFileInfos(): any[] {
   return infos;
 }
 
+function addMockMarkdownFile(files: Record<string, string>, fileInfos: any[], relativePath: string, content = '# Imported from external file') {
+  files[relativePath] = content;
+  if (fileInfos.some((info) => (info.path ?? info.Path) === relativePath)) {
+    return;
+  }
+  fileInfos.push({
+    Name: path.basename(relativePath),
+    Path: relativePath,
+    IsDir: false,
+    name: path.basename(relativePath),
+    path: relativePath,
+    isDir: false,
+    FileType: 'markdown',
+    fileType: 'markdown',
+    ModTime: new Date().toISOString(),
+    Size: content.length,
+    Children: null,
+    modifiedAt: new Date().toISOString(),
+  });
+}
+
 type MockLastOpenedFile = { path: string; fileType: string } | null;
 
 type MockBindingOptions = {
@@ -156,6 +177,27 @@ export async function setupMockBindings(page: Page, options: MockBindingOptions 
       // FileService.ReadBinaryFile
       case 797232813:
         value = files[args[0]] || '';
+        break;
+      // FileService.ImportExternalFile
+      case 3954866026: {
+        const sourcePath = String(args[0] || '');
+        const targetFolder = String(args[1] || '');
+        const fileName = sourcePath.split('/').pop() || 'imported.md';
+        const relativePath = targetFolder ? `${targetFolder}/${fileName}` : fileName;
+        addMockMarkdownFile(files, fileInfos, relativePath);
+        value = relativePath;
+        break;
+      }
+      // FileService.CreateFile
+      case 4120094888: {
+        const relativePath = String(args[0] || '');
+        addMockMarkdownFile(files, fileInfos, relativePath, String(args[1] || ''));
+        value = null;
+        break;
+      }
+      // FileService.RevealInFinder
+      case 3963746572:
+        value = null;
         break;
       // NoteService.GetNote
       case 591728348: {
@@ -254,6 +296,48 @@ export async function setupMockBindings(page: Page, options: MockBindingOptions 
             // FileService.ReadBinaryFile (ID: 797232813)
             case 797232813:
               return createMockPromise(files[args[0]] || '');
+
+            // FileService.ImportExternalFile
+            case 3954866026: {
+              const sourcePath = String(args[0] || '');
+              const targetFolder = String(args[1] || '');
+              const fileName = sourcePath.split('/').pop() || 'imported.md';
+              const relativePath = targetFolder ? `${targetFolder}/${fileName}` : fileName;
+              const content = '# Imported from external file';
+              files[relativePath] = content;
+              const fileInfos = (window as any).__wails_mock_fileInfos;
+              if (!fileInfos.some((info: any) => (info.path ?? info.Path) === relativePath)) {
+                fileInfos.push({
+                  name: fileName,
+                  path: relativePath,
+                  isDir: false,
+                  fileType: 'markdown',
+                  modifiedAt: new Date().toISOString(),
+                });
+              }
+              return createMockPromise(relativePath);
+            }
+
+            // FileService.CreateFile
+            case 4120094888: {
+              const relativePath = String(args[0] || '');
+              files[relativePath] = String(args[1] || '');
+              const fileInfos = (window as any).__wails_mock_fileInfos;
+              if (!fileInfos.some((info: any) => (info.path ?? info.Path) === relativePath)) {
+                fileInfos.push({
+                  name: relativePath.split('/').pop() || relativePath,
+                  path: relativePath,
+                  isDir: false,
+                  fileType: 'markdown',
+                  modifiedAt: new Date().toISOString(),
+                });
+              }
+              return createMockPromise(undefined);
+            }
+
+            // FileService.RevealInFinder
+            case 3963746572:
+              return createMockPromise(undefined);
 
             // NoteService.GetNote
             case 591728348:

@@ -85,8 +85,8 @@ test.describe('Obails App', () => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
 
-    // Check title
-    await expect(page.locator('.sidebar-header h2')).toHaveText('Obails');
+    await expect(page.locator('#settings-btn')).toBeVisible();
+    await expect(page.locator('.sidebar-header h2')).toHaveCount(0);
   });
 
   test('should display sidebar with file tree', async ({ page }) => {
@@ -145,6 +145,83 @@ test.describe('Obails App', () => {
     await expect(page.locator('#daily-note-btn')).toBeVisible();
     await expect(page.locator('#timeline-btn')).toBeVisible();
     await expect(page.locator('#refresh-btn')).toBeVisible();
+    await expect(page.locator('#new-note-btn svg')).toBeVisible();
+    await expect(page.locator('#graph-btn svg')).toBeVisible();
+  });
+
+  test('should center the mini player in the toolbar', async ({ page }) => {
+    await setupMockBindings(page);
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+    await expect(page.locator('.file-item[data-path="Welcome.md"]')).toBeVisible();
+
+    await page.locator('.file-item.folder[data-path="audio"]').click();
+    await page.locator('.file-item.file[data-path="audio/test-tone.wav"]').click();
+    await expect(page.locator('#mini-player')).toBeVisible();
+
+    const alignment = await page.locator('.toolbar-center').evaluate((el) => {
+      const style = window.getComputedStyle(el);
+      return {
+        justifySelf: style.justifySelf,
+        display: style.display,
+      };
+    });
+    expect(alignment.justifySelf).toBe('center');
+    expect(alignment.display).toBe('flex');
+  });
+
+  test('should expand and collapse all folders from sidebar controls', async ({ page }) => {
+    await setupMockBindings(page);
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+
+    const folder = page.locator('.file-item.folder[data-path="docs"]');
+    await expect(folder).toBeVisible();
+
+    await folder.click();
+    await expect(folder).toHaveClass(/expanded/);
+
+    await page.locator('#collapse-all-folders-btn').click();
+    await expect(folder).not.toHaveClass(/expanded/);
+
+    await page.locator('#expand-all-folders-btn').click();
+    await expect(folder).toHaveClass(/expanded/);
+  });
+
+  test('should show Open Finder for folder context menu', async ({ page }) => {
+    await setupMockBindings(page);
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+
+    const folder = page.locator('.file-item.folder[data-path="docs"]');
+    await expect(folder).toBeVisible();
+
+    await folder.click({ button: 'right' });
+    await expect(page.locator('#ctx-open-finder')).toBeVisible();
+  });
+
+  test('should accept external file drops on the file tree', async ({ page }) => {
+    await setupMockBindings(page);
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+    await expect(page.locator('.file-item[data-path="Welcome.md"]')).toBeVisible();
+
+    const fileTree = page.locator('#file-tree');
+    await page.evaluate(() => {
+      const fileTreeEl = document.getElementById('file-tree');
+      if (!fileTreeEl) {
+        throw new Error('file tree not found');
+      }
+      const dataTransfer = new DataTransfer();
+      dataTransfer.items.add(new File(['# dropped from e2e'], 'drop-target.md', { type: 'text/markdown' }));
+      fileTreeEl.dispatchEvent(new DragEvent('dragover', {
+        bubbles: true,
+        cancelable: true,
+        dataTransfer,
+      }));
+    });
+
+    await expect(fileTree).toHaveClass(/drag-over-import/);
   });
 
   test('should hide toolbar theme selector and accept menu theme events', async ({ page }) => {

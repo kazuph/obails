@@ -67,3 +67,60 @@ export function shouldIgnoreTreeClick(
   }
   return path === suppressedPath && now < suppressUntil;
 }
+
+export function parseFileUriList(uriList: string): string[] {
+  return uriList
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => !line.startsWith("#"))
+    .map((line) => fileUriToPath(line))
+    .filter((path): path is string => Boolean(path));
+}
+
+export function fileUriToPath(uri: string): string | null {
+  try {
+    const url = new URL(uri);
+    if (url.protocol !== "file:") {
+      return null;
+    }
+    let pathname = decodeURIComponent(url.pathname);
+    if (/^\/[A-Za-z]:\//.test(pathname)) {
+      pathname = pathname.slice(1);
+    }
+    return pathname || null;
+  } catch {
+    return null;
+  }
+}
+
+export function extractExternalDropPaths(dataTransfer: DataTransfer | null): string[] {
+  if (!dataTransfer) {
+    return [];
+  }
+
+  const paths = new Set<string>();
+
+  for (const uri of parseFileUriList(dataTransfer.getData("text/uri-list"))) {
+    paths.add(uri);
+  }
+
+  for (const file of Array.from(dataTransfer.files)) {
+    const filePath = (file as File & { path?: string }).path;
+    if (filePath) {
+      paths.add(filePath);
+    }
+  }
+
+  return Array.from(paths);
+}
+
+export function hasExternalFileDrop(dataTransfer: DataTransfer | null): boolean {
+  if (!dataTransfer) {
+    return false;
+  }
+  if (extractExternalDropPaths(dataTransfer).length > 0) {
+    return true;
+  }
+  return dataTransfer.files.length > 0;
+}

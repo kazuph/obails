@@ -40,10 +40,13 @@ import {
 import {
   buildChildPath,
   buildRenamePath,
+  extractExternalDropPaths,
   getDisplayName,
+  hasExternalFileDrop,
   shouldIgnoreTreeClick,
   type ItemKind,
 } from "./lib/file-tree-ops";
+import { renderIcon, setButtonIcon } from "./lib/icons";
 import * as pdfjsLib from "pdfjs-dist";
 
 // Setup PDF.js worker
@@ -186,6 +189,29 @@ async function init() {
     }
 
     setupEventListeners();
+    setupToolbarIcons();
+}
+
+function setupToolbarIcons() {
+    setButtonIcon(document.getElementById("settings-btn")!, "settings");
+    setButtonIcon(document.getElementById("new-note-btn")!, "edit");
+    setButtonIcon(document.getElementById("daily-note-btn")!, "calendar");
+    setButtonIcon(document.getElementById("timeline-btn")!, "timeline");
+    setButtonIcon(document.getElementById("graph-btn")!, "graph");
+    setButtonIcon(document.getElementById("refresh-btn")!, "refresh");
+    setButtonIcon(document.getElementById("collapse-all-folders-btn")!, "folder-closed");
+    setButtonIcon(document.getElementById("expand-all-folders-btn")!, "folder-open");
+    setButtonIcon(document.getElementById("mini-player-close")!, "close");
+
+    const miniPlayerIcon = document.querySelector(".mini-player-icon") as HTMLElement | null;
+    if (miniPlayerIcon) {
+        miniPlayerIcon.innerHTML = renderIcon("music");
+    }
+
+    const searchClearBtn = document.getElementById("file-search-clear");
+    if (searchClearBtn) {
+        searchClearBtn.innerHTML = renderIcon("close");
+    }
 }
 
 function toStateKey(path: string, fileType: string): string {
@@ -475,6 +501,7 @@ function setupEventListeners() {
     setupThemeMenu();
     setupContextMenu();
     setupFileTreeDropTarget();
+    setupFolderTreeControls();
     setupFileSearch();
     setupFileTreeKeyboardNavigation();
     setupShortcutsHelp();
@@ -495,32 +522,150 @@ function setupShortcutsHelp() {
     });
 }
 
-// Setup file-tree as drop target for moving files to root
+// Setup file-tree as drop target for moving files to root and importing external files
 function setupFileTreeDropTarget() {
-    // Allow drop on file-tree itself (root directory)
     fileTree.addEventListener("dragover", (e) => {
-        // Only highlight if dropping on file-tree directly, not on child elements
-        if (e.target === fileTree && draggedFilePath) {
-            e.preventDefault();
-            fileTree.classList.add("drag-over-root");
+        if (!draggedFilePath && !hasExternalFileDrop(e.dataTransfer)) {
+            return;
+        }
+        e.preventDefault();
+        if (e.target === fileTree || fileTree.contains(e.target as Node)) {
+            fileTree.classList.add("drag-over-import");
         }
     });
 
     fileTree.addEventListener("dragleave", (e) => {
-        if (e.target === fileTree) {
-            fileTree.classList.remove("drag-over-root");
+        if (!fileTree.contains(e.relatedTarget as Node)) {
+            fileTree.classList.remove("drag-over-import", "drag-over-root");
         }
     });
 
     fileTree.addEventListener("drop", async (e) => {
-        // Only handle drop on file-tree directly (root), not on folders
-        if (e.target === fileTree && draggedFilePath) {
-            e.preventDefault();
-            fileTree.classList.remove("drag-over-root");
-            // Move to root (empty string as target)
-            await moveFileToFolder(draggedFilePath, "");
+        fileTree.classList.remove("drag-over-import", "drag-over-root");
+        const folderItem = (e.target as HTMLElement).closest(".file-item.folder") as HTMLElement | null;
+        if (folderItem) {
+            return;
         }
+        await handleFileTreeDrop(e, "");
     });
+}
+
+function setupFolderTreeControls() {
+    document.getElementById("collapse-all-folders-btn")!.addEventListener("click", () => {
+        setAllFoldersExpanded(false);
+    });
+    document.getElementById("expand-all-folders-btn")!.addEventListener("click", () => {
+        setAllFoldersExpanded(true);
+    });
+}
+
+function setFolderExpanded(folderItem: HTMLElement, expanded: boolean) {
+    folderItem.classList.toggle("expanded", expanded);
+    const iconSpan = folderItem.querySelector(".folder-icon");
+    if (iconSpan) {
+        iconSpan.textContent = expanded ? "📂" : "📁";
+    }
+
+    const wrapper = folderItem.parentElement;
+    const childrenEl = wrapper?.querySelector(":scope > .folder-children") as HTMLElement | null;
+    if (childrenEl) {
+        childrenEl.style.display = expanded ? "block" : "none";
+    }
+}
+
+function setAllFoldersExpanded(expanded: boolean) {
+    fileTree.querySelectorAll(".file-item.folder").forEach((folder) => {
+        setFolderExpanded(folder as HTMLElement, expanded);
+    });
+}
+
+async function handleFileTreeDrop(e: DragEvent, targetFolder: string) {
+    if (draggedFilePath) {
+        e.preventDefault();
+        e.stopPropagation();
+        await moveFileToFolder(draggedFilePath, targetFolder);
+        return;
+    }
+
+    const externalPaths = extractExternalDropPaths(e.dataTransfer);
+    if (externalPaths.length > 0) {
+        e.preventDefault();
+        e.stopPropagation();
+        await importExternalFiles(externalPaths, targetFolder);
+        return;
+    }
+
+    const files = e.dataTransfer?.files;
+    if (files && files.length > 0) {
+        e.preventDefault();
+        e.stopPropagation();
+        await importDroppedFileList(files, targetFolder);
+    }
+}
+
+async function importExternalFiles(sourcePaths: string[], targetFolder: string) {
+    const importedPaths: string[] = [];
+
+    for (const sourcePath of sourcePaths) {
+        try {
+            const relativePath = await FileService.ImportExternalFile(sourcePath, targetFolder);
+            importedPaths.push(relativePath);
+        } catch (err) {
+            console.error("Failed to import external file:", err);
+            alert(`Failed to import file: ${err}`);
+        }
+    }
+
+    if (importedPaths.length === 0) {
+        return;
+    }
+
+    await loadFileTree();
+    const lastImported = importedPaths[importedPaths.length - 1];
+    expandParentFolders(lastImported);
+    updateFileTreeSelection(lastImported);
+
+    const fileType = getFileTypeFromPath(lastImported);
+    if (fileType === "markdown") {
+        await openNote(lastImported);
+    }
+}
+
+async function importDroppedFileList(files: FileList, targetFolder: string) {
+    const importedPaths: string[] = [];
+
+    for (const file of Array.from(files)) {
+        const filePath = (file as File & { path?: string }).path;
+        if (filePath) {
+            try {
+                const relativePath = await FileService.ImportExternalFile(filePath, targetFolder);
+                importedPaths.push(relativePath);
+            } catch (err) {
+                console.error("Failed to import dropped file:", err);
+                alert(`Failed to import file: ${err}`);
+            }
+            continue;
+        }
+
+        try {
+            const relativePath = targetFolder ? `${targetFolder}/${file.name}` : file.name;
+            const content = await file.text();
+            await FileService.CreateFile(relativePath, content);
+            importedPaths.push(relativePath);
+        } catch (err) {
+            console.error("Failed to import dropped file content:", err);
+            alert(`Failed to import file: ${err}`);
+        }
+    }
+
+    if (importedPaths.length === 0) {
+        return;
+    }
+
+    await loadFileTree();
+    const lastImported = importedPaths[importedPaths.length - 1];
+    expandParentFolders(lastImported);
+    updateFileTreeSelection(lastImported);
 }
 
 // File Search
@@ -1160,6 +1305,7 @@ function setupContextMenu() {
     const contextMenu = document.getElementById("context-menu")!;
     const ctxNewFile = document.getElementById("ctx-new-file")!;
     const ctxNewFolder = document.getElementById("ctx-new-folder")!;
+    const ctxOpenFinder = document.getElementById("ctx-open-finder")!;
     const ctxRename = document.getElementById("ctx-rename")!;
     const ctxDelete = document.getElementById("ctx-delete")!;
 
@@ -1273,6 +1419,20 @@ function setupContextMenu() {
         }
         showRenameForm(targetPath, isDir);
     });
+
+    ctxOpenFinder.addEventListener("click", async () => {
+        const targetPath = contextMenuTargetPath;
+        hideContextMenu();
+        if (!targetPath) {
+            return;
+        }
+        try {
+            await FileService.RevealInFinder(targetPath);
+        } catch (err) {
+            console.error("Failed to reveal in Finder:", err);
+            alert(`Failed to open Finder: ${err}`);
+        }
+    });
 }
 
 function showContextMenu(x: number, y: number, path: string, isDir: boolean) {
@@ -1280,6 +1440,7 @@ function showContextMenu(x: number, y: number, path: string, isDir: boolean) {
     const backdrop = document.getElementById("context-menu-backdrop")!;
     const ctxNewFile = document.getElementById("ctx-new-file")!;
     const ctxNewFolder = document.getElementById("ctx-new-folder")!;
+    const ctxOpenFinder = document.getElementById("ctx-open-finder")!;
     const ctxRename = document.getElementById("ctx-rename")!;
     const ctxDelete = document.getElementById("ctx-delete")!;
     const isRoot = path === "";
@@ -1292,6 +1453,7 @@ function showContextMenu(x: number, y: number, path: string, isDir: boolean) {
 
     ctxNewFile.style.display = "flex";
     ctxNewFolder.style.display = "flex";
+    ctxOpenFinder.style.display = isDir && !isRoot ? "flex" : "none";
     ctxRename.style.display = isRoot ? "none" : "flex";
     ctxDelete.style.display = isRoot ? "none" : "flex";
 
@@ -1489,7 +1651,6 @@ function applyTheme(themeValue: string, persist: boolean) {
         });
     }
 
-    // Re-initialize mermaid with new theme
     const isDark = isDarkTheme(theme);
     mermaid.initialize({
         startOnLoad: false,
@@ -1498,7 +1659,6 @@ function applyTheme(themeValue: string, persist: boolean) {
         logLevel: "error"
     });
 
-    // Re-render mermaid diagrams
     updatePreview();
 }
 
@@ -2164,22 +2324,7 @@ function expandParentFolders(path: string) {
         const folderItem = document.querySelector(`.file-item.folder[data-path="${currentPath}"]`);
         if (folderItem && !folderItem.classList.contains("expanded")) {
             // Expand the folder
-            folderItem.classList.add("expanded");
-
-            // Update folder icon
-            const iconSpan = folderItem.querySelector(".folder-icon");
-            if (iconSpan) {
-                iconSpan.textContent = "📂";
-            }
-
-            // Show children
-            const wrapper = folderItem.parentElement;
-            if (wrapper) {
-                const childrenEl = wrapper.querySelector(".folder-children") as HTMLElement;
-                if (childrenEl) {
-                    childrenEl.style.display = "block";
-                }
-            }
+            setFolderExpanded(folderItem as HTMLElement, true);
         }
     }
 }
@@ -2259,15 +2404,8 @@ function createFileElement(file: FileInfo): HTMLElement {
                 return;
             }
             e.stopPropagation();
-            el.classList.toggle("expanded");
-            const iconSpan = el.querySelector(".folder-icon");
-            if (iconSpan) {
-                // 📂 = open folder, 📁 = closed folder
-                iconSpan.textContent = el.classList.contains("expanded") ? "📂" : "📁";
-            }
-            if (childrenEl) {
-                childrenEl.style.display = childrenEl.style.display === "none" ? "block" : "none";
-            }
+            const expanded = !el.classList.contains("expanded");
+            setFolderExpanded(el, expanded);
         });
 
         // Right-click context menu for folders
@@ -2281,20 +2419,22 @@ function createFileElement(file: FileInfo): HTMLElement {
 
         // Drop target for drag & drop
         el.addEventListener("dragover", (e) => {
-            e.preventDefault();
-            if (draggedFilePath) {
-                el.classList.add("drag-over");
+            if (!draggedFilePath && !hasExternalFileDrop(e.dataTransfer)) {
+                return;
             }
+            e.preventDefault();
+            e.stopPropagation();
+            el.classList.add("drag-over");
         });
         el.addEventListener("dragleave", () => {
             el.classList.remove("drag-over");
         });
         el.addEventListener("drop", async (e) => {
-            e.preventDefault();
             el.classList.remove("drag-over");
-            if (draggedFilePath && draggedFilePath !== file.path) {
-                await moveFileToFolder(draggedFilePath, file.path);
+            if (draggedFilePath === file.path) {
+                return;
             }
+            await handleFileTreeDrop(e, file.path);
         });
     } else {
         // Handle file click based on file type

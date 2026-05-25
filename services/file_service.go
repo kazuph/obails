@@ -3,6 +3,8 @@ package services
 import (
 	"encoding/base64"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -568,6 +570,117 @@ func (s *FileService) ResolveImagePath(imagePath string, notePath string) (strin
 	}
 
 	return "", errors.New("image not found: " + imagePath)
+}
+
+// ImportExternalFile copies a file from an absolute path on disk into the vault.
+func (s *FileService) ImportExternalFile(sourceAbsolutePath string, targetFolder string) (string, error) {
+	sourceAbsolutePath = strings.TrimSpace(sourceAbsolutePath)
+	if sourceAbsolutePath == "" {
+		return "", errors.New("source path is required")
+	}
+	if !filepath.IsAbs(sourceAbsolutePath) {
+		return "", errors.New("source path must be absolute")
+	}
+
+	sourceInfo, err := os.Stat(sourceAbsolutePath)
+	if err != nil {
+		return "", err
+	}
+	if sourceInfo.IsDir() {
+		return "", errors.New("directories are not supported")
+	}
+
+	destRelativePath, err := s.uniqueRelativePath(targetFolder, filepath.Base(sourceAbsolutePath))
+	if err != nil {
+		return "", err
+	}
+
+	destFullPath, err := s.resolveFullPath(destRelativePath, false)
+	if err != nil {
+		return "", err
+	}
+
+	if err := os.MkdirAll(filepath.Dir(destFullPath), 0755); err != nil {
+		return "", err
+	}
+
+	sourceFile, err := os.Open(sourceAbsolutePath)
+	if err != nil {
+		return "", err
+	}
+	defer sourceFile.Close()
+
+	destFile, err := os.OpenFile(destFullPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	if err != nil {
+		return "", err
+	}
+	defer destFile.Close()
+
+	if _, err := io.Copy(destFile, sourceFile); err != nil {
+		return "", err
+	}
+
+	return destRelativePath, nil
+}
+
+// RevealInFinder reveals a file or directory in Finder.
+func (s *FileService) RevealInFinder(relativePath string) error {
+	fullPath, err := s.resolveFullPath(relativePath, false)
+	if err != nil {
+		return err
+	}
+
+	if _, err := os.Stat(fullPath); err != nil {
+		return err
+	}
+
+	cmd := exec.Command("open", "-R", fullPath)
+	return cmd.Start()
+}
+
+func (s *FileService) uniqueRelativePath(targetFolder, fileName string) (string, error) {
+	fileName = strings.TrimSpace(fileName)
+	if fileName == "" || fileName == "." || fileName == ".." {
+		return "", errors.New("invalid file name")
+	}
+
+	ext := filepath.Ext(fileName)
+	nameWithoutExt := strings.TrimSuffix(fileName, ext)
+
+	candidate := fileName
+	for i := 0; ; i++ {
+		if i > 0 {
+			candidate = fmt.Sprintf("%s (%d)%s", nameWithoutExt, i, ext)
+		}
+
+		relativePath := candidate
+		if targetFolder != "" {
+			relativePath = filepath.ToSlash(filepath.Join(filepath.FromSlash(targetFolder), candidate))
+		}
+
+		exists, err := s.pathExists(relativePath)
+		if err != nil {
+			return "", err
+		}
+		if !exists {
+			return relativePath, nil
+		}
+	}
+}
+
+func (s *FileService) pathExists(relativePath string) (bool, error) {
+	fullPath, err := s.resolveFullPath(relativePath, false)
+	if err != nil {
+		return false, err
+	}
+	_, err = os.Stat(fullPath)
+	if err == nil {
+		return true, nil
+	}
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	return false, err
 }
 
 // OpenExternal opens a file with the system's default application

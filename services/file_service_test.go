@@ -850,3 +850,82 @@ func TestVaultWatchService_SwitchVaultPath(t *testing.T) {
 
 	waitForRevision(revision)
 }
+
+func TestFileService_ImportExternalFile(t *testing.T) {
+	cs, tmpDir := newTestConfigService(t)
+	defer os.RemoveAll(tmpDir)
+
+	fs := NewFileService(cs)
+	sourceDir := filepath.Join(tmpDir, "external")
+	if err := os.MkdirAll(sourceDir, 0755); err != nil {
+		t.Fatalf("setup external dir: %v", err)
+	}
+
+	sourcePath := filepath.Join(sourceDir, "import-me.md")
+	if err := os.WriteFile(sourcePath, []byte("# Imported"), 0644); err != nil {
+		t.Fatalf("setup source file: %v", err)
+	}
+
+	t.Run("imports file into vault root", func(t *testing.T) {
+		relativePath, err := fs.ImportExternalFile(sourcePath, "")
+		if err != nil {
+			t.Fatalf("ImportExternalFile() error = %v", err)
+		}
+		if relativePath != "import-me.md" {
+			t.Fatalf("relativePath = %q, want import-me.md", relativePath)
+		}
+
+		content, err := fs.ReadFile("import-me.md")
+		if err != nil {
+			t.Fatalf("ReadFile() error = %v", err)
+		}
+		if content != "# Imported" {
+			t.Fatalf("content = %q, want # Imported", content)
+		}
+	})
+
+	t.Run("imports file into target folder with unique name", func(t *testing.T) {
+		if err := fs.CreateDirectory("docs"); err != nil {
+			t.Fatalf("CreateDirectory() error = %v", err)
+		}
+		if err := os.WriteFile(sourcePath, []byte("# Imported again"), 0644); err != nil {
+			t.Fatalf("rewrite source file: %v", err)
+		}
+
+		firstPath, err := fs.ImportExternalFile(sourcePath, "docs")
+		if err != nil {
+			t.Fatalf("first import error = %v", err)
+		}
+		if firstPath != "docs/import-me.md" {
+			t.Fatalf("firstPath = %q, want docs/import-me.md", firstPath)
+		}
+
+		secondPath, err := fs.ImportExternalFile(sourcePath, "docs")
+		if err != nil {
+			t.Fatalf("second import error = %v", err)
+		}
+		if secondPath != "docs/import-me (1).md" {
+			t.Fatalf("secondPath = %q, want docs/import-me (1).md", secondPath)
+		}
+	})
+
+	t.Run("rejects directories", func(t *testing.T) {
+		if _, err := fs.ImportExternalFile(sourceDir, ""); err == nil {
+			t.Fatal("expected error importing directory")
+		}
+	})
+}
+
+func TestFileService_RevealInFinder(t *testing.T) {
+	cs, tmpDir := newTestConfigService(t)
+	defer os.RemoveAll(tmpDir)
+
+	fs := NewFileService(cs)
+	if err := fs.CreateFile("reveal-me.md", "# reveal"); err != nil {
+		t.Fatalf("CreateFile() error = %v", err)
+	}
+
+	if err := fs.RevealInFinder("reveal-me.md"); err != nil {
+		t.Fatalf("RevealInFinder() error = %v", err)
+	}
+}
