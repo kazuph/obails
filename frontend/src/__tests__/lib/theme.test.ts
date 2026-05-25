@@ -2,6 +2,8 @@ import { beforeEach, describe, it, expect } from "vitest";
 import {
   DEFAULT_THEME,
   LIGHT_THEMES,
+  THEME_OPTIONS,
+  VALID_THEMES,
   getAppliedTheme,
   isDarkTheme,
   normalizeThemeValue,
@@ -21,6 +23,15 @@ describe("LIGHT_THEMES", () => {
     expect(LIGHT_THEMES).toContain("catppuccin-latte");
     expect(LIGHT_THEMES).toContain("rosepine-dawn");
     expect(LIGHT_THEMES).toHaveLength(5);
+  });
+});
+
+describe("THEME_OPTIONS", () => {
+  it("should expose all selectable themes for the native menu", () => {
+    expect(VALID_THEMES).toEqual(THEME_OPTIONS.map(theme => theme.value));
+    expect(VALID_THEMES).toContain("rosepine-dawn");
+    expect(VALID_THEMES).toContain("dracula");
+    expect(VALID_THEMES).toHaveLength(12);
   });
 });
 

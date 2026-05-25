@@ -77,8 +77,14 @@ test.describe('Visual Regression - README Screenshots', () => {
    * テーマを切り替えるヘルパー関数
    */
   async function switchTheme(page: Page, theme: string): Promise<void> {
-    const themeSelect = page.locator('#theme-select');
-    await themeSelect.selectOption(theme);
+    await page.evaluate((selectedTheme) => {
+      const wails = (window as any)._wails;
+      if (wails?.dispatchWailsEvent) {
+        wails.dispatchWailsEvent({ name: 'obails:theme-selected', data: selectedTheme });
+        return;
+      }
+      window.dispatchEvent(new CustomEvent('obails:theme-selected', { detail: selectedTheme }));
+    }, theme);
     await page.waitForTimeout(300); // テーマ適用を待機
   }
 

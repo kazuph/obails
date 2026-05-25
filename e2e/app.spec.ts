@@ -1,5 +1,16 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, Page } from '@playwright/test';
 import { setupMockBindings } from './helpers/mock-bindings';
+
+async function selectThemeFromMenu(page: Page, theme: string): Promise<void> {
+  await page.evaluate((selectedTheme) => {
+    const wails = (window as any)._wails;
+    if (wails?.dispatchWailsEvent) {
+      wails.dispatchWailsEvent({ name: 'obails:theme-selected', data: selectedTheme });
+      return;
+    }
+    window.dispatchEvent(new CustomEvent('obails:theme-selected', { detail: selectedTheme }));
+  }, theme);
+}
 
 test.describe('Obails App', () => {
   test('should close the context menu when clicking elsewhere', async ({ page }) => {
@@ -110,6 +121,23 @@ test.describe('Obails App', () => {
     await expect(page.locator('#editor-title')).toHaveText('Welcome');
   });
 
+  test('should not periodically reopen stale last-opened state while reading another note', async ({ page }) => {
+    await setupMockBindings(page);
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+    await expect(page.locator('.file-item[data-path="Welcome.md"]')).toBeVisible();
+
+    await page.locator('.file-item[data-path="Welcome.md"]').click();
+    await expect(page.locator('#editor-title')).toHaveText('Welcome');
+
+    await page.evaluate(() => {
+      (window as any).__wails_mock_lastOpenedFile = { path: 'Features.md', fileType: 'markdown' };
+    });
+    await page.waitForTimeout(900);
+
+    await expect(page.locator('#editor-title')).toHaveText('Welcome');
+  });
+
   test('should have toolbar buttons', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
@@ -119,37 +147,20 @@ test.describe('Obails App', () => {
     await expect(page.locator('#refresh-btn')).toBeVisible();
   });
 
-  test('should have theme selector with Light and Dark groups', async ({ page }) => {
+  test('should hide toolbar theme selector and accept menu theme events', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
 
-    const themeSelect = page.locator('#theme-select');
-    await expect(themeSelect).toBeVisible();
-
-    // Check optgroups exist
-    const lightGroup = page.locator('#theme-select optgroup[label="Light"]');
-    const darkGroup = page.locator('#theme-select optgroup[label="Dark"]');
-    await expect(lightGroup).toBeAttached();
-    await expect(darkGroup).toBeAttached();
-
-    // Check light themes exist
-    await expect(page.locator('#theme-select option[value="github-light"]')).toBeAttached();
-    await expect(page.locator('#theme-select option[value="solarized-light"]')).toBeAttached();
-    await expect(page.locator('#theme-select option[value="one-light"]')).toBeAttached();
-    await expect(page.locator('#theme-select option[value="catppuccin-latte"]')).toBeAttached();
-    await expect(page.locator('#theme-select option[value="rosepine-dawn"]')).toBeAttached();
-
-    // Check dark themes exist
-    await expect(page.locator('#theme-select option[value="dracula"]')).toBeAttached();
-    await expect(page.locator('#theme-select option[value="catppuccin"]')).toBeAttached();
+    await expect(page.locator('#theme-select')).toHaveCount(0);
+    await selectThemeFromMenu(page, 'rosepine-dawn');
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'rosepine-dawn');
   });
 
   test('should switch to light theme', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
 
-    const themeSelect = page.locator('#theme-select');
-    await themeSelect.selectOption('github-light');
+    await selectThemeFromMenu(page, 'github-light');
 
     const html = page.locator('html');
     await expect(html).toHaveAttribute('data-theme', 'github-light');
@@ -165,8 +176,7 @@ test.describe('Obails App', () => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
 
-    const themeSelect = page.locator('#theme-select');
-    await themeSelect.selectOption('dracula');
+    await selectThemeFromMenu(page, 'dracula');
 
     const html = page.locator('html');
     await expect(html).toHaveAttribute('data-theme', 'dracula');
@@ -182,15 +192,13 @@ test.describe('Obails App', () => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
 
-    const themeSelect = page.locator('#theme-select');
-    await themeSelect.selectOption('dracula');
+    await selectThemeFromMenu(page, 'dracula');
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dracula');
 
     await page.reload();
     await page.waitForLoadState('networkidle');
 
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dracula');
-    await expect(page.locator('#theme-select')).toHaveValue('dracula');
   });
 
   test('should toggle Timeline panel', async ({ page }) => {
@@ -469,8 +477,7 @@ test.describe('Graph View', () => {
     await page.waitForLoadState('networkidle');
 
     // Switch to dark theme first
-    const themeSelect = page.locator('#theme-select');
-    await themeSelect.selectOption('dracula');
+    await selectThemeFromMenu(page, 'dracula');
 
     // Open graph view
     await page.click('#graph-btn');
@@ -488,7 +495,7 @@ test.describe('Graph View', () => {
 
     // Close graph and switch to light theme
     await page.click('#graph-close');
-    await themeSelect.selectOption('github-light');
+    await selectThemeFromMenu(page, 'github-light');
 
     // Open graph again
     await page.click('#graph-btn');

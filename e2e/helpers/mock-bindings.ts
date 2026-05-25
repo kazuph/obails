@@ -95,12 +95,19 @@ function generateFileInfos(): any[] {
   return infos;
 }
 
+type MockLastOpenedFile = { path: string; fileType: string } | null;
+
+type MockBindingOptions = {
+  initialLastOpenedFile?: MockLastOpenedFile;
+};
+
 /**
  * ページにWailsバインディングのモックを設定する
  */
-export async function setupMockBindings(page: Page): Promise<void> {
+export async function setupMockBindings(page: Page, options: MockBindingOptions = {}): Promise<void> {
   const files = loadTestFiles();
   const fileInfos = generateFileInfos();
+  let lastOpenedFile: MockLastOpenedFile = options.initialLastOpenedFile ?? null;
 
   await page.route('**/media/audio?**', async (route) => {
     const requestURL = new URL(route.request().url());
@@ -172,6 +179,16 @@ export async function setupMockBindings(page: Page): Promise<void> {
         break;
       // StateService.GetLastOpenedFile
       case 235349142:
+        value = lastOpenedFile;
+        break;
+      // StateService.SetLastOpenedFile
+      case 1385456610:
+        lastOpenedFile = { path: String(args[0] || ''), fileType: String(args[1] || '') };
+        value = null;
+        break;
+      // StateService.ClearLastOpenedFile
+      case 4136538343:
+        lastOpenedFile = null;
         value = null;
         break;
       // StateService.SetLastOpenedFile / ClearLastOpenedFile and other void calls
@@ -188,10 +205,11 @@ export async function setupMockBindings(page: Page): Promise<void> {
   });
 
   // Wailsランタイムをモック
-  await page.addInitScript(({ files, fileInfos }) => {
+  await page.addInitScript(({ files, fileInfos, initialLastOpenedFile }) => {
     // @wailsio/runtime の $Call.ByID をモック
     (window as any).__wails_mock_files = files;
     (window as any).__wails_mock_fileInfos = fileInfos;
+    (window as any).__wails_mock_lastOpenedFile = initialLastOpenedFile;
 
     // CancellablePromise風のオブジェクトを作成
     const createMockPromise = <T>(value: T): Promise<T> & { cancel: () => void } => {
@@ -259,10 +277,19 @@ export async function setupMockBindings(page: Page): Promise<void> {
 
             // StateService.GetLastOpenedFile
             case 235349142:
-              return createMockPromise(null);
+              return createMockPromise((window as any).__wails_mock_lastOpenedFile ?? null);
 
             // StateService.SetLastOpenedFile
             case 1385456610:
+              (window as any).__wails_mock_lastOpenedFile = {
+                path: String(args[0] || ''),
+                fileType: String(args[1] || ''),
+              };
+              return createMockPromise(undefined);
+
+            // StateService.ClearLastOpenedFile
+            case 4136538343:
+              (window as any).__wails_mock_lastOpenedFile = null;
               return createMockPromise(undefined);
 
             // GraphService.GetFullGraph
@@ -294,7 +321,7 @@ export async function setupMockBindings(page: Page): Promise<void> {
       value: mockRuntime,
       writable: false,
     });
-  }, { files, fileInfos });
+  }, { files, fileInfos, initialLastOpenedFile: lastOpenedFile });
 }
 
 /**

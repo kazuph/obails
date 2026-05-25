@@ -13,6 +13,23 @@ export type LightTheme = (typeof LIGHT_THEMES)[number];
 
 export const DEFAULT_THEME = "github-light";
 
+export const THEME_OPTIONS = [
+  { group: "Light", label: "GitHub Light", value: "github-light" },
+  { group: "Light", label: "Solarized Light", value: "solarized-light" },
+  { group: "Light", label: "One Light", value: "one-light" },
+  { group: "Light", label: "Catppuccin Latte", value: "catppuccin-latte" },
+  { group: "Light", label: "Rose Pine Dawn", value: "rosepine-dawn" },
+  { group: "Dark", label: "Catppuccin Mocha", value: "catppuccin" },
+  { group: "Dark", label: "Dracula", value: "dracula" },
+  { group: "Dark", label: "Nord", value: "nord" },
+  { group: "Dark", label: "Solarized Dark", value: "solarized" },
+  { group: "Dark", label: "One Dark", value: "onedark" },
+  { group: "Dark", label: "Gruvbox", value: "gruvbox" },
+  { group: "Dark", label: "Tokyo Night", value: "tokyonight" },
+] as const;
+
+export const VALID_THEMES = THEME_OPTIONS.map(theme => theme.value);
+
 /**
  * Determines if a theme is dark based on its identifier
  */

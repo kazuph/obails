@@ -6,6 +6,7 @@ import * as WindowService from "../bindings/github.com/kazuph/obails/services/wi
 import * as GraphService from "../bindings/github.com/kazuph/obails/services/graphservice.js";
 import * as StateService from "../bindings/github.com/kazuph/obails/services/stateservice.js";
 import { FileInfo, Note, Timeline, Backlink, Link, Config, Graph } from "../bindings/github.com/kazuph/obails/models/models.js";
+import { Events } from "@wailsio/runtime";
 import mermaid from "mermaid";
 import hljs from "highlight.js";
 import "highlight.js/styles/github-dark.css";
@@ -13,6 +14,7 @@ import ForceGraph from "force-graph";
 import { debounce } from "./lib/utils";
 import {
   DEFAULT_THEME,
+  VALID_THEMES,
   getAppliedTheme,
   isDarkTheme,
   normalizeThemeValue,
@@ -70,7 +72,6 @@ let contextMenuTargetIsDir: boolean = false;
 let draggedFilePath: string | null = null;
 let graphInstance: ReturnType<typeof ForceGraph> | null = null;
 let lastSyncedOpenedFile: string = "";
-let stateWatchTimerId: ReturnType<typeof window.setInterval> | null = null;
 let fileTreeWatchTimerId: ReturnType<typeof window.setInterval> | null = null;
 let isFileTreeWatchRunning = false;
 let fileTreeSignature = "";
@@ -172,7 +173,6 @@ async function init() {
                 }
             }
 
-            startLastOpenedFileWatcher();
             startFileTreeWatcher();
 
             // Prefetch graph data in background (don't block init)
@@ -190,43 +190,6 @@ async function init() {
 
 function toStateKey(path: string, fileType: string): string {
     return `${path}::${fileType}`;
-}
-
-function startLastOpenedFileWatcher() {
-    if (stateWatchTimerId !== null) {
-        return;
-    }
-
-    stateWatchTimerId = window.setInterval(async () => {
-        try {
-            const lastFile = await StateService.GetLastOpenedFile();
-            const resolvedType = lastFile ? resolveFileType(lastFile.fileType, lastFile.path) : "";
-            const nextKey = lastFile ? toStateKey(lastFile.path, resolvedType) : "";
-            const currentType = currentFilePath ? getFileTypeFromPath(currentFilePath) : "";
-            const targetType = resolvedType;
-
-            if (nextKey === lastSyncedOpenedFile) {
-                return;
-            }
-
-            if (!lastFile) {
-                lastSyncedOpenedFile = "";
-                return;
-            }
-
-            const sameFile = lastFile.path === currentFilePath && targetType === currentType;
-            if (!sameFile) {
-                try {
-                    await openFile(lastFile.path, targetType);
-                } catch {
-                    await StateService.ClearLastOpenedFile();
-                }
-            }
-            lastSyncedOpenedFile = toStateKey(lastFile.path, targetType);
-        } catch (err) {
-            console.warn("Failed to sync last opened file from state:", err);
-        }
-    }, 600);
 }
 
 function startFileTreeWatcher() {
@@ -333,7 +296,6 @@ async function handleVaultFolderSelection() {
         if (path) {
             hideVaultSetupDialog();
             await loadFileTree();
-            startLastOpenedFileWatcher();
             startFileTreeWatcher();
         }
     } catch (err) {
@@ -510,7 +472,7 @@ function setupEventListeners() {
     });
 
     setupResizeHandles();
-    setupThemeSelector();
+    setupThemeMenu();
     setupContextMenu();
     setupFileTreeDropTarget();
     setupFileSearch();
@@ -1496,44 +1458,48 @@ function showNewNoteFormInFolder(folderPath: string) {
 }
 
 // Theme
-function setupThemeSelector() {
-    const themeSelect = document.getElementById("theme-select") as HTMLSelectElement;
-
-    const validThemes = Array.from(themeSelect.options).map(option => option.value);
+function setupThemeMenu() {
     const selectedTheme = resolveThemeSelection(
-        validThemes,
+        VALID_THEMES,
         appThemeFromConfig,
         localStorage.getItem("obails-theme"),
         DEFAULT_THEME
     );
 
-    localStorage.setItem("obails-theme", selectedTheme);
-    document.documentElement.setAttribute("data-theme", selectedTheme);
-    themeSelect.value = selectedTheme;
+    applyTheme(selectedTheme, false);
 
-    // Handle theme change
-    themeSelect.addEventListener("change", () => {
-        const theme = themeSelect.value;
-        document.documentElement.setAttribute("data-theme", theme);
-        localStorage.setItem("obails-theme", theme);
+    Events.On("obails:theme-selected", (event) => {
+        applyTheme(String(event.data || ""), true);
+    });
 
-        // Save theme to config file
+    window.addEventListener("obails:theme-selected", (event) => {
+        const theme = (event as CustomEvent<string>).detail;
+        applyTheme(theme, true);
+    });
+}
+
+function applyTheme(themeValue: string, persist: boolean) {
+    const theme = resolveThemeSelection(VALID_THEMES, themeValue, null, DEFAULT_THEME);
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem("obails-theme", theme);
+
+    if (persist) {
         ConfigService.SetTheme(theme).catch((err: unknown) => {
             console.warn("Failed to save theme to config:", err);
         });
+    }
 
-        // Re-initialize mermaid with new theme
-        const isDark = isDarkTheme(theme);
-        mermaid.initialize({
-            startOnLoad: false,
-            theme: isDark ? "dark" : "default",
-            securityLevel: "loose",
-            logLevel: "error"
-        });
-
-        // Re-render mermaid diagrams
-        updatePreview();
+    // Re-initialize mermaid with new theme
+    const isDark = isDarkTheme(theme);
+    mermaid.initialize({
+        startOnLoad: false,
+        theme: isDark ? "dark" : "default",
+        securityLevel: "loose",
+        logLevel: "error"
     });
+
+    // Re-render mermaid diagrams
+    updatePreview();
 }
 
 function showEmptyMainPane() {

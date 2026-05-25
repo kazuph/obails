@@ -672,32 +672,6 @@ body {
     border-radius: 4px;
 }
 
-.theme-selector {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    -webkit-app-region: no-drag;
-}
-
-.theme-selector label {
-    font-size: 0.85rem;
-    color: var(--text-secondary);
-}
-
-.theme-selector select {
-    padding: 0.4rem 0.8rem;
-    background: var(--bg-tertiary);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    color: var(--text-primary);
-    cursor: pointer;
-    font-size: 0.85rem;
-}
-
-.theme-selector select:hover {
-    background: var(--border);
-}
-
 @media (max-width: 900px) {
     .mini-player {
         max-width: 54vw;

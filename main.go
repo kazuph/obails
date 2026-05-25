@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/kazuph/obails/services"
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -15,6 +16,70 @@ var assets embed.FS
 
 //go:embed build/appicon.png
 var appIcon []byte
+
+type themeMenuOption struct {
+	Group string
+	Label string
+	Value string
+}
+
+var themeMenuOptions = []themeMenuOption{
+	{Group: "Light", Label: "GitHub Light", Value: "github-light"},
+	{Group: "Light", Label: "Solarized Light", Value: "solarized-light"},
+	{Group: "Light", Label: "One Light", Value: "one-light"},
+	{Group: "Light", Label: "Catppuccin Latte", Value: "catppuccin-latte"},
+	{Group: "Light", Label: "Rose Pine Dawn", Value: "rosepine-dawn"},
+	{Group: "Dark", Label: "Catppuccin Mocha", Value: "catppuccin"},
+	{Group: "Dark", Label: "Dracula", Value: "dracula"},
+	{Group: "Dark", Label: "Nord", Value: "nord"},
+	{Group: "Dark", Label: "Solarized Dark", Value: "solarized"},
+	{Group: "Dark", Label: "One Dark", Value: "onedark"},
+	{Group: "Dark", Label: "Gruvbox", Value: "gruvbox"},
+	{Group: "Dark", Label: "Tokyo Night", Value: "tokyonight"},
+}
+
+func normalizeThemeValue(theme string) string {
+	normalized := strings.ToLower(strings.TrimSpace(theme))
+	normalized = strings.ReplaceAll(normalized, " ", "-")
+
+	switch normalized {
+	case "dark", "github-dark", "catppuccin-mocha":
+		return "catppuccin"
+	case "light", "github-light":
+		return "github-light"
+	case "solarized-dark", "solarized":
+		return "solarized"
+	case "one-dark", "onedark":
+		return "onedark"
+	case "rose-pine-dawn", "rosepine-dawn":
+		return "rosepine-dawn"
+	case "tokyo-night", "tokyonight":
+		return "tokyonight"
+	default:
+		return normalized
+	}
+}
+
+func buildApplicationMenu(app *application.App, selectedTheme string) *application.Menu {
+	menu := application.DefaultApplicationMenu()
+	themeMenu := menu.AddSubmenu("Theme")
+	selectedTheme = normalizeThemeValue(selectedTheme)
+	currentGroup := ""
+
+	for _, option := range themeMenuOptions {
+		if currentGroup != "" && currentGroup != option.Group {
+			themeMenu.AddSeparator()
+		}
+		currentGroup = option.Group
+
+		theme := option.Value
+		themeMenu.AddRadio(option.Label, theme == selectedTheme).OnClick(func(ctx *application.Context) {
+			app.Event.Emit("obails:theme-selected", theme)
+		})
+	}
+
+	return menu
+}
 
 func main() {
 	// Initialize services
@@ -76,6 +141,7 @@ func main() {
 			ApplicationShouldTerminateAfterLastWindowClosed: true,
 		},
 	})
+	app.Menu.SetApplicationMenu(buildApplicationMenu(app, configService.GetConfig().UI.Theme))
 
 	// Create the main window
 	mainWindow := app.Window.NewWithOptions(application.WebviewWindowOptions{
