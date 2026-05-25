@@ -244,6 +244,33 @@ test.describe('Obails App', () => {
     await expect(page.locator('.file-item[data-path="finder-drop.md"]')).toBeVisible();
   });
 
+  test('should not expand folders while importing native files from Finder', async ({ page }) => {
+    await setupMockBindings(page);
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+    await expect(page.locator('.file-item[data-path="Welcome.md"]')).toBeVisible();
+
+    const audioFolder = page.locator('.file-item.folder[data-path="audio"]');
+    await audioFolder.click();
+    await page.locator('.file-item.file[data-path="audio/test-tone.wav"]').click();
+    await audioFolder.click();
+    await expect(audioFolder).not.toHaveClass(/expanded/);
+
+    await page.evaluate(() => {
+      const wails = (window as any)._wails;
+      wails.dispatchWailsEvent({
+        name: 'obails:files-dropped',
+        data: {
+          files: ['/tmp/root-drop.md'],
+          targetFolder: '',
+        },
+      });
+    });
+
+    await expect(audioFolder).not.toHaveClass(/expanded/);
+    await expect(page.locator('.file-item[data-path="root-drop.md"]')).toBeVisible();
+  });
+
   test('should hide toolbar theme selector and accept menu theme events', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');

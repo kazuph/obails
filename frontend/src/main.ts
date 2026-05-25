@@ -297,10 +297,16 @@ function restoreActiveFileTreeSelection() {
     }
 }
 
-function applyFileTreeSnapshot(files: FileInfo[]) {
+type FileTreeSnapshotOptions = {
+    revealActiveFile?: boolean;
+};
+
+function applyFileTreeSnapshot(files: FileInfo[], options: FileTreeSnapshotOptions = {}) {
     fileTreeSignature = buildFileTreeSignature(files);
     renderFileTree(files);
-    restoreActiveFileTreeSelection();
+    if (options.revealActiveFile !== false) {
+        restoreActiveFileTreeSelection();
+    }
 }
 
 // Show vault setup dialog
@@ -620,10 +626,9 @@ async function importExternalFiles(sourcePaths: string[], targetFolder: string) 
         return;
     }
 
-    await loadFileTree();
+    await loadFileTree({ revealActiveFile: false });
     const lastImported = importedPaths[importedPaths.length - 1];
-    expandParentFolders(lastImported);
-    updateFileTreeSelection(lastImported);
+    updateFileTreeSelection(lastImported, { reveal: false });
 
     const fileType = getFileTypeFromPath(lastImported);
     if (fileType === "markdown") {
@@ -662,10 +667,9 @@ async function importDroppedFileList(files: FileList, targetFolder: string) {
         return;
     }
 
-    await loadFileTree();
+    await loadFileTree({ revealActiveFile: false });
     const lastImported = importedPaths[importedPaths.length - 1];
-    expandParentFolders(lastImported);
-    updateFileTreeSelection(lastImported);
+    updateFileTreeSelection(lastImported, { reveal: false });
 }
 
 // File Search
@@ -2300,12 +2304,18 @@ function getMimeTypeFromExt(ext: string): string {
 }
 
 // Update file tree selection highlight
-function updateFileTreeSelection(path: string) {
+type FileTreeSelectionOptions = {
+    reveal?: boolean;
+};
+
+function updateFileTreeSelection(path: string, options: FileTreeSelectionOptions = {}) {
     // Remove previous selection
     document.querySelectorAll(".file-item").forEach(el => el.classList.remove("active"));
 
     // Expand parent folders to reveal the file
-    expandParentFolders(path);
+    if (options.reveal !== false) {
+        expandParentFolders(path);
+    }
 
     // Highlight the file
     const fileItem = document.querySelector(`.file-item[data-path="${path}"]`);
@@ -2336,10 +2346,10 @@ function expandParentFolders(path: string) {
 }
 
 // File Tree
-async function loadFileTree() {
+async function loadFileTree(options: FileTreeSnapshotOptions = {}) {
     try {
         const files = normalizeAndSortFileTree(await FileService.ListDirectoryTree());
-        applyFileTreeSnapshot(files);
+        applyFileTreeSnapshot(files, options);
     } catch (err) {
         console.error("Failed to load file tree:", err);
         fileTree.innerHTML = '<div class="error">Failed to load files</div>';
