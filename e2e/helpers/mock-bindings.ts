@@ -130,6 +130,9 @@ export async function setupMockBindings(page: Page, options: MockBindingOptions 
   const files = loadTestFiles();
   const fileInfos = generateFileInfos();
   let lastOpenedFile: MockLastOpenedFile = options.initialLastOpenedFile ?? null;
+  const readBinaryCalls: string[] = [];
+
+  await page.exposeFunction('__wailsMockReadBinaryCalls', () => readBinaryCalls.slice());
 
   await page.route('**/media/audio?**', async (route) => {
     const requestURL = new URL(route.request().url());
@@ -177,6 +180,7 @@ export async function setupMockBindings(page: Page, options: MockBindingOptions 
         break;
       // FileService.ReadBinaryFile
       case 797232813:
+        readBinaryCalls.push(String(args[0] || ''));
         value = files[args[0]] || '';
         break;
       // FileService.ImportExternalFile
@@ -258,6 +262,7 @@ export async function setupMockBindings(page: Page, options: MockBindingOptions 
     (window as any).__wails_mock_fileInfos = fileInfos;
     (window as any).__wails_mock_lastOpenedFile = initialLastOpenedFile;
     (window as any).__wails_mock_openExternalCalls = [];
+    (window as any).__wails_mock_readBinaryCalls = [];
 
     // CancellablePromise風のオブジェクトを作成
     const createMockPromise = <T>(value: T): Promise<T> & { cancel: () => void } => {
@@ -301,6 +306,7 @@ export async function setupMockBindings(page: Page, options: MockBindingOptions 
 
             // FileService.ReadBinaryFile (ID: 797232813)
             case 797232813:
+              (window as any).__wails_mock_readBinaryCalls.push(String(args[0] || ''));
               return createMockPromise(files[args[0]] || '');
 
             // FileService.ImportExternalFile

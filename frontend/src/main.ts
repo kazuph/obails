@@ -294,7 +294,6 @@ function buildFileTreeSignature(files: FileInfo[]): string {
 
 function restoreActiveFileTreeSelection() {
     if (currentFilePath) {
-        expandParentFolders(currentFilePath);
         updateFileTreeSelection(currentFilePath);
     }
 }
@@ -2392,14 +2391,9 @@ type FileTreeSelectionOptions = {
     reveal?: boolean;
 };
 
-function updateFileTreeSelection(path: string, options: FileTreeSelectionOptions = {}) {
+function updateFileTreeSelection(path: string, _options: FileTreeSelectionOptions = {}) {
     // Remove previous selection
     document.querySelectorAll(".file-item").forEach(el => el.classList.remove("active"));
-
-    // Expand parent folders to reveal the file
-    if (options.reveal !== false) {
-        expandParentFolders(path);
-    }
 
     // Highlight the file
     const fileItem = document.querySelector(`.file-item[data-path="${path}"]`);
@@ -2789,13 +2783,8 @@ async function syncOpenFileWithVault() {
         return;
     }
 
-    if (fileType === "image" || fileType === "pdf") {
-        try {
-            await openFile(currentFilePath, fileType);
-        } catch (err) {
-            console.warn("Failed to reopen current file after vault sync:", err);
-        }
-    }
+    // Binary viewers keep their current rendered state. Reopening them on every
+    // vault watch tick makes PDFs/images visibly flicker.
 }
 
 async function openTodayNote() {
@@ -3157,9 +3146,8 @@ async function refresh() {
     await loadFileTree();
     await LinkService.RebuildIndex();
 
-    // Restore file tree selection and expand parent folders
+    // Restore selection without changing user-controlled folder expansion.
     if (currentFilePath) {
-        expandParentFolders(currentFilePath);
         updateFileTreeSelection(currentFilePath);
     }
 

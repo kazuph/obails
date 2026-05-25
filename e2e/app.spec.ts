@@ -276,6 +276,35 @@ test.describe('Obails App', () => {
     await expect(page.locator('.file-item[data-path="root-drop.md"]')).toBeVisible();
   });
 
+  test('should not reopen a target folder after dropping a file into it and closing it', async ({ page }) => {
+    await setupMockBindings(page);
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+    await expect(page.locator('.file-item[data-path="Welcome.md"]')).toBeVisible();
+
+    const audioFolder = page.locator('.file-item.folder[data-path="audio"]');
+    await audioFolder.click();
+    await expect(audioFolder).toHaveClass(/expanded/);
+
+    await page.evaluate(() => {
+      const wails = (window as any)._wails;
+      wails.dispatchWailsEvent({
+        name: 'obails:files-dropped',
+        data: {
+          files: ['/tmp/folder-drop.md'],
+          targetFolder: 'audio',
+        },
+      });
+    });
+
+    await expect(page.locator('#editor-title')).toHaveText('folder-drop');
+    await audioFolder.click();
+    await expect(audioFolder).not.toHaveClass(/expanded/);
+
+    await page.waitForTimeout(1200);
+    await expect(audioFolder).not.toHaveClass(/expanded/);
+  });
+
   test('should open txt files inside Obails without launching an external editor', async ({ page }) => {
     await setupMockBindings(page);
     await page.goto('/');
@@ -289,6 +318,25 @@ test.describe('Obails App', () => {
 
     const externalCalls = await page.evaluate(() => (window as any).__wails_mock_openExternalCalls);
     expect(externalCalls).toEqual([]);
+  });
+
+  test('should not reload binary viewers on vault watch ticks', async ({ page }) => {
+    await setupMockBindings(page);
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+    await expect(page.locator('.file-item[data-path="Welcome.md"]')).toBeVisible();
+
+    await page.locator('.file-item.folder[data-path="images"]').click();
+    await page.locator('.file-item.file[data-path="images/test-photo.png"]').click();
+    await expect(page.locator('#image-viewer')).toBeVisible();
+
+    const callsAfterOpen = await page.evaluate(() => (window as any).__wailsMockReadBinaryCalls());
+    expect(callsAfterOpen).toEqual(['images/test-photo.png']);
+
+    await page.waitForTimeout(1200);
+
+    const callsAfterWatchTicks = await page.evaluate(() => (window as any).__wailsMockReadBinaryCalls());
+    expect(callsAfterWatchTicks).toEqual(callsAfterOpen);
   });
 
   test('should hide toolbar theme selector and accept menu theme events', async ({ page }) => {
