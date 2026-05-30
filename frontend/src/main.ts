@@ -47,6 +47,13 @@ import {
   type ItemKind,
 } from "./lib/file-tree-ops";
 import { renderIcon, setButtonIcon } from "./lib/icons";
+import {
+  PLAYBACK_SPEEDS,
+  DEFAULT_PLAYBACK_SPEED,
+  formatSpeedLabel,
+  loadStoredSpeed,
+  storeSpeed,
+} from "./lib/playback-speed";
 import * as pdfjsLib from "pdfjs-dist";
 
 // Setup PDF.js worker
@@ -117,6 +124,9 @@ const miniPlayer = document.getElementById("mini-player") as HTMLElement;
 const miniPlayerTitle = document.getElementById("mini-player-title")!;
 const miniAudioPlayer = document.getElementById("mini-audio-player") as HTMLAudioElement;
 const miniPlayerClose = document.getElementById("mini-player-close") as HTMLButtonElement;
+const speedBtn = document.getElementById("speed-btn") as HTMLButtonElement;
+const speedMenu = document.getElementById("speed-menu") as HTMLElement;
+let currentPlaybackSpeed = loadStoredSpeed(window.localStorage);
 
 // New viewer elements
 const imageViewer = document.getElementById("image-viewer")!;
@@ -394,6 +404,25 @@ function setupEventListeners() {
     document.getElementById("refresh-btn")!.addEventListener("click", refresh);
     document.getElementById("timeline-submit")!.addEventListener("click", submitTimeline);
     miniPlayerClose.addEventListener("click", stopAudioPlayback);
+
+    // 倍速メニュー
+    speedBtn.textContent = formatSpeedLabel(currentPlaybackSpeed);
+    speedBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        toggleSpeedMenu();
+    });
+    speedMenu.addEventListener("click", (e) => e.stopPropagation());
+    document.addEventListener("click", () => closeSpeedMenu());
+    document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") closeSpeedMenu();
+    });
+    // メディア読み込み完了時に playbackRate がリセットされるので再適用する
+    miniAudioPlayer.addEventListener("loadedmetadata", () => {
+        if (miniAudioPlayer.playbackRate !== currentPlaybackSpeed) {
+            miniAudioPlayer.playbackRate = currentPlaybackSpeed;
+        }
+    });
+
     setupWindowDoubleClickMaximise();
 
     // Timeline input: ⌘+Enter to submit
@@ -1832,6 +1861,56 @@ function hideAllViewers() {
     htmlEditorContainer.style.display = "none";
 }
 
+// 倍速メニューの選択肢を生成する（初回のみ）
+function buildSpeedMenu() {
+    if (speedMenu.childElementCount > 0) return;
+    for (const speed of PLAYBACK_SPEEDS) {
+        const item = document.createElement("button");
+        item.type = "button";
+        item.className = "speed-menu-item";
+        item.setAttribute("role", "menuitemradio");
+        item.dataset.speed = String(speed);
+        item.textContent = formatSpeedLabel(speed);
+        item.addEventListener("click", () => {
+            applyPlaybackSpeed(speed);
+            closeSpeedMenu();
+        });
+        speedMenu.appendChild(item);
+    }
+}
+
+// 速度を実際の audio 要素・UI・保存先に反映する
+function applyPlaybackSpeed(speed: number) {
+    currentPlaybackSpeed = speed;
+    miniAudioPlayer.playbackRate = speed;
+    speedBtn.textContent = formatSpeedLabel(speed);
+    storeSpeed(window.localStorage, speed);
+    for (const el of Array.from(speedMenu.children) as HTMLElement[]) {
+        const isActive = Number(el.dataset.speed) === speed;
+        el.classList.toggle("active", isActive);
+        el.setAttribute("aria-checked", isActive ? "true" : "false");
+    }
+}
+
+function openSpeedMenu() {
+    buildSpeedMenu();
+    speedMenu.hidden = false;
+    speedBtn.setAttribute("aria-expanded", "true");
+}
+
+function closeSpeedMenu() {
+    speedMenu.hidden = true;
+    speedBtn.setAttribute("aria-expanded", "false");
+}
+
+function toggleSpeedMenu() {
+    if (speedMenu.hidden) {
+        openSpeedMenu();
+    } else {
+        closeSpeedMenu();
+    }
+}
+
 async function openAudio(path: string): Promise<void> {
     try {
         currentAudioPath = path;
@@ -1840,6 +1919,8 @@ async function openAudio(path: string): Promise<void> {
         miniAudioPlayer.src = `/media/audio?path=${encodeURIComponent(path)}`;
         miniPlayerTitle.textContent = fileName;
         miniPlayer.style.display = "flex";
+        // 新しいソースを読み込むと playbackRate が 1 にリセットされるため、選択中の速度を再適用
+        applyPlaybackSpeed(currentPlaybackSpeed);
         await miniAudioPlayer.play().catch(() => undefined);
 
         updateFileTreeSelection(path);

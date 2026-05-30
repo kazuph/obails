@@ -763,6 +763,75 @@ body {
     background: var(--border);
 }
 
+/* Playback speed control */
+.mini-player-speed {
+    position: relative;
+    flex: 0 0 auto;
+    display: inline-flex;
+}
+
+.toolbar .mini-player .speed-btn {
+    min-width: 2.6rem;
+    padding: 0.2rem 0.45rem;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    font-size: 0.78rem;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.toolbar .mini-player .speed-btn:hover {
+    background: var(--border);
+}
+
+.speed-menu {
+    /* mini-player はツールバー最上部にあるため、メニューは下方向へ展開する */
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    min-width: 4.5rem;
+    padding: 0.25rem;
+    gap: 0.1rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg-secondary);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+}
+
+.speed-menu[hidden] {
+    display: none;
+}
+
+.toolbar .mini-player .speed-menu-item {
+    width: 100%;
+    min-width: 0;
+    padding: 0.3rem 0.6rem;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 0.82rem;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+    cursor: pointer;
+}
+
+.toolbar .mini-player .speed-menu-item:hover {
+    background: var(--border);
+}
+
+.toolbar .mini-player .speed-menu-item.active {
+    background: var(--accent);
+    color: #fff;
+    font-weight: 600;
+}
+
 @media (max-width: 900px) {
     .mini-player {
         max-width: 54vw;

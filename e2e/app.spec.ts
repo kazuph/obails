@@ -121,6 +121,66 @@ test.describe('Obails App', () => {
     await expect(page.locator('#editor-title')).toHaveText('Welcome');
   });
 
+  test('should change audio playback speed from the speed menu', async ({ page }) => {
+    await setupMockBindings(page);
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+    await expect(page.locator('.file-item[data-path="Welcome.md"]')).toBeVisible();
+
+    await page.locator('.file-item.folder[data-path="audio"]').click();
+    await page.locator('.file-item.file[data-path="audio/test-tone.wav"]').click();
+    await expect(page.locator('#mini-player')).toBeVisible();
+
+    const audio = page.locator('#mini-audio-player');
+    const speedBtn = page.locator('#speed-btn');
+    const speedMenu = page.locator('#speed-menu');
+
+    // 初期状態は等倍速
+    await expect(speedBtn).toHaveText('1×');
+    await expect(speedMenu).toBeHidden();
+    await expect.poll(() => audio.evaluate((el: HTMLMediaElement) => el.playbackRate)).toBe(1);
+
+    // ボタンを押すとメニューが開き、要求された7段階すべてが並ぶ
+    await speedBtn.click();
+    await expect(speedMenu).toBeVisible();
+    await expect(speedMenu.locator('.speed-menu-item')).toHaveText([
+      '0.5×', '0.75×', '1×', '1.25×', '1.5×', '2×', '3×',
+    ]);
+
+    // 1.5倍速を選ぶと実際の playbackRate が変わり、ラベルも更新される
+    await speedMenu.locator('.speed-menu-item', { hasText: '1.5×' }).click();
+    await expect(speedMenu).toBeHidden();
+    await expect(speedBtn).toHaveText('1.5×');
+    await expect.poll(() => audio.evaluate((el: HTMLMediaElement) => el.playbackRate)).toBe(1.5);
+
+    // 3倍速も選べる
+    await speedBtn.click();
+    await speedMenu.locator('.speed-menu-item', { hasText: '3×' }).click();
+    await expect(speedBtn).toHaveText('3×');
+    await expect.poll(() => audio.evaluate((el: HTMLMediaElement) => el.playbackRate)).toBe(3);
+  });
+
+  test('should keep the selected playback speed when opening another audio file', async ({ page }) => {
+    await setupMockBindings(page);
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+    await expect(page.locator('.file-item[data-path="Welcome.md"]')).toBeVisible();
+
+    await page.locator('.file-item.folder[data-path="audio"]').click();
+    await page.locator('.file-item.file[data-path="audio/test-tone.wav"]').click();
+    await expect(page.locator('#mini-player')).toBeVisible();
+
+    const audio = page.locator('#mini-audio-player');
+    await page.locator('#speed-btn').click();
+    await page.locator('#speed-menu .speed-menu-item', { hasText: '2×' }).click();
+    await expect(page.locator('#speed-btn')).toHaveText('2×');
+
+    // 同じ音源を開き直しても選択した速度が維持される（ソース再読込で 1 に戻らない）
+    await page.locator('.file-item.file[data-path="audio/test-tone.wav"]').click();
+    await expect(page.locator('#speed-btn')).toHaveText('2×');
+    await expect.poll(() => audio.evaluate((el: HTMLMediaElement) => el.playbackRate)).toBe(2);
+  });
+
   test('should not periodically reopen stale last-opened state while reading another note', async ({ page }) => {
     await setupMockBindings(page);
     await page.goto('/');
