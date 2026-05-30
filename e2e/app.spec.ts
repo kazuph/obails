@@ -181,6 +181,63 @@ test.describe('Obails App', () => {
     await expect.poll(() => audio.evaluate((el: HTMLMediaElement) => el.playbackRate)).toBe(2);
   });
 
+  test('should hide the right sidebar for non-markdown files and show it for markdown', async ({ page }) => {
+    await setupMockBindings(page);
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+    await expect(page.locator('.file-item[data-path="Welcome.md"]')).toBeVisible();
+
+    const rightSidebar = page.locator('#right-sidebar');
+
+    // マークダウン: サイドバー表示
+    await page.locator('.file-item[data-path="Welcome.md"]').click();
+    await expect(page.locator('#editor-title')).toHaveText('Welcome');
+    await expect(rightSidebar).toBeVisible();
+
+    // 音源: サイドバー非表示
+    await page.locator('.file-item.folder[data-path="audio"]').click();
+    await page.locator('.file-item.file[data-path="audio/test-tone.wav"]').click();
+    await expect(page.locator('#mini-player')).toBeVisible();
+    await expect(rightSidebar).toBeHidden();
+
+    // 画像: サイドバー非表示
+    await page.locator('.file-item.folder[data-path="images"]').click();
+    await page.locator('.file-item.file[data-path="images/test-photo.png"]').click();
+    await expect(rightSidebar).toBeHidden();
+
+    // マークダウンに戻すとサイドバー復帰
+    await page.locator('.file-item[data-path="Welcome.md"]').click();
+    await expect(page.locator('#editor-title')).toHaveText('Welcome');
+    await expect(rightSidebar).toBeVisible();
+  });
+
+  test('should transcribe audio into a sibling note and open it for editing', async ({ page }) => {
+    await setupMockBindings(page);
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+    await expect(page.locator('.file-item[data-path="Welcome.md"]')).toBeVisible();
+
+    await page.locator('.file-item.folder[data-path="audio"]').click();
+    await page.locator('.file-item.file[data-path="audio/test-tone.wav"]').click();
+    await expect(page.locator('#mini-player')).toBeVisible();
+
+    const transcribeBtn = page.locator('#transcribe-btn');
+    // 文字起こし未作成: ボタンは「文字起こし」
+    await expect(transcribeBtn).toBeVisible();
+    await expect(transcribeBtn).toHaveText('文字起こし');
+
+    // クリックで文字起こし → 隣の .md がエディタで開く（mini-playerは継続表示）
+    await transcribeBtn.click();
+    await expect(page.locator('#editor-title')).toHaveText('test-tone');
+    await expect(page.locator('#mini-player')).toBeVisible();
+    // .md を開いたので右サイドバーは復帰
+    await expect(page.locator('#right-sidebar')).toBeVisible();
+
+    // 同じ音源に戻ると、既存ありなので「文字起こしを開く」表示
+    await page.locator('.file-item.file[data-path="audio/test-tone.wav"]').click();
+    await expect(transcribeBtn).toHaveText('文字起こしを開く');
+  });
+
   test('should not periodically reopen stale last-opened state while reading another note', async ({ page }) => {
     await setupMockBindings(page);
     await page.goto('/');

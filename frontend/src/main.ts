@@ -5,6 +5,7 @@ import * as LinkService from "../bindings/github.com/kazuph/obails/services/link
 import * as WindowService from "../bindings/github.com/kazuph/obails/services/windowservice.js";
 import * as GraphService from "../bindings/github.com/kazuph/obails/services/graphservice.js";
 import * as StateService from "../bindings/github.com/kazuph/obails/services/stateservice.js";
+import * as TranscribeService from "../bindings/github.com/kazuph/obails/services/transcribeservice.js";
 import { FileInfo, Note, Timeline, Backlink, Link, Config, Graph } from "../bindings/github.com/kazuph/obails/models/models.js";
 import { Events } from "@wailsio/runtime";
 import mermaid from "mermaid";
@@ -54,6 +55,7 @@ import {
   loadStoredSpeed,
   storeSpeed,
 } from "./lib/playback-speed";
+import { transcriptPathForAudio } from "./lib/transcript";
 import * as pdfjsLib from "pdfjs-dist";
 
 // Setup PDF.js worker
@@ -118,6 +120,7 @@ const timelineTimeline = document.getElementById("timeline-list")!;
 const backlinksList = document.getElementById("backlinks-list")!;
 const outgoingLinksList = document.getElementById("outgoing-links-list")!;
 const outlineList = document.getElementById("outline-list")!;
+const rightSidebar = document.getElementById("right-sidebar") as HTMLElement;
 const fileSearchInput = document.getElementById("file-search-input") as HTMLInputElement;
 const fileSearchClear = document.getElementById("file-search-clear")!;
 const miniPlayer = document.getElementById("mini-player") as HTMLElement;
@@ -126,6 +129,7 @@ const miniAudioPlayer = document.getElementById("mini-audio-player") as HTMLAudi
 const miniPlayerClose = document.getElementById("mini-player-close") as HTMLButtonElement;
 const speedBtn = document.getElementById("speed-btn") as HTMLButtonElement;
 const speedMenu = document.getElementById("speed-menu") as HTMLElement;
+const transcribeBtn = document.getElementById("transcribe-btn") as HTMLButtonElement;
 let currentPlaybackSpeed = loadStoredSpeed(window.localStorage);
 
 // New viewer elements
@@ -422,6 +426,9 @@ function setupEventListeners() {
             miniAudioPlayer.playbackRate = currentPlaybackSpeed;
         }
     });
+
+    // 文字起こしボタン
+    transcribeBtn.addEventListener("click", () => void handleTranscribeClick());
 
     setupWindowDoubleClickMaximise();
 
@@ -1779,6 +1786,10 @@ async function openFile(path: string, fileType: string): Promise<void> {
     const resolvedType = resolveFileType(fileType, path);
     let opened = false;
 
+    // 右サイドバー(OUTLINE/OUTGOING LINKS/BACKLINKS)はマークダウン専用情報のため、
+    // 非マークダウン(音源/画像/PDF/HTML/テキスト)表示時は隠す。
+    rightSidebar.style.display = resolvedType === "markdown" ? "flex" : "none";
+
     if (resolvedType !== "audio") {
         hideAllViewers();
         currentTextPath = null;
@@ -1924,10 +1935,56 @@ async function openAudio(path: string): Promise<void> {
         await miniAudioPlayer.play().catch(() => undefined);
 
         updateFileTreeSelection(path);
+        void refreshTranscribeButton(path);
     } catch (err) {
         console.error("Failed to open audio:", err);
         alert(`Failed to open audio: ${err}`);
         throw err;
+    }
+}
+
+// 文字起こしボタンの状態を、対象音源に既存の文字起こし.mdがあるかで出し分ける。
+async function refreshTranscribeButton(audioPath: string): Promise<void> {
+    transcribeBtn.disabled = false;
+    transcribeBtn.classList.remove("is-busy");
+    try {
+        const has = await TranscribeService.HasTranscript(audioPath);
+        transcribeBtn.textContent = has ? "文字起こしを開く" : "文字起こし";
+    } catch (err) {
+        console.warn("Failed to check transcript:", err);
+        transcribeBtn.textContent = "文字起こし";
+    }
+}
+
+// 文字起こしボタン押下: 既存なら即.mdを開く。無ければ文字起こし→.md生成→エディタで開く。
+async function handleTranscribeClick(): Promise<void> {
+    const audioPath = currentAudioPath;
+    if (!audioPath) return;
+
+    const mdPath = transcriptPathForAudio(audioPath);
+    const alreadyDone = transcribeBtn.textContent === "文字起こしを開く";
+
+    if (alreadyDone) {
+        await openFile(mdPath, "markdown");
+        return;
+    }
+
+    const prevLabel = transcribeBtn.textContent;
+    transcribeBtn.disabled = true;
+    transcribeBtn.classList.add("is-busy");
+    transcribeBtn.textContent = "文字起こし中…";
+    try {
+        const createdPath = await TranscribeService.Transcribe(audioPath);
+        transcribeBtn.classList.remove("is-busy");
+        transcribeBtn.disabled = false;
+        transcribeBtn.textContent = "文字起こしを開く";
+        await openFile(createdPath || mdPath, "markdown");
+    } catch (err) {
+        console.error("Transcription failed:", err);
+        alert(`文字起こしに失敗しました: ${err}`);
+        transcribeBtn.classList.remove("is-busy");
+        transcribeBtn.disabled = false;
+        transcribeBtn.textContent = prevLabel || "文字起こし";
     }
 }
 

@@ -100,6 +100,7 @@ func main() {
 	graphService := services.NewGraphService(linkService, fileService, configService)
 	windowService := services.NewWindowService()
 	vaultWatchService := services.NewVaultWatchService(configService)
+	transcribeService := services.NewTranscribeService(configService, fileService)
 
 	// Build link index on startup
 	go func() {
@@ -126,6 +127,7 @@ func main() {
 			application.NewService(graphService),
 			application.NewService(vaultWatchService),
 			application.NewService(windowService),
+			application.NewService(transcribeService),
 		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),

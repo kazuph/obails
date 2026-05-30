@@ -208,6 +208,25 @@ export async function setupMockBindings(page: Page, options: MockBindingOptions 
       case 1598367945:
         value = null;
         break;
+      // TranscribeService.HasTranscript
+      case 3858737331: {
+        const mdPath = String(args[0] || '').replace(/\.[^/.]+$/, '') + '.md';
+        value = Object.prototype.hasOwnProperty.call(files, mdPath);
+        break;
+      }
+      // TranscribeService.Transcribe
+      case 2533709064: {
+        const audioRel = String(args[0] || '');
+        const mdPath = audioRel.replace(/\.[^/.]+$/, '') + '.md';
+        if (!Object.prototype.hasOwnProperty.call(files, mdPath)) {
+          const audioName = audioRel.split('/').pop() || audioRel;
+          const title = audioName.replace(/\.[^/.]+$/, '');
+          const content = `---\nsource: "[[${audioName}]]"\nlocale: ja-JP\n---\n\n# ${title}\n\n## 文字起こし\n\nテスト用の文字起こし本文。\n\n## メモ\n\n`;
+          addMockMarkdownFile(files, fileInfos, mdPath, content);
+        }
+        value = mdPath;
+        break;
+      }
       // NoteService.GetNote
       case 591728348: {
         const notePath = args[0];
@@ -355,6 +374,34 @@ export async function setupMockBindings(page: Page, options: MockBindingOptions 
             case 1598367945:
               (window as any).__wails_mock_openExternalCalls.push(String(args[0] || ''));
               return createMockPromise(undefined);
+
+            // TranscribeService.HasTranscript
+            case 3858737331: {
+              const mdPath = String(args[0] || '').replace(/\.[^/.]+$/, '') + '.md';
+              return createMockPromise(Object.prototype.hasOwnProperty.call(files, mdPath));
+            }
+
+            // TranscribeService.Transcribe
+            case 2533709064: {
+              const audioRel = String(args[0] || '');
+              const mdPath = audioRel.replace(/\.[^/.]+$/, '') + '.md';
+              if (!Object.prototype.hasOwnProperty.call(files, mdPath)) {
+                const audioName = audioRel.split('/').pop() || audioRel;
+                const title = audioName.replace(/\.[^/.]+$/, '');
+                files[mdPath] = `---\nsource: "[[${audioName}]]"\nlocale: ja-JP\n---\n\n# ${title}\n\n## 文字起こし\n\nテスト用の文字起こし本文。\n\n## メモ\n\n`;
+                const fileInfos = (window as any).__wails_mock_fileInfos;
+                if (!fileInfos.some((info: any) => (info.path ?? info.Path) === mdPath)) {
+                  fileInfos.push({
+                    name: mdPath.split('/').pop() || mdPath,
+                    path: mdPath,
+                    isDir: false,
+                    fileType: 'markdown',
+                    modifiedAt: new Date().toISOString(),
+                  });
+                }
+              }
+              return createMockPromise(mdPath);
+            }
 
             // NoteService.GetNote
             case 591728348:

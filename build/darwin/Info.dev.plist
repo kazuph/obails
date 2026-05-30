@@ -33,6 +33,8 @@
             <string>true</string>
         <key>NSHumanReadableCopyright</key>
             <string>© 2026, kazuph</string>
+        <key>NSSpeechRecognitionUsageDescription</key>
+            <string>音源ファイルをオンデバイスで文字起こしするために音声認識を使用します。</string>
         <key>NSAppTransportSecurity</key>
         <dict>
             <key>NSAllowsLocalNetworking</key>

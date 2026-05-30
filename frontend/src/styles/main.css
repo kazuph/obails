@@ -832,6 +832,31 @@ body {
     font-weight: 600;
 }
 
+/* Transcribe button */
+.toolbar .mini-player .transcribe-btn {
+    flex: 0 0 auto;
+    min-width: 0;
+    padding: 0.2rem 0.55rem;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    font-size: 0.78rem;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.toolbar .mini-player .transcribe-btn:hover {
+    background: var(--border);
+}
+
+.toolbar .mini-player .transcribe-btn:disabled,
+.toolbar .mini-player .transcribe-btn.is-busy {
+    opacity: 0.6;
+    cursor: progress;
+}
+
 @media (max-width: 900px) {
     .mini-player {
         max-width: 54vw;
