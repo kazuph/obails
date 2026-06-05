@@ -56,6 +56,7 @@ import {
   storeSpeed,
 } from "./lib/playback-speed";
 import { transcriptPathForAudio } from "./lib/transcript";
+import { formatPlaybackTime } from "./lib/time";
 import * as pdfjsLib from "pdfjs-dist";
 
 // Setup PDF.js worker
@@ -127,6 +128,10 @@ const miniPlayer = document.getElementById("mini-player") as HTMLElement;
 const miniPlayerTitle = document.getElementById("mini-player-title")!;
 const miniAudioPlayer = document.getElementById("mini-audio-player") as HTMLAudioElement;
 const miniPlayerClose = document.getElementById("mini-player-close") as HTMLButtonElement;
+const miniPlayerPlayPause = document.getElementById("mini-player-playpause") as HTMLButtonElement;
+const miniPlayerCurrent = document.getElementById("mini-player-current") as HTMLElement;
+const miniPlayerDuration = document.getElementById("mini-player-duration") as HTMLElement;
+const miniPlayerSeek = document.getElementById("mini-player-seek") as HTMLInputElement;
 const speedBtn = document.getElementById("speed-btn") as HTMLButtonElement;
 const speedMenu = document.getElementById("speed-menu") as HTMLElement;
 const transcribeBtn = document.getElementById("transcribe-btn") as HTMLButtonElement;
@@ -425,7 +430,12 @@ function setupEventListeners() {
         if (miniAudioPlayer.playbackRate !== currentPlaybackSpeed) {
             miniAudioPlayer.playbackRate = currentPlaybackSpeed;
         }
+        updatePlayerDuration();
+        updatePlayerProgress();
     });
+
+    // カスタム再生コントロール（再生/一時停止・シーク・時間表示）の配線
+    setupCustomAudioControls();
 
     // 文字起こしボタン
     transcribeBtn.addEventListener("click", () => void handleTranscribeClick());
@@ -1988,6 +1998,82 @@ async function handleTranscribeClick(): Promise<void> {
     }
 }
 
+// シーク操作中はユーザーのドラッグ位置を優先し、timeupdate での上書きを止める
+let isSeeking = false;
+
+// カスタムプレイヤー（再生/一時停止ボタン・シークバー・経過/全体時間）を一度だけ配線する。
+function setupCustomAudioControls() {
+    syncPlayPauseIcon();
+
+    miniPlayerPlayPause.addEventListener("click", () => {
+        if (miniAudioPlayer.paused) {
+            void miniAudioPlayer.play().catch(() => undefined);
+        } else {
+            miniAudioPlayer.pause();
+        }
+    });
+
+    miniAudioPlayer.addEventListener("play", syncPlayPauseIcon);
+    miniAudioPlayer.addEventListener("pause", syncPlayPauseIcon);
+    miniAudioPlayer.addEventListener("ended", syncPlayPauseIcon);
+
+    miniAudioPlayer.addEventListener("durationchange", updatePlayerDuration);
+    miniAudioPlayer.addEventListener("timeupdate", () => {
+        if (!isSeeking) updatePlayerProgress();
+    });
+
+    // クリック/ドラッグした位置へ即座にシーク（input中はその時点の値で頭出し）
+    miniPlayerSeek.addEventListener("input", () => {
+        isSeeking = true;
+        const value = Number(miniPlayerSeek.value);
+        miniPlayerCurrent.textContent = formatPlaybackTime(value);
+        updateSeekFill();
+    });
+    miniPlayerSeek.addEventListener("change", () => {
+        const value = Number(miniPlayerSeek.value);
+        if (Number.isFinite(value)) {
+            miniAudioPlayer.currentTime = value;
+        }
+        isSeeking = false;
+        updatePlayerProgress();
+    });
+}
+
+// 再生/一時停止ボタンのアイコンを現在の状態に合わせる
+function syncPlayPauseIcon() {
+    const icon = miniAudioPlayer.paused ? "play" : "pause";
+    miniPlayerPlayPause.innerHTML = renderIcon(icon);
+}
+
+// 全体の長さをシークバーの max と表示ラベルに反映する
+function updatePlayerDuration() {
+    const duration = miniAudioPlayer.duration;
+    if (Number.isFinite(duration) && duration > 0) {
+        miniPlayerSeek.max = String(duration);
+        miniPlayerDuration.textContent = formatPlaybackTime(duration);
+    } else {
+        miniPlayerSeek.max = "0";
+        miniPlayerDuration.textContent = "0:00";
+    }
+    updateSeekFill();
+}
+
+// 現在の再生位置をシークバーの値・経過時間ラベル・塗りに反映する
+function updatePlayerProgress() {
+    const current = miniAudioPlayer.currentTime;
+    miniPlayerSeek.value = String(Number.isFinite(current) ? current : 0);
+    miniPlayerCurrent.textContent = formatPlaybackTime(current);
+    updateSeekFill();
+}
+
+// シークバーの進捗塗り（再生済み部分を accent 色で）を CSS 変数で更新する
+function updateSeekFill() {
+    const max = Number(miniPlayerSeek.max);
+    const value = Number(miniPlayerSeek.value);
+    const ratio = max > 0 && Number.isFinite(value) ? (value / max) * 100 : 0;
+    miniPlayerSeek.style.setProperty("--seek-progress", `${Math.min(100, Math.max(0, ratio))}%`);
+}
+
 function stopAudioPlayback() {
     miniAudioPlayer.pause();
     miniAudioPlayer.removeAttribute("src");
@@ -1995,6 +2081,13 @@ function stopAudioPlayback() {
     miniPlayerTitle.textContent = "No audio";
     miniPlayer.style.display = "none";
     currentAudioPath = null;
+    isSeeking = false;
+    miniPlayerSeek.value = "0";
+    miniPlayerSeek.max = "0";
+    miniPlayerCurrent.textContent = "0:00";
+    miniPlayerDuration.textContent = "0:00";
+    updateSeekFill();
+    syncPlayPauseIcon();
 }
 
 // Open image file

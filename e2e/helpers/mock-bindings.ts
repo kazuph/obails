@@ -134,13 +134,41 @@ export async function setupMockBindings(page: Page, options: MockBindingOptions 
 
   await page.exposeFunction('__wailsMockReadBinaryCalls', () => readBinaryCalls.slice());
 
+  // 本番の file_service.go は http.ServeContent + "Accept-Ranges: bytes" で
+  // Range リクエストに対応している。シーク（頭出し）は Range が無いとブラウザが
+  // 拒否することがあるため、モックでも 206 Partial Content を返して本番に忠実にする。
   await page.route('**/media/audio?**', async (route) => {
     const requestURL = new URL(route.request().url());
     const relativePath = requestURL.searchParams.get('path') || '';
     const body = Buffer.from(files[relativePath] || '', 'base64');
+    const total = body.length;
+    const rangeHeader = route.request().headers()['range'];
+
+    if (rangeHeader) {
+      const match = /bytes=(\d*)-(\d*)/.exec(rangeHeader);
+      const start = match && match[1] ? parseInt(match[1], 10) : 0;
+      const end = match && match[2] ? parseInt(match[2], 10) : total - 1;
+      const chunk = body.subarray(start, end + 1);
+      await route.fulfill({
+        status: 206,
+        headers: {
+          'Content-Type': 'audio/wav',
+          'Accept-Ranges': 'bytes',
+          'Content-Range': `bytes ${start}-${end}/${total}`,
+          'Content-Length': String(chunk.length),
+        },
+        body: chunk,
+      });
+      return;
+    }
+
     await route.fulfill({
       status: 200,
-      contentType: 'audio/wav',
+      headers: {
+        'Content-Type': 'audio/wav',
+        'Accept-Ranges': 'bytes',
+        'Content-Length': String(total),
+      },
       body,
     });
   });

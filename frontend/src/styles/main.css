@@ -716,8 +716,8 @@ body {
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
-    max-width: min(42vw, 520px);
-    min-width: 280px;
+    max-width: min(60vw, 720px);
+    min-width: 360px;
     padding: 0.25rem 0.35rem 0.25rem 0.55rem;
     border: 1px solid var(--border);
     border-radius: 6px;
@@ -746,8 +746,79 @@ body {
 }
 
 .mini-player audio {
-    width: clamp(160px, 22vw, 260px);
-    height: 30px;
+    display: none;
+}
+
+/* Custom playback controls */
+.toolbar .mini-player .mini-player-playpause {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.9rem;
+    height: 1.9rem;
+    padding: 0;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    cursor: pointer;
+    line-height: 0;
+}
+
+.toolbar .mini-player .mini-player-playpause:hover {
+    background: var(--border);
+}
+
+.mini-player-time {
+    flex: 0 0 auto;
+    font-size: 0.76rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-secondary);
+    min-width: 2.4rem;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.mini-player-seek {
+    flex: 1 1 auto;
+    min-width: 80px;
+    height: 4px;
+    margin: 0;
+    padding: 0;
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent;
+    cursor: pointer;
+}
+
+.mini-player-seek::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: 2px;
+    background: linear-gradient(
+        to right,
+        var(--accent) 0%,
+        var(--accent) var(--seek-progress, 0%),
+        var(--border) var(--seek-progress, 0%),
+        var(--border) 100%
+    );
+}
+
+.mini-player-seek::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 12px;
+    height: 12px;
+    margin-top: -4px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 2px solid var(--bg-tertiary);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+    cursor: pointer;
+}
+
+.mini-player-seek:hover::-webkit-slider-thumb {
+    transform: scale(1.15);
 }
 
 .toolbar .mini-player button {
@@ -859,16 +930,12 @@ body {
 
 @media (max-width: 900px) {
     .mini-player {
-        max-width: 54vw;
-        min-width: 220px;
+        max-width: 64vw;
+        min-width: 300px;
     }
 
     .mini-player-title {
-        max-width: 7rem;
-    }
-
-    .mini-player audio {
-        width: 150px;
+        max-width: 5rem;
     }
 }
 

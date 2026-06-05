@@ -160,6 +160,53 @@ test.describe('Obails App', () => {
     await expect.poll(() => audio.evaluate((el: HTMLMediaElement) => el.playbackRate)).toBe(3);
   });
 
+  test('should show the time sequence (duration, seek bar, current time) and allow instant seeking', async ({ page }) => {
+    await setupMockBindings(page);
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+    await expect(page.locator('.file-item[data-path="Welcome.md"]')).toBeVisible();
+
+    await page.locator('.file-item.folder[data-path="audio"]').click();
+    await page.locator('.file-item.file[data-path="audio/long-tone.wav"]').click();
+    await expect(page.locator('#mini-player')).toBeVisible();
+
+    const audio = page.locator('#mini-audio-player');
+    const seek = page.locator('#mini-player-seek');
+    const current = page.locator('#mini-player-current');
+    const duration = page.locator('#mini-player-duration');
+    const playPause = page.locator('#mini-player-playpause');
+
+    // メタデータ読み込み後、全体の長さ(95秒=1:35)が表示され、シークバーの最大値も一致する
+    await expect.poll(() => audio.evaluate((el: HTMLMediaElement) => el.duration)).toBeGreaterThan(90);
+    await expect(duration).toHaveText('1:35');
+    await expect.poll(async () => Number(await seek.getAttribute('max'))).toBeGreaterThan(90);
+
+    // 初期は経過0:00
+    await expect(current).toHaveText('0:00');
+
+    // シークバーを 60 秒位置へ動かすと、実際の再生位置が即座に移動し、経過時間表示も更新される
+    await seek.evaluate((el: HTMLInputElement) => {
+      el.value = '60';
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await expect.poll(() => audio.evaluate((el: HTMLMediaElement) => el.currentTime)).toBeGreaterThan(55);
+    await expect(current).toHaveText('1:00');
+
+    // 進捗塗り(--seek-progress)が再生位置に応じて更新されている
+    const progress = await seek.evaluate((el: HTMLElement) =>
+      el.style.getPropertyValue('--seek-progress'),
+    );
+    expect(progress).not.toBe('0%');
+    expect(progress).not.toBe('');
+
+    // 一時停止ボタンで再生中の音源を止められ、アイコンが再生(▶)へ切り替わる
+    await expect.poll(() => audio.evaluate((el: HTMLMediaElement) => el.paused)).toBe(false);
+    await playPause.click();
+    await expect.poll(() => audio.evaluate((el: HTMLMediaElement) => el.paused)).toBe(true);
+    await expect(playPause.locator('svg path')).toHaveAttribute('d', 'M8 5v14l11-7z');
+  });
+
   test('should keep the selected playback speed when opening another audio file', async ({ page }) => {
     await setupMockBindings(page);
     await page.goto('/');

@@ -39,7 +39,11 @@
                     <div class="mini-player" id="mini-player" style="display: none;">
                         <span class="mini-player-icon" aria-hidden="true"></span>
                         <span class="mini-player-title" id="mini-player-title">No audio</span>
-                        <audio id="mini-audio-player" controls preload="metadata"></audio>
+                        <audio id="mini-audio-player" preload="metadata"></audio>
+                        <button type="button" id="mini-player-playpause" class="mini-player-playpause" title="Play/Pause" aria-label="Play/Pause"></button>
+                        <span class="mini-player-time mini-player-time-current" id="mini-player-current">0:00</span>
+                        <input type="range" id="mini-player-seek" class="mini-player-seek" min="0" max="0" step="0.01" value="0" aria-label="Seek" title="Seek">
+                        <span class="mini-player-time mini-player-time-duration" id="mini-player-duration">0:00</span>
                         <div class="mini-player-speed" id="mini-player-speed">
                             <button type="button" id="speed-btn" class="speed-btn" title="Playback speed" aria-label="Playback speed" aria-haspopup="true" aria-expanded="false">1×</button>
                             <div class="speed-menu" id="speed-menu" role="menu" aria-label="Playback speed" hidden></div>
