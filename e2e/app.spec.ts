@@ -1913,3 +1913,142 @@ test.describe('HTML Preview', () => {
     expect(lowContrastTokens).toEqual([]);
   });
 });
+
+test.describe('Design Polish', () => {
+  test('should switch to Liquid Glass Dark and let the window backdrop show through', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    await selectThemeFromMenu(page, 'liquid-glass-dark');
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'liquid-glass-dark');
+
+    // ガラス配管: body は透明、本文側は浮いたカード（不透過の床＋角丸）になる
+    const bodyBackground = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+    expect(bodyBackground).toBe('rgba(0, 0, 0, 0)');
+
+    const mainContent = await page.evaluate(() => {
+      const el = document.querySelector('.main-content');
+      if (!el) return null;
+      const style = getComputedStyle(el);
+      return { background: style.backgroundColor, radius: style.borderRadius };
+    });
+    expect(mainContent?.background).toContain('0.94');
+    expect(mainContent?.radius).toBe('12px');
+
+    // レールはガラスの気配を残しつつ「必ず読める」材質（半透明だが濃い）
+    const sidebarAlpha = await page.evaluate(() => {
+      const el = document.querySelector('.sidebar');
+      if (!el) return 1;
+      const match = getComputedStyle(el).backgroundColor.match(/rgba?\([^)]*\)/);
+      if (!match) return 1;
+      const parts = match[0].replace(/rgba?\(|\)/g, '').split(',').map(Number);
+      return parts.length === 4 ? parts[3] : 1;
+    });
+    expect(sidebarAlpha).toBeLessThan(1);
+    expect(sidebarAlpha).toBeGreaterThanOrEqual(0.7);
+
+    // 浮かぶ操作部（コンテキストメニュー）には本物のガラス(backdrop-filter)が乗る
+    const popoverBackdrop = await page.evaluate(() => {
+      const el = document.querySelector('.context-menu');
+      if (!el) return '';
+      const style = getComputedStyle(el) as CSSStyleDeclaration & { webkitBackdropFilter?: string };
+      return style.backdropFilter || style.webkitBackdropFilter || '';
+    });
+    expect(popoverBackdrop).toContain('blur');
+  });
+
+  test('should switch to Liquid Glass Light via theme menu', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    await selectThemeFromMenu(page, 'liquid-glass-light');
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'liquid-glass-light');
+
+    const accent = await page.evaluate(() =>
+      getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()
+    );
+    expect(accent).toBe('#0969da');
+  });
+
+  test('should resolve the liquid-glass alias to the dark glass theme', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    await selectThemeFromMenu(page, 'liquid-glass');
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'liquid-glass-dark');
+  });
+
+  test('should preserve a glass theme after reload', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    await selectThemeFromMenu(page, 'liquid-glass-dark');
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'liquid-glass-dark');
+
+    await page.reload();
+    await page.waitForLoadState('networkidle');
+
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'liquid-glass-dark');
+  });
+
+  test('should render context menu icons as SVG instead of emoji', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    for (const id of ['ctx-new-file', 'ctx-new-folder', 'ctx-rename', 'ctx-delete']) {
+      const iconSvgCount = await page.locator(`#${id} .ctx-icon svg`).count();
+      expect(iconSvgCount, id).toBe(1);
+      const text = await page.locator(`#${id}`).textContent();
+      expect(text, id).not.toMatch(/[\u{1F300}-\u{1FAFF}\u{2700}-\u{27BF}]/u);
+    }
+  });
+
+  test('should keep toolbar buttons borderless until hovered', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    const refreshBtn = page.locator('#refresh-btn');
+    await expect(refreshBtn).toBeVisible();
+
+    const styles = await refreshBtn.evaluate((el) => {
+      const style = getComputedStyle(el);
+      return {
+        borderWidth: style.borderTopWidth,
+        background: style.backgroundColor,
+      };
+    });
+    expect(styles.borderWidth).toBe('0px');
+    expect(styles.background).toBe('rgba(0, 0, 0, 0)');
+  });
+
+  test('should expose a save pulse dot that is invisible by default', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    const pulse = page.locator('#save-pulse');
+    await expect(pulse).toHaveCount(1);
+    const opacity = await pulse.evaluate((el) => getComputedStyle(el).opacity);
+    expect(opacity).toBe('0');
+  });
+
+  test('should dim chrome when the window loses focus', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+    await expect(page.locator('body')).toHaveClass(/window-inactive/);
+
+    // opacity は var(--duration) のトランジション中なので、落ち着くまでポーリングする
+    await expect
+      .poll(async () =>
+        page.evaluate(() => {
+          const el = document.querySelector('.sidebar');
+          return el ? Number(getComputedStyle(el).opacity) : 1;
+        })
+      )
+      .toBeLessThan(1);
+
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await expect(page.locator('body')).not.toHaveClass(/window-inactive/);
+  });
+});

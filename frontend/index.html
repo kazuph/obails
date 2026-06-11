@@ -59,7 +59,7 @@
             <!-- Item Input Form -->
             <div class="new-note-form" id="new-note-form" style="display: none;">
                 <div class="new-note-input-container">
-                    <span class="new-note-icon" id="new-note-icon">📄</span>
+                    <span class="new-note-icon" id="new-note-icon"></span>
                     <input type="text" id="new-note-input" placeholder="Enter filename (without .md)" autocomplete="off">
                     <span class="new-note-extension" id="new-note-extension">.md</span>
                     <button id="new-note-create" class="new-note-btn create">Create</button>
@@ -71,6 +71,7 @@
                 <div class="editor-pane" id="editor-pane">
                     <div class="pane-header" id="editor-header">
                         <span class="pane-title" id="editor-title">Select a note...</span>
+                        <span class="save-pulse" id="save-pulse" aria-hidden="true"></span>
                     </div>
                     <textarea id="editor" placeholder="Select a note..."></textarea>
                 </div>
@@ -111,7 +112,7 @@
                 <div class="pane-header">
                     <span class="pane-title" id="pdf-title">PDF</span>
                     <div class="pdf-controls">
-                        <button id="pdf-view-mode" title="Toggle View Mode (Single/Continuous)">📄</button>
+                        <button id="pdf-view-mode" title="Toggle View Mode (Single/Continuous)"></button>
                         <button id="pdf-prev" title="Previous Page">◀</button>
                         <span id="pdf-page-info">1 / 1</span>
                         <button id="pdf-next" title="Next Page">▶</button>
@@ -185,7 +186,7 @@
         <div class="pdf-fs-header">
             <span class="pdf-fs-title" id="pdf-fs-title">PDF</span>
             <div class="pdf-fs-controls">
-                <button id="pdf-fs-view-mode" title="Toggle View Mode">📄</button>
+                <button id="pdf-fs-view-mode" title="Toggle View Mode"></button>
                 <button id="pdf-fs-prev" title="Previous Page">◀</button>
                 <span id="pdf-fs-page-info">1 / 1</span>
                 <button id="pdf-fs-next" title="Next Page">▶</button>
@@ -236,11 +237,11 @@
     <!-- Context Menu -->
     <div class="context-menu-backdrop" id="context-menu-backdrop" style="display: none;"></div>
     <div class="context-menu" id="context-menu" style="display: none;">
-        <div class="context-menu-item" id="ctx-new-file">📄 New File</div>
-        <div class="context-menu-item" id="ctx-new-folder">📁 New Folder</div>
-        <div class="context-menu-item" id="ctx-open-finder">Open Finder</div>
-        <div class="context-menu-item" id="ctx-rename">✏️ Rename</div>
-        <div class="context-menu-item danger" id="ctx-delete">🗑️ Delete</div>
+        <div class="context-menu-item" id="ctx-new-file"><span class="ctx-icon" data-icon="file-plus"></span>New File</div>
+        <div class="context-menu-item" id="ctx-new-folder"><span class="ctx-icon" data-icon="folder-plus"></span>New Folder</div>
+        <div class="context-menu-item" id="ctx-open-finder"><span class="ctx-icon" data-icon="folder-open"></span>Open Finder</div>
+        <div class="context-menu-item" id="ctx-rename"><span class="ctx-icon" data-icon="edit"></span>Rename</div>
+        <div class="context-menu-item danger" id="ctx-delete"><span class="ctx-icon" data-icon="trash"></span>Delete</div>
     </div>
 
     <!-- Vault Setup Dialog -->

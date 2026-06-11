@@ -56,7 +56,7 @@ import {
   shouldIgnoreTreeClick,
   type ItemKind,
 } from "./lib/file-tree-ops";
-import { renderIcon, setButtonIcon } from "./lib/icons";
+import { renderIcon, setButtonIcon, type IconName } from "./lib/icons";
 import {
   PLAYBACK_SPEEDS,
   DEFAULT_PLAYBACK_SPEED,
@@ -224,6 +224,17 @@ async function init() {
 
     setupEventListeners();
     setupToolbarIcons();
+    setupWindowFocusBreathing();
+}
+
+// ウィンドウが背面に回ったら、道具類が静かに沈む（macOSの作法）
+function setupWindowFocusBreathing() {
+    window.addEventListener("blur", () => {
+        document.body.classList.add("window-inactive");
+    });
+    window.addEventListener("focus", () => {
+        document.body.classList.remove("window-inactive");
+    });
 }
 
 function setupToolbarIcons() {
@@ -246,6 +257,15 @@ function setupToolbarIcons() {
     if (searchClearBtn) {
         searchClearBtn.innerHTML = renderIcon("close");
     }
+
+    document.querySelectorAll<HTMLElement>(".ctx-icon[data-icon]").forEach((el) => {
+        el.innerHTML = renderIcon(el.dataset.icon as IconName);
+    });
+
+    const pdfViewModeBtn = document.getElementById("pdf-view-mode");
+    const pdfFsViewModeBtn = document.getElementById("pdf-fs-view-mode");
+    if (pdfViewModeBtn) pdfViewModeBtn.innerHTML = renderIcon("page-continuous");
+    if (pdfFsViewModeBtn) pdfFsViewModeBtn.innerHTML = renderIcon("page-continuous");
 }
 
 function toStateKey(path: string, fileType: string): string {
@@ -636,7 +656,7 @@ function setFolderExpanded(folderItem: HTMLElement, expanded: boolean) {
     folderItem.classList.toggle("expanded", expanded);
     const iconSpan = folderItem.querySelector(".folder-icon");
     if (iconSpan) {
-        iconSpan.textContent = expanded ? "📂" : "📁";
+        iconSpan.innerHTML = renderIcon(expanded ? "folder-open" : "folder-closed");
     }
 
     const wrapper = folderItem.parentElement;
@@ -1295,7 +1315,7 @@ function showItemForm(options: {
     itemFormTargetFolder = options.targetFolder || "";
     itemFormTargetPath = options.targetPath || "";
 
-    icon.textContent = options.kind === "folder" ? "📁" : "📄";
+    icon.innerHTML = renderIcon(options.kind === "folder" ? "folder-plus" : "file-plus");
     extension.textContent = options.kind === "folder" ? "" : ".md";
     extension.style.display = options.kind === "folder" ? "none" : "inline";
     createButton.textContent = options.mode === "rename" ? "Rename" : "Create";
@@ -1744,7 +1764,7 @@ function showEmptyMainPane() {
     editor.value = "";
     preview.innerHTML = "Select a note from the file tree.";
     updatePaneTitles("Select a note...");
-    outlineList.innerHTML = '<div class="outline-empty">No outline available</div>';
+    outlineList.innerHTML = '<div class="outline-empty">Headings you write will gather here</div>';
     currentNote = null;
     currentFilePath = null;
     currentHtmlPath = null;
@@ -1756,17 +1776,17 @@ function showEmptyMainPane() {
 
 // File Type Helpers
 function getFileIcon(file: FileInfo): string {
-    if (file.isDir) return "📁";
+    if (file.isDir) return renderIcon("folder-closed");
 
     const fileType = file.fileType || "other";
     switch (fileType) {
-        case "markdown": return "📝";
-        case "image": return "🖼️";
-        case "pdf": return "📕";
-        case "html": return "🌐";
-        case "audio": return "🎧";
-        case "text": return "📄";
-        default: return "📄";
+        case "markdown": return renderIcon("file-text");
+        case "image": return renderIcon("file-image");
+        case "pdf": return renderIcon("file-pdf");
+        case "html": return renderIcon("file-code");
+        case "audio": return renderIcon("file-audio");
+        case "text": return renderIcon("file");
+        default: return renderIcon("file");
     }
 }
 
@@ -1818,7 +1838,7 @@ async function openFile(path: string, fileType: string): Promise<void> {
 
     // Clear outline for non-markdown files (outline is only relevant for markdown)
     if (resolvedType !== "markdown" && resolvedType !== "audio") {
-        outlineList.innerHTML = '<div class="outline-empty">No outline available</div>';
+        outlineList.innerHTML = '<div class="outline-empty">Headings you write will gather here</div>';
         currentNote = null;
     }
 
@@ -2374,9 +2394,9 @@ function updatePdfInfo() {
     // Update view mode button icon
     const viewModeBtn = document.getElementById("pdf-view-mode")!;
     const viewModeFsBtn = document.getElementById("pdf-fs-view-mode")!;
-    const icon = pdfViewMode === 'continuous' ? '📄' : '📃';
-    viewModeBtn.textContent = icon;
-    viewModeFsBtn.textContent = icon;
+    const icon = renderIcon(pdfViewMode === 'continuous' ? 'page-single' : 'page-continuous');
+    viewModeBtn.innerHTML = icon;
+    viewModeFsBtn.innerHTML = icon;
     viewModeBtn.title = pdfViewMode === 'continuous' ? 'Switch to Single Page' : 'Switch to Continuous Scroll';
     viewModeFsBtn.title = viewModeBtn.title;
 }
@@ -2646,12 +2666,33 @@ async function saveEditorContent() {
     await saveCurrentNote();
 }
 
+// 保存の気配: 「保存しました」とは言わず、タイトル横の小さな点がふっと現れて消える
+let savePulseTimerId: number | null = null;
+function showSavePulse() {
+    const pulse = document.getElementById("save-pulse");
+    if (!pulse) return;
+
+    pulse.classList.remove("visible");
+    // 連続保存でもアニメーションを最初からやり直すための reflow
+    void (pulse as HTMLElement).offsetWidth;
+    pulse.classList.add("visible");
+
+    if (savePulseTimerId !== null) {
+        window.clearTimeout(savePulseTimerId);
+    }
+    savePulseTimerId = window.setTimeout(() => {
+        pulse.classList.remove("visible");
+        savePulseTimerId = null;
+    }, 1200);
+}
+
 async function saveCurrentTextFile() {
     if (!currentTextPath) return;
 
     try {
         await FileService.WriteFile(currentTextPath, editor.value);
         lastLoadedTextContent = editor.value;
+        showSavePulse();
     } catch (err) {
         console.error("Failed to save text file:", err);
     }
@@ -2993,6 +3034,7 @@ async function saveCurrentNote() {
         await NoteService.SaveNote(currentNote.path, editor.value);
         currentNote.content = editor.value;
         lastLoadedMarkdownContent = editor.value;
+        showSavePulse();
         const refreshedNote = await NoteService.GetNote(currentNote.path);
         if (refreshedNote) {
             currentNote = refreshedNote;
@@ -3139,7 +3181,7 @@ function updatePreview() {
     const content = editor.value;
     if (currentTextPath) {
         preview.innerHTML = `<pre class="plain-text-preview">${escapeHtml(content)}</pre>`;
-        outlineList.innerHTML = '<div class="outline-empty">No outline available</div>';
+        outlineList.innerHTML = '<div class="outline-empty">Headings you write will gather here</div>';
         return;
     }
 
@@ -3300,7 +3342,7 @@ async function loadBacklinks(path: string) {
 }
 
 function clearBacklinks() {
-    backlinksList.innerHTML = '<div class="empty">No backlinks</div>';
+    backlinksList.innerHTML = '<div class="empty">No notes link here yet</div>';
 }
 
 function renderBacklinks(backlinks: Backlink[]) {
@@ -3321,7 +3363,7 @@ function renderBacklinks(backlinks: Backlink[]) {
     }
 
     if (backlinks.length === 0) {
-        backlinksList.innerHTML = '<div class="empty">No backlinks</div>';
+        backlinksList.innerHTML = '<div class="empty">No notes link here yet</div>';
     }
 }
 
@@ -3337,7 +3379,7 @@ async function loadOutgoingLinks(path: string) {
 }
 
 function clearOutgoingLinks() {
-    outgoingLinksList.innerHTML = '<div class="empty">No outgoing links</div>';
+    outgoingLinksList.innerHTML = '<div class="empty">No links from this note yet</div>';
 }
 
 function renderOutgoingLinks(links: Link[]) {
@@ -3364,7 +3406,7 @@ function renderOutgoingLinks(links: Link[]) {
     }
 
     if (filteredLinks.length === 0) {
-        outgoingLinksList.innerHTML = '<div class="empty">No outgoing links</div>';
+        outgoingLinksList.innerHTML = '<div class="empty">No links from this note yet</div>';
     }
 }
 

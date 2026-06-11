@@ -37,6 +37,8 @@ var themeMenuOptions = []themeMenuOption{
 	{Group: "Dark", Label: "One Dark", Value: "onedark"},
 	{Group: "Dark", Label: "Gruvbox", Value: "gruvbox"},
 	{Group: "Dark", Label: "Tokyo Night", Value: "tokyonight"},
+	{Group: "Glass", Label: "Liquid Glass Light", Value: "liquid-glass-light"},
+	{Group: "Glass", Label: "Liquid Glass Dark", Value: "liquid-glass-dark"},
 }
 
 func normalizeThemeValue(theme string) string {
@@ -56,9 +58,30 @@ func normalizeThemeValue(theme string) string {
 		return "rosepine-dawn"
 	case "tokyo-night", "tokyonight":
 		return "tokyonight"
+	case "liquid-glass", "liquidglass", "glass", "glass-dark", "liquid-glass-dark":
+		return "liquid-glass-dark"
+	case "glass-light", "liquid-glass-light":
+		return "liquid-glass-light"
 	default:
 		return normalized
 	}
+}
+
+// macBackdropForTheme decides the window backdrop at startup.
+// Liquid Glass themes use the native NSGlassEffectView (with automatic
+// fallback to NSVisualEffectView on older macOS); everything else keeps
+// the existing translucent backdrop.
+func macBackdropForTheme(theme string) (application.MacBackdrop, application.MacLiquidGlass) {
+	normalized := normalizeThemeValue(theme)
+	if !strings.HasPrefix(normalized, "liquid-glass") {
+		return application.MacBackdropTranslucent, application.MacLiquidGlass{}
+	}
+
+	style := application.LiquidGlassStyleDark
+	if strings.HasSuffix(normalized, "light") {
+		style = application.LiquidGlassStyleLight
+	}
+	return application.MacBackdropLiquidGlass, application.MacLiquidGlass{Style: style}
 }
 
 func buildApplicationMenu(app *application.App, selectedTheme string) *application.Menu {
@@ -147,6 +170,7 @@ func main() {
 	app.Menu.SetApplicationMenu(buildApplicationMenu(app, configService.GetConfig().UI.Theme))
 
 	// Create the main window
+	backdrop, liquidGlass := macBackdropForTheme(configService.GetConfig().UI.Theme)
 	mainWindow := app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title:          "Obails",
 		Width:          1200,
@@ -154,7 +178,8 @@ func main() {
 		EnableFileDrop: true,
 		Mac: application.MacWindow{
 			InvisibleTitleBarHeight: 50,
-			Backdrop:                application.MacBackdropTranslucent,
+			Backdrop:                backdrop,
+			LiquidGlass:             liquidGlass,
 			TitleBar:                application.MacTitleBarHiddenInset,
 		},
 		BackgroundColour: application.NewRGB(27, 38, 54),

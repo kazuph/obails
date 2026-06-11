@@ -7,6 +7,7 @@ export const LIGHT_THEMES = [
   "one-light",
   "catppuccin-latte",
   "rosepine-dawn",
+  "liquid-glass-light",
 ] as const;
 
 export type LightTheme = (typeof LIGHT_THEMES)[number];
@@ -26,6 +27,8 @@ export const THEME_OPTIONS = [
   { group: "Dark", label: "One Dark", value: "onedark" },
   { group: "Dark", label: "Gruvbox", value: "gruvbox" },
   { group: "Dark", label: "Tokyo Night", value: "tokyonight" },
+  { group: "Glass", label: "Liquid Glass Light", value: "liquid-glass-light" },
+  { group: "Glass", label: "Liquid Glass Dark", value: "liquid-glass-dark" },
 ] as const;
 
 export const VALID_THEMES = THEME_OPTIONS.map(theme => theme.value);
@@ -62,6 +65,14 @@ export function normalizeThemeValue(theme: string | undefined | null): string {
 
   if (["tokyo-night", "tokyonight"].includes(normalized)) {
     return "tokyonight";
+  }
+
+  if (["liquid-glass", "liquidglass", "glass", "glass-dark", "liquid-glass-dark"].includes(normalized)) {
+    return "liquid-glass-dark";
+  }
+
+  if (["glass-light", "liquid-glass-light"].includes(normalized)) {
+    return "liquid-glass-light";
   }
 
   return normalized;

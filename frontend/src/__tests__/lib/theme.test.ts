@@ -22,7 +22,8 @@ describe("LIGHT_THEMES", () => {
     expect(LIGHT_THEMES).toContain("one-light");
     expect(LIGHT_THEMES).toContain("catppuccin-latte");
     expect(LIGHT_THEMES).toContain("rosepine-dawn");
-    expect(LIGHT_THEMES).toHaveLength(5);
+    expect(LIGHT_THEMES).toContain("liquid-glass-light");
+    expect(LIGHT_THEMES).toHaveLength(6);
   });
 });
 
@@ -31,7 +32,17 @@ describe("THEME_OPTIONS", () => {
     expect(VALID_THEMES).toEqual(THEME_OPTIONS.map(theme => theme.value));
     expect(VALID_THEMES).toContain("rosepine-dawn");
     expect(VALID_THEMES).toContain("dracula");
-    expect(VALID_THEMES).toHaveLength(12);
+    expect(VALID_THEMES).toContain("liquid-glass-light");
+    expect(VALID_THEMES).toContain("liquid-glass-dark");
+    expect(VALID_THEMES).toHaveLength(14);
+  });
+
+  it("should group Liquid Glass themes under Glass", () => {
+    const glassThemes = THEME_OPTIONS.filter(theme => theme.group === "Glass");
+    expect(glassThemes.map(theme => theme.value)).toEqual([
+      "liquid-glass-light",
+      "liquid-glass-dark",
+    ]);
   });
 });
 
@@ -56,6 +67,11 @@ describe("isDarkTheme", () => {
     expect(isDarkTheme("unknown-theme")).toBe(true);
     expect(isDarkTheme("")).toBe(true);
   });
+
+  it("should classify Liquid Glass themes", () => {
+    expect(isDarkTheme("liquid-glass-light")).toBe(false);
+    expect(isDarkTheme("liquid-glass-dark")).toBe(true);
+  });
 });
 
 describe("normalizeThemeValue", () => {
@@ -70,6 +86,15 @@ describe("normalizeThemeValue", () => {
 
   it("should normalize spacing and casing", () => {
     expect(normalizeThemeValue("  Rose Pine Dawn  ")).toBe("rosepine-dawn");
+  });
+
+  it("should normalize Liquid Glass aliases", () => {
+    expect(normalizeThemeValue("liquid-glass")).toBe("liquid-glass-dark");
+    expect(normalizeThemeValue("Liquid Glass")).toBe("liquid-glass-dark");
+    expect(normalizeThemeValue("glass")).toBe("liquid-glass-dark");
+    expect(normalizeThemeValue("glass-light")).toBe("liquid-glass-light");
+    expect(normalizeThemeValue("Liquid Glass Light")).toBe("liquid-glass-light");
+    expect(normalizeThemeValue("liquid-glass-dark")).toBe("liquid-glass-dark");
   });
 });
 

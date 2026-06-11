@@ -229,6 +229,128 @@
     --error: #f7768e;
 }
 
+/* ========== GLASS THEMES (Liquid Glass) ========== */
+/* ガラスにするのは縁側（サイドバー）だけ。
+   読み書きする場所（エディタ/プレビュー）はほぼ不透過を保ち、可読性を最優先する */
+
+/* Liquid Glass Light: GitHub Light の色をガラスの上に */
+[data-theme="liquid-glass-light"] {
+    --bg-primary: rgba(255, 255, 255, 0.94);
+    --bg-secondary: rgba(246, 248, 250, 0.6);
+    --bg-tertiary: rgba(17, 24, 39, 0.06);
+    --text-primary: #1f2429;
+    --text-secondary: #4b555f;
+    --text-muted: #66707a;
+    --accent: #0969da;
+    --accent-hover: #0550ae;
+    --border: rgba(17, 24, 39, 0.12);
+    --success: #1a7f37;
+    --error: #cf222e;
+    --code-bg: rgba(246, 248, 250, 0.9);
+    --code-text: #24292f;
+    --syntax-comment: #57606a;
+    --syntax-keyword: #cf222e;
+    --syntax-string: #0a3069;
+    --syntax-title: #8250df;
+    --syntax-attr: #953800;
+    --syntax-literal: #0550ae;
+    --syntax-meta: #57606a;
+    /* ガラスの縁の光（スペキュラ） */
+    --glass-rim: rgba(17, 24, 39, 0.08);
+    --glass-specular: rgba(255, 255, 255, 0.85);
+    /* レールは「読める材質」が最優先。ガラスの気配は残しつつほぼ不透過 */
+    --glass-rail-tint: rgba(246, 248, 250, 0.86);
+    /* 浮遊チューム（メニュー/ポップオーバー）用の本物のガラス */
+    --glass-popover: rgba(255, 255, 255, 0.55);
+}
+
+/* Liquid Glass Dark: Tokyo Night の色をガラスの上に */
+[data-theme="liquid-glass-dark"] {
+    --bg-primary: rgba(26, 27, 38, 0.94);
+    --bg-secondary: rgba(30, 32, 48, 0.5);
+    --bg-tertiary: rgba(255, 255, 255, 0.07);
+    --text-primary: #d2dafc;
+    --text-secondary: #b3bbdd;
+    --text-muted: #8b93b8;
+    --accent: #7aa2f7;
+    --accent-hover: #bb9af7;
+    --border: rgba(255, 255, 255, 0.10);
+    --success: #9ece6a;
+    --error: #f7768e;
+    --glass-rim: rgba(255, 255, 255, 0.14);
+    --glass-specular: rgba(255, 255, 255, 0.22);
+    --glass-rail-tint: rgba(22, 23, 36, 0.84);
+    --glass-popover: rgba(30, 32, 48, 0.6);
+}
+
+/* ガラス配管（Tahoe流・v3）:
+   ウィンドウ背面にネイティブガラス(NSGlassEffectView/NSVisualEffectView)。
+   Liquid Glass の主役は「コンテンツの上に浮かぶ操作部」であって、
+   常時読むレールやノート本文を素通しにしないこと。
+   - レール: ほぼ不透過の材質（ガラスの気配だけ）→ 文字が必ず読める
+   - 本文: 浮いた角丸カード。わずかに透ける(0.94)が読み物として成立する濃度
+   - メニュー/ポップオーバー/ダイアログ: コンテンツ上に浮かぶ本物のガラス
+     （ここはCSSのbackdrop-filterがアプリ内コンテンツを実際に屈折させる） */
+[data-theme^="liquid-glass"] body {
+    background: transparent;
+}
+
+[data-theme^="liquid-glass"] .sidebar {
+    background: var(--glass-rail-tint);
+    border-right: none;
+}
+
+[data-theme^="liquid-glass"] .right-sidebar {
+    background: var(--glass-rail-tint);
+    border-left: none;
+}
+
+[data-theme^="liquid-glass"] .sidebar-header,
+[data-theme^="liquid-glass"] .file-search {
+    border-bottom-color: transparent;
+}
+
+/* 本文 = 浮いたガラス上のカード。縁に上方光のスペキュラを一筋 */
+[data-theme^="liquid-glass"] .main-content {
+    background: var(--bg-primary);
+    margin: 10px;
+    margin-left: 2px;
+    border-radius: var(--radius-l);
+    overflow: hidden;
+    box-shadow:
+        inset 0 1px 0 var(--glass-specular),
+        inset 0 0 0 1px var(--glass-rim),
+        0 10px 30px rgba(0, 0, 0, 0.18);
+}
+
+/* レール上の入力・行は、ガラスに馴染む淡いピルにする */
+[data-theme^="liquid-glass"] #file-search-input {
+    background: color-mix(in srgb, var(--bg-primary) 55%, transparent);
+    border-color: var(--glass-rim);
+}
+
+/* 浮かぶ操作部 = 本物のLiquid Glass。
+   コンテンツの上に重なるので、backdrop-filterが実際に下の文字を屈折させる */
+[data-theme^="liquid-glass"] .context-menu,
+[data-theme^="liquid-glass"] .speed-menu,
+[data-theme^="liquid-glass"] .shortcuts-content,
+[data-theme^="liquid-glass"] .modal-dialog {
+    background: var(--glass-popover);
+    backdrop-filter: blur(24px) saturate(1.5);
+    -webkit-backdrop-filter: blur(24px) saturate(1.5);
+    border: none;
+    box-shadow:
+        inset 0 1px 0 var(--glass-specular),
+        inset 0 0 0 1px var(--glass-rim),
+        var(--shadow-2);
+}
+
+/* フルスクリーン系オーバーレイはガラスを敷かない（中身が主役） */
+[data-theme^="liquid-glass"] .graph-overlay,
+[data-theme^="liquid-glass"] .mermaid-fullscreen {
+    background: var(--bg-primary);
+}
+
 /* ========== GRAPH VIEW COSMIC THEME (DARK THEMES ONLY) ========== */
 :is(
     [data-theme="catppuccin"],
@@ -237,7 +359,8 @@
     [data-theme="solarized"],
     [data-theme="onedark"],
     [data-theme="gruvbox"],
-    [data-theme="tokyonight"]
+    [data-theme="tokyonight"],
+    [data-theme="liquid-glass-dark"]
 ) {
     --code-bg: #0d1117;
     --code-text: #c9d1d9;
@@ -267,10 +390,48 @@
     --graph-stars-opacity: 0.5;
 }
 
+/* ========== DESIGN TOKENS (theme-independent) ========== */
+:root {
+    /* 形: 角丸は3段だけ。これ以外の値を新設しない */
+    --radius-s: 5px;   /* 入力欄・小ボタン */
+    --radius-m: 8px;   /* カード・メニュー・ミニプレイヤー */
+    --radius-l: 12px;  /* オーバーレイ・ダイアログ */
+    /* 影: 2段だけ */
+    --shadow-1: 0 1px 3px rgba(0, 0, 0, 0.12);
+    --shadow-2: 0 8px 24px rgba(0, 0, 0, 0.24);
+    /* 動き: 全アニメはこの2つを参照する */
+    --duration: 0.18s;
+    --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+    /* フォーカスリングは accent 由来の1種のみ */
+    --focus-ring: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    :root {
+        --duration: 0s;
+    }
+}
+
 * {
     box-sizing: border-box;
     margin: 0;
     padding: 0;
+}
+
+/* ウィンドウが背面に回ったら、道具類は静かに沈む（中身のノートは沈めない） */
+body.window-inactive .sidebar,
+body.window-inactive .right-sidebar,
+body.window-inactive .toolbar,
+body.window-inactive .pane-header {
+    opacity: 0.72;
+    transition: opacity var(--duration) var(--ease);
+}
+
+.sidebar,
+.right-sidebar,
+.toolbar,
+.pane-header {
+    transition: opacity var(--duration) var(--ease);
 }
 
 body {
@@ -292,7 +453,7 @@ body {
     background: transparent;
     cursor: col-resize;
     flex-shrink: 0;
-    transition: background 0.2s;
+    transition: background var(--duration) var(--ease);
 }
 
 .resize-handle:hover,
@@ -337,7 +498,7 @@ body {
     color: var(--text-secondary);
     cursor: pointer;
     padding: 0.35rem;
-    border-radius: 4px;
+    border-radius: var(--radius-s);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -375,7 +536,7 @@ body {
     flex: 1;
     padding: 0.4rem 0.6rem;
     border: 1px solid var(--border);
-    border-radius: 4px;
+    border-radius: var(--radius-s);
     background: var(--bg-primary);
     color: var(--text-primary);
     font-size: 0.85rem;
@@ -384,7 +545,7 @@ body {
 #file-search-input:focus {
     outline: none;
     border-color: var(--accent);
-    box-shadow: 0 0 0 2px rgba(var(--accent), 0.1);
+    box-shadow: var(--focus-ring);
 }
 
 #file-search-input::placeholder {
@@ -398,7 +559,7 @@ body {
     cursor: pointer;
     padding: 0.2rem 0.4rem;
     font-size: 0.8rem;
-    border-radius: 4px;
+    border-radius: var(--radius-s);
 }
 
 .search-clear-btn:hover {
@@ -499,7 +660,7 @@ body {
     line-height: 1;
     font-size: 1rem;
     transform: rotate(0deg);
-    transition: transform 0.15s ease;
+    transition: transform var(--duration) var(--ease);
 }
 
 .preview-pane .frontmatter-summary-icon::after {
@@ -552,20 +713,24 @@ body {
 .file-item {
     padding: 0.4rem 0.6rem;
     cursor: pointer;
-    border-radius: 4px;
+    border-radius: var(--radius-s);
     font-size: 0.9rem;
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    transition: background var(--duration) var(--ease);
 }
 
 .file-item:hover {
-    background: var(--border);
+    background: color-mix(in srgb, var(--text-primary) 7%, transparent);
 }
 
+/* 選択中: 淡い塗り＋左端のアクセント線（macOSの作法）。
+   キーボード選択(.keyboard-selected)とは別表現を維持する */
 .file-item.active {
-    background: var(--accent);
-    color: var(--bg-primary);
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    color: var(--text-primary);
+    box-shadow: inset 3px 0 0 0 var(--accent);
 }
 
 /* Keyboard navigation selection - use magenta to differentiate from active file */
@@ -607,6 +772,19 @@ body {
 
 .folder-icon {
     flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    line-height: 0;
+    color: var(--text-muted);
+}
+
+.folder-icon svg {
+    width: 15px;
+    height: 15px;
+}
+
+.file-item.active .folder-icon {
+    color: var(--accent);
 }
 
 .file-name {
@@ -670,7 +848,7 @@ body {
     padding: 0.35rem;
     background: transparent;
     border: none;
-    border-radius: 4px;
+    border-radius: var(--radius-s);
     color: var(--text-secondary);
     cursor: pointer;
     display: inline-flex;
@@ -694,24 +872,27 @@ body {
     display: block;
 }
 
+/* ツールバーの道具は黙っている。hover時だけ気配が出る */
 .toolbar button {
     padding: 0.4rem 0.8rem;
-    background: var(--bg-tertiary);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    color: var(--text-primary);
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-s);
+    color: var(--text-secondary);
     cursor: pointer;
     font-size: 0.85rem;
+    transition: background var(--duration) var(--ease), color var(--duration) var(--ease);
     -webkit-app-region: no-drag;
 }
 
 .toolbar button:hover {
-    background: var(--border);
+    background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+    color: var(--text-primary);
 }
 
 .toolbar button.active {
-    background: var(--accent);
-    color: var(--bg-primary);
+    background: color-mix(in srgb, var(--accent) 15%, transparent);
+    color: var(--accent);
 }
 
 .toolbar-spacer {
@@ -727,7 +908,7 @@ body {
     min-width: 360px;
     padding: 0.25rem 0.35rem 0.25rem 0.55rem;
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: var(--radius-m);
     background: var(--bg-tertiary);
     color: var(--text-primary);
     -webkit-app-region: no-drag;
@@ -766,15 +947,15 @@ body {
     height: 1.9rem;
     padding: 0;
     border-radius: 50%;
-    border: 1px solid var(--border);
-    background: var(--bg-secondary);
+    border: none;
+    background: transparent;
     color: var(--text-primary);
     cursor: pointer;
     line-height: 0;
 }
 
 .toolbar .mini-player .mini-player-playpause:hover {
-    background: var(--border);
+    background: color-mix(in srgb, var(--text-primary) 8%, transparent);
 }
 
 .mini-player-time {
@@ -820,7 +1001,7 @@ body {
     border-radius: 50%;
     background: var(--accent);
     border: 2px solid var(--bg-tertiary);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+    box-shadow: var(--shadow-1);
     cursor: pointer;
 }
 
@@ -832,7 +1013,7 @@ body {
     flex: 0 0 auto;
     min-width: 1.8rem;
     padding: 0.25rem 0.45rem;
-    border-radius: 4px;
+    border-radius: var(--radius-s);
     background: transparent;
     border: none;
 }
@@ -851,10 +1032,10 @@ body {
 .toolbar .mini-player .speed-btn {
     min-width: 2.6rem;
     padding: 0.2rem 0.45rem;
-    border-radius: 4px;
-    border: 1px solid var(--border);
-    background: var(--bg-secondary);
-    color: var(--text-primary);
+    border-radius: var(--radius-s);
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
     font-size: 0.78rem;
     font-variant-numeric: tabular-nums;
     font-weight: 600;
@@ -862,7 +1043,8 @@ body {
 }
 
 .toolbar .mini-player .speed-btn:hover {
-    background: var(--border);
+    background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+    color: var(--text-primary);
 }
 
 .speed-menu {
@@ -877,9 +1059,9 @@ body {
     padding: 0.25rem;
     gap: 0.1rem;
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: var(--radius-m);
     background: var(--bg-secondary);
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+    box-shadow: var(--shadow-2);
 }
 
 .speed-menu[hidden] {
@@ -891,7 +1073,7 @@ body {
     min-width: 0;
     padding: 0.3rem 0.6rem;
     border: none;
-    border-radius: 4px;
+    border-radius: var(--radius-s);
     background: transparent;
     color: var(--text-primary);
     font-size: 0.82rem;
@@ -914,20 +1096,24 @@ body {
     flex: 0 0 auto;
     min-width: 3.2rem;
     padding: 0.2rem 0.5rem;
-    border-radius: 4px;
-    border: 1px solid var(--border);
-    background: var(--bg-secondary);
-    color: var(--text-primary);
+    border-radius: var(--radius-s);
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
     font-size: 0.78rem;
     font-weight: 700;
     white-space: nowrap;
     cursor: pointer;
 }
 
+.toolbar .mini-player .audio-loop-btn:hover {
+    background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+    color: var(--text-primary);
+}
+
 .toolbar .mini-player .audio-loop-btn[aria-pressed="true"] {
-    background: var(--accent);
-    border-color: var(--accent);
-    color: #fff;
+    background: color-mix(in srgb, var(--accent) 15%, transparent);
+    color: var(--accent);
 }
 
 /* Transcribe button */
@@ -935,10 +1121,10 @@ body {
     flex: 0 0 auto;
     min-width: 0;
     padding: 0.2rem 0.55rem;
-    border-radius: 4px;
-    border: 1px solid var(--border);
-    background: var(--bg-secondary);
-    color: var(--text-primary);
+    border-radius: var(--radius-s);
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
     font-size: 0.78rem;
     font-weight: 600;
     white-space: nowrap;
@@ -946,7 +1132,8 @@ body {
 }
 
 .toolbar .mini-player .transcribe-btn:hover {
-    background: var(--border);
+    background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+    color: var(--text-primary);
 }
 
 .toolbar .mini-player .transcribe-btn:disabled,
@@ -970,7 +1157,7 @@ body {
     flex: 0 0 auto;
     margin-left: auto;
     padding: 0.06rem 0.32rem;
-    border-radius: 4px;
+    border-radius: var(--radius-s);
     font-size: 0.68rem;
     font-weight: 700;
     line-height: 1.35;
@@ -1004,9 +1191,10 @@ body {
     overflow: hidden;
 }
 
+/* ペインの帯は背景に溶ける。タイトルは囁く程度に */
 .pane-header {
     padding: 8px 16px;
-    background: var(--bg-tertiary);
+    background: var(--bg-secondary);
     border-bottom: 1px solid var(--border);
     flex-shrink: 0;
 }
@@ -1014,13 +1202,37 @@ body {
 .pane-title {
     font-size: 14px;
     font-weight: 500;
-    color: var(--text-primary);
+    color: var(--text-secondary);
+}
+
+#editor-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* 保存の気配: 「保存しました」とは言わない。点がふっと現れて、すっと消える */
+.save-pulse {
+    flex-shrink: 0;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--success);
+    opacity: 0;
+    transform: scale(0.6);
+    transition: opacity 0.5s var(--ease), transform 0.5s var(--ease);
+}
+
+.save-pulse.visible {
+    opacity: 0.85;
+    transform: scale(1);
+    transition: opacity 0.15s var(--ease), transform 0.15s var(--ease);
 }
 
 /* Editable title (editor-title) */
 #editor-title {
     cursor: pointer;
-    transition: color 0.15s ease;
+    transition: color var(--duration) var(--ease);
     display: flex;
     align-items: center;
     gap: 4px;
@@ -1040,7 +1252,7 @@ body {
     color: var(--text-primary);
     background: var(--bg-primary);
     border: 1px solid var(--accent);
-    border-radius: 4px;
+    border-radius: var(--radius-s);
     padding: 2px 8px;
     outline: none;
     flex: 1;
@@ -1049,7 +1261,7 @@ body {
 }
 
 .title-edit-input:focus {
-    box-shadow: 0 0 0 2px var(--accent-alpha);
+    box-shadow: var(--focus-ring);
 }
 
 .title-edit-ext {
@@ -1065,12 +1277,12 @@ body {
     color: #fff;
     background: var(--accent);
     border: none;
-    border-radius: 4px;
+    border-radius: var(--radius-s);
     padding: 4px 12px;
     cursor: pointer;
     flex-shrink: 0;
     margin-left: 8px;
-    transition: background 0.15s ease;
+    transition: background var(--duration) var(--ease);
 }
 
 .title-edit-save:hover {
@@ -1128,9 +1340,12 @@ body {
     color: var(--accent);
 }
 
+/* 日本語本文がゆったり呼吸できる行間。約物の詰めはエンジン任せ(text-spacing-trim: normal) */
 .preview-pane p {
     margin: 0.5rem 0;
-    line-height: 1.6;
+    line-height: 1.85;
+    overflow-wrap: anywhere;
+    text-spacing-trim: normal;
 }
 
 .preview-pane ul, .preview-pane ol {
@@ -1140,13 +1355,15 @@ body {
 
 .preview-pane li {
     margin: 0.25rem 0;
+    line-height: 1.75;
+    overflow-wrap: anywhere;
 }
 
 .preview-pane code {
     background: var(--code-bg);
     color: var(--code-text);
     padding: 0.2rem 0.4rem;
-    border-radius: 4px;
+    border-radius: var(--radius-s);
     font-family: 'SF Mono', 'Fira Code', monospace;
     font-size: 0.9em;
 }
@@ -1154,7 +1371,7 @@ body {
 .preview-pane pre {
     background: var(--code-bg);
     padding: 1rem;
-    border-radius: 8px;
+    border-radius: var(--radius-m);
     overflow-x: auto;
     margin: 0.5rem 0;
 }
@@ -1226,7 +1443,7 @@ body {
 .preview-pane .frontmatter {
     margin: 0.5rem 0 1rem;
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: var(--radius-m);
     background: color-mix(in srgb, var(--bg-tertiary) 92%, transparent);
     padding: 0.5rem;
 }
@@ -1332,7 +1549,7 @@ body {
     padding: 0.75rem;
     background: var(--bg-secondary);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: var(--radius-m);
     color: var(--text-primary);
     font-size: 0.95rem;
     resize: none;
@@ -1343,7 +1560,7 @@ body {
     padding: 0.75rem 1.5rem;
     background: var(--accent);
     border: none;
-    border-radius: 8px;
+    border-radius: var(--radius-m);
     color: var(--bg-primary);
     cursor: pointer;
     font-weight: 600;
@@ -1364,7 +1581,7 @@ body {
     padding: 1rem;
     background: var(--bg-secondary);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: var(--radius-m);
 }
 
 .timeline-time {
@@ -1428,7 +1645,7 @@ body {
 .outline-item {
     padding: 0.4rem 0.5rem;
     cursor: pointer;
-    border-radius: 4px;
+    border-radius: var(--radius-s);
     color: var(--text-primary);
     font-size: 0.85rem;
     white-space: nowrap;
@@ -1470,7 +1687,7 @@ body {
 
 .outgoing-link-item {
     padding: 0.5rem 0.75rem;
-    border-radius: 6px;
+    border-radius: var(--radius-m);
     margin-bottom: 0.5rem;
     display: flex;
     align-items: center;
@@ -1530,7 +1747,7 @@ body {
 .backlink-item {
     padding: 0.75rem;
     background: var(--bg-tertiary);
-    border-radius: 6px;
+    border-radius: var(--radius-m);
     margin-bottom: 0.5rem;
     cursor: pointer;
 }
@@ -1554,23 +1771,31 @@ body {
     white-space: nowrap;
 }
 
-/* Scrollbar */
+/* Scrollbar: 普段は黙っていて、撫でたときだけ細く現れる */
 ::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+    width: 10px;
+    height: 10px;
 }
 
 ::-webkit-scrollbar-track {
-    background: var(--bg-tertiary);
+    background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-    background: var(--border);
-    border-radius: 4px;
+    background: transparent;
+    border-radius: 5px;
+    border: 3px solid transparent;
+    background-clip: padding-box;
+}
+
+*:hover::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--text-muted) 45%, transparent);
+    background-clip: padding-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: var(--text-muted);
+    background: color-mix(in srgb, var(--text-muted) 70%, transparent);
+    background-clip: padding-box;
 }
 
 /* Wiki Link Style */
@@ -1594,7 +1819,7 @@ body {
     margin: 16px 0;
     background: var(--bg-tertiary);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: var(--radius-m);
     padding: 16px;
     overflow: hidden;
     cursor: pointer;
@@ -1622,7 +1847,7 @@ body {
     font-size: 0.75rem;
     color: var(--text-muted);
     opacity: 0;
-    transition: opacity 0.2s;
+    transition: opacity var(--duration) var(--ease);
 }
 
 .mermaid-container:hover::after {
@@ -1633,7 +1858,7 @@ body {
 .mermaid-error-inline {
     background: #fff5f5;
     border: 1px solid #fed7d7;
-    border-radius: 6px;
+    border-radius: var(--radius-m);
     padding: 12px;
     margin: 8px 0;
 }
@@ -1650,7 +1875,7 @@ body {
     padding: 8px 12px;
     background: #fff;
     border: 1px solid #feb2b2;
-    border-radius: 4px;
+    border-radius: var(--radius-s);
     font-family: monospace;
     font-size: 0.85rem;
     color: #742a2a;
@@ -1742,7 +1967,7 @@ body {
     padding: 6px 12px;
     background: var(--bg-tertiary);
     border: 1px solid var(--border);
-    border-radius: 4px;
+    border-radius: var(--radius-s);
     color: var(--text-primary);
     cursor: pointer;
     font-size: 0.85rem;
@@ -1785,9 +2010,9 @@ body {
     height: 150px;
     background: var(--bg-secondary);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: var(--radius-m);
     overflow: hidden;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    box-shadow: var(--shadow-2);
 }
 
 .mermaid-minimap-content {
@@ -1822,10 +2047,10 @@ body {
     background: var(--error);
     color: white;
     padding: 12px 24px;
-    border-radius: 8px;
+    border-radius: var(--radius-m);
     z-index: 1001;
     opacity: 0;
-    transition: opacity 0.3s;
+    transition: opacity var(--duration) var(--ease);
     pointer-events: none;
 }
 
@@ -1848,7 +2073,10 @@ body {
 }
 
 .new-note-icon {
-    font-size: 1.2rem;
+    display: inline-flex;
+    align-items: center;
+    line-height: 0;
+    color: var(--text-secondary);
 }
 
 .new-note-form input {
@@ -1856,7 +2084,7 @@ body {
     padding: 0.6rem 0.8rem;
     background: var(--bg-primary);
     border: 2px solid var(--accent);
-    border-radius: 6px;
+    border-radius: var(--radius-m);
     color: var(--text-primary);
     font-size: 0.95rem;
     outline: none;
@@ -1874,7 +2102,7 @@ body {
 .new-note-btn {
     padding: 0.6rem 1rem;
     border: none;
-    border-radius: 6px;
+    border-radius: var(--radius-m);
     font-size: 0.9rem;
     cursor: pointer;
     font-weight: 500;
@@ -1915,8 +2143,8 @@ body {
     min-width: 150px;
     background: var(--bg-primary);
     border: 1px solid var(--border);
-    border-radius: 6px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    border-radius: var(--radius-m);
+    box-shadow: var(--shadow-2);
     padding: 4px 0;
 }
 
@@ -2014,10 +2242,10 @@ body {
     border: 1px solid var(--graph-btn-border, var(--error));
     color: var(--error);
     padding: 6px 14px;
-    border-radius: 6px;
+    border-radius: var(--radius-m);
     cursor: pointer;
     font-size: 13px;
-    transition: all 0.2s;
+    transition: background var(--duration) var(--ease), color var(--duration) var(--ease);
 }
 
 .graph-header button:hover {
@@ -2073,8 +2301,8 @@ body {
     width: 100%;
     height: 100%;
     object-fit: contain; /* Maintain aspect ratio, fill container */
-    border-radius: 4px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    border-radius: var(--radius-s);
+    box-shadow: var(--shadow-1);
 }
 
 /* ========== PDF VIEWER ========== */
@@ -2105,19 +2333,19 @@ body {
 
 .pdf-controls button {
     padding: 0.25rem 0.5rem;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    color: var(--text-primary);
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-s);
+    color: var(--text-secondary);
     cursor: pointer;
     font-size: 0.85rem;
     min-width: 2rem;
-    transition: background 0.15s, border-color 0.15s;
+    transition: background var(--duration) var(--ease), color var(--duration) var(--ease);
 }
 
 .pdf-controls button:hover {
-    background: var(--bg-primary);
-    border-color: var(--accent);
+    background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+    color: var(--text-primary);
 }
 
 .pdf-controls button:active {
@@ -2164,7 +2392,7 @@ body {
 }
 
 .pdf-page-canvas {
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    box-shadow: var(--shadow-1);
     background: white;
     margin-bottom: 1rem;
     display: block;
@@ -2183,18 +2411,18 @@ body {
 
 .image-controls button {
     padding: 0.25rem 0.5rem;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    color: var(--text-primary);
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-s);
+    color: var(--text-secondary);
     cursor: pointer;
     font-size: 0.85rem;
-    transition: background 0.15s, border-color 0.15s;
+    transition: background var(--duration) var(--ease), color var(--duration) var(--ease);
 }
 
 .image-controls button:hover {
-    background: var(--bg-primary);
-    border-color: var(--accent);
+    background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+    color: var(--text-primary);
 }
 
 .image-viewer .pane-header {
@@ -2237,11 +2465,11 @@ body {
     padding: 0.4rem 0.75rem;
     background: rgba(255, 255, 255, 0.1);
     border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 4px;
+    border-radius: var(--radius-s);
     color: #fff;
     cursor: pointer;
     font-size: 0.9rem;
-    transition: background 0.15s;
+    transition: background var(--duration) var(--ease);
 }
 
 .image-fs-header button:hover {
@@ -2301,12 +2529,12 @@ body {
     padding: 0.4rem 0.6rem;
     background: rgba(255, 255, 255, 0.1);
     border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 4px;
+    border-radius: var(--radius-s);
     color: #fff;
     cursor: pointer;
     font-size: 0.85rem;
     min-width: 2rem;
-    transition: background 0.15s;
+    transition: background var(--duration) var(--ease);
 }
 
 .pdf-fs-controls button:hover {
@@ -2331,7 +2559,7 @@ body {
 }
 
 .pdf-fs-container .pdf-page-canvas {
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+    box-shadow: var(--shadow-2);
 }
 
 /* ========== HTML EDITOR ========== */
@@ -2379,11 +2607,17 @@ body {
     background: var(--bg-primary);
 }
 
-/* ========== FILE TYPE ICONS ========== */
-.file-icon-image::before { content: '🖼️'; }
-.file-icon-pdf::before { content: '📕'; }
-.file-icon-html::before { content: '🌐'; }
-.file-icon-other::before { content: '📎'; }
+/* ========== CONTEXT MENU / FORM ICONS ========== */
+.ctx-icon {
+    display: inline-flex;
+    align-items: center;
+    line-height: 0;
+    color: var(--text-muted);
+}
+
+.context-menu-item.danger .ctx-icon {
+    color: inherit;
+}
 
 /* ========== MODAL DIALOG ========== */
 .modal-overlay {
@@ -2402,11 +2636,11 @@ body {
 
 .modal-dialog {
     background: var(--bg-secondary);
-    border-radius: 12px;
+    border-radius: var(--radius-l);
     padding: 32px;
     max-width: 400px;
     width: 90%;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+    box-shadow: var(--shadow-2);
     text-align: center;
 }
 
@@ -2433,11 +2667,11 @@ body {
     color: white;
     border: none;
     padding: 12px 24px;
-    border-radius: 8px;
+    border-radius: var(--radius-m);
     font-size: 1rem;
     font-weight: 500;
     cursor: pointer;
-    transition: background 0.2s, transform 0.1s;
+    transition: background var(--duration) var(--ease), transform var(--duration) var(--ease);
 }
 
 .primary-btn:hover {
@@ -2453,11 +2687,11 @@ body {
 .danger-btn {
     border: none;
     padding: 12px 24px;
-    border-radius: 8px;
+    border-radius: var(--radius-m);
     font-size: 1rem;
     font-weight: 500;
     cursor: pointer;
-    transition: background 0.2s, transform 0.1s;
+    transition: background var(--duration) var(--ease), transform var(--duration) var(--ease);
 }
 
 .secondary-btn {
@@ -2500,7 +2734,7 @@ body {
     z-index: 10000;
     opacity: 0;
     visibility: hidden;
-    transition: opacity 0.2s ease, visibility 0.2s ease;
+    transition: opacity var(--duration) var(--ease), visibility var(--duration) var(--ease);
     backdrop-filter: blur(4px);
 }
 
@@ -2511,15 +2745,15 @@ body {
 
 .shortcuts-content {
     background: var(--bg-primary);
-    border-radius: 16px;
+    border-radius: var(--radius-l);
     max-width: 600px;
     width: 90%;
     max-height: 80vh;
     overflow: hidden;
-    box-shadow: 0 25px 80px rgba(0, 0, 0, 0.4);
+    box-shadow: var(--shadow-2);
     display: flex;
     flex-direction: column;
-    animation: shortcuts-slide-in 0.2s ease;
+    animation: shortcuts-slide-in var(--duration) var(--ease);
 }
 
 @keyframes shortcuts-slide-in {
@@ -2555,8 +2789,8 @@ body {
     cursor: pointer;
     color: var(--text-secondary);
     padding: 4px 8px;
-    border-radius: 6px;
-    transition: background 0.15s, color 0.15s;
+    border-radius: var(--radius-m);
+    transition: background var(--duration) var(--ease), color var(--duration) var(--ease);
 }
 
 .shortcuts-close:hover {
@@ -2614,7 +2848,7 @@ body {
 .shortcut-keys kbd {
     background: var(--bg-tertiary);
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: var(--radius-m);
     padding: 4px 8px;
     font-family: inherit;
     font-size: 0.8rem;
@@ -2641,7 +2875,7 @@ body {
 .shortcuts-footer kbd {
     background: var(--bg-tertiary);
     border: 1px solid var(--border);
-    border-radius: 4px;
+    border-radius: var(--radius-s);
     padding: 2px 6px;
     font-family: inherit;
     font-size: 0.75rem;
