@@ -1,6 +1,15 @@
 export type ItemKind = "file" | "folder";
 
 const INVALID_NAME_CHARS = /[<>:"/\\|?*]/;
+const AUDIO_EXTENSIONS = new Set(["mp3", "m4a", "wav", "ogg", "flac", "aac", "opus"]);
+
+export type SortableFileInfo = {
+  name: string;
+  path: string;
+  isDir: boolean;
+  fileType?: string;
+  children?: SortableFileInfo[] | null;
+};
 
 export function validateItemName(name: string): string {
   const trimmed = name.trim();
@@ -123,4 +132,55 @@ export function hasExternalFileDrop(dataTransfer: DataTransfer | null): boolean 
     return true;
   }
   return dataTransfer.files.length > 0;
+}
+
+export function compareFileInfoForSort(
+  a: SortableFileInfo,
+  b: SortableFileInfo,
+  filesAscending: boolean
+): number {
+  if (a.isDir !== b.isDir) {
+    return a.isDir ? -1 : 1;
+  }
+  if (a.isDir) {
+    return a.name.localeCompare(b.name);
+  }
+  return filesAscending ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name);
+}
+
+export function hasAudioMajority(files: SortableFileInfo[]): boolean {
+  let audioCount = 0;
+  let otherFileCount = 0;
+
+  for (const file of files) {
+    if (file.isDir) {
+      continue;
+    }
+    if (isAudioFile(file)) {
+      audioCount += 1;
+    } else {
+      otherFileCount += 1;
+    }
+  }
+
+  return audioCount > otherFileCount;
+}
+
+export function normalizeAndSortFileTree<T extends SortableFileInfo>(files: T[]): T[] {
+  const filesAscending = hasAudioMajority(files);
+
+  return files
+    .map((file) => ({
+      ...file,
+      children: file.children?.length ? normalizeAndSortFileTree(file.children) : [],
+    }) as T)
+    .sort((a, b) => compareFileInfoForSort(a, b, filesAscending));
+}
+
+function isAudioFile(file: SortableFileInfo): boolean {
+  if ((file.fileType || "").toLowerCase() === "audio") {
+    return true;
+  }
+  const ext = file.path.split(".").pop()?.toLowerCase() || "";
+  return AUDIO_EXTENSIONS.has(ext);
 }

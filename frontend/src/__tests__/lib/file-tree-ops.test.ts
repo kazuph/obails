@@ -8,6 +8,8 @@ import {
   getFileExtension,
   getParentPath,
   hasExternalFileDrop,
+  normalizeAndSortFileTree,
+  type SortableFileInfo,
   parseFileUriList,
   shouldIgnoreTreeClick,
   validateItemName,
@@ -57,4 +59,71 @@ describe("file-tree-ops", () => {
     expect(hasExternalFileDrop(dataTransfer)).toBe(true);
     expect(extractExternalDropPaths(dataTransfer)).toEqual(["/tmp/import.md"]);
   });
+
+  it("keeps descending file order when audio is not the majority", () => {
+    expect(sortNames([
+      file("a.md", "markdown"),
+      file("c.md", "markdown"),
+      file("b.wav", "audio"),
+    ])).toEqual(["c.md", "b.wav", "a.md"]);
+  });
+
+  it("uses ascending file order when audio files are the majority", () => {
+    expect(sortNames([
+      file("track-03.wav", "audio"),
+      file("track-01.wav", "audio"),
+      file("notes.md", "markdown"),
+      file("track-02.wav", "audio"),
+    ])).toEqual(["notes.md", "track-01.wav", "track-02.wav", "track-03.wav"]);
+  });
+
+  it("keeps folders first and sorted ascending even when files are audio-heavy", () => {
+    expect(sortNames([
+      file("track-02.wav", "audio"),
+      folder("z-folder"),
+      file("track-01.wav", "audio"),
+      folder("a-folder"),
+    ])).toEqual(["a-folder", "z-folder", "track-01.wav", "track-02.wav"]);
+  });
+
+  it("sorts each folder by its own audio majority", () => {
+    const sorted = normalizeAndSortFileTree([
+      folder("albums", [
+        file("03.wav", "audio", "albums/03.wav"),
+        file("01.wav", "audio", "albums/01.wav"),
+        file("memo.md", "markdown", "albums/memo.md"),
+      ]),
+      folder("notes", [
+        file("a.wav", "audio", "notes/a.wav"),
+        file("c.md", "markdown", "notes/c.md"),
+        file("b.md", "markdown", "notes/b.md"),
+      ]),
+    ]);
+
+    expect(sorted[0].children?.map((child) => child.name)).toEqual(["01.wav", "03.wav", "memo.md"]);
+    expect(sorted[1].children?.map((child) => child.name)).toEqual(["c.md", "b.md", "a.wav"]);
+  });
 });
+
+function sortNames(files: SortableFileInfo[]): string[] {
+  return normalizeAndSortFileTree(files).map((file) => file.name);
+}
+
+function file(name: string, fileType: string, path = name): SortableFileInfo {
+  return {
+    name,
+    path,
+    isDir: false,
+    fileType,
+    children: null,
+  };
+}
+
+function folder(name: string, children: SortableFileInfo[] = []): SortableFileInfo {
+  return {
+    name,
+    path: name,
+    isDir: true,
+    children,
+  };
+}

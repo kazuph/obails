@@ -121,6 +121,7 @@ type MockLastOpenedFile = { path: string; fileType: string } | null;
 
 type MockBindingOptions = {
   initialLastOpenedFile?: MockLastOpenedFile;
+  fileInfos?: any[];
 };
 
 /**
@@ -128,7 +129,7 @@ type MockBindingOptions = {
  */
 export async function setupMockBindings(page: Page, options: MockBindingOptions = {}): Promise<void> {
   const files = loadTestFiles();
-  const fileInfos = generateFileInfos();
+  const fileInfos = options.fileInfos ?? generateFileInfos();
   let lastOpenedFile: MockLastOpenedFile = options.initialLastOpenedFile ?? null;
   const readBinaryCalls: string[] = [];
 

@@ -39,11 +39,20 @@ import {
   clearCache,
 } from "./lib/graph-cache";
 import {
+  getNextAudioPath,
+  loadAudioLoopMode,
+  loadDoneAudioPaths,
+  storeAudioLoopMode,
+  storeDoneAudioPaths,
+  type AudioLoopMode,
+} from "./lib/audio-playback";
+import {
   buildChildPath,
   buildRenamePath,
   extractExternalDropPaths,
   getDisplayName,
   hasExternalFileDrop,
+  normalizeAndSortFileTree,
   shouldIgnoreTreeClick,
   type ItemKind,
 } from "./lib/file-tree-ops";
@@ -77,6 +86,9 @@ function isModKey(e: KeyboardEvent): boolean {
 let currentNote: Note | null = null;
 let currentFilePath: string | null = null;  // Tracks the open main-pane file (md, image, pdf, html)
 let currentAudioPath: string | null = null;
+let latestFileTree: FileInfo[] = [];
+let audioLoopMode: AudioLoopMode = loadAudioLoopMode(window.localStorage);
+let doneAudioPaths: Set<string> = loadDoneAudioPaths(window.localStorage);
 let appThemeFromConfig: string | null = null;
 let showTimeline = false;
 let showGraph = false;
@@ -134,6 +146,7 @@ const miniPlayerDuration = document.getElementById("mini-player-duration") as HT
 const miniPlayerSeek = document.getElementById("mini-player-seek") as HTMLInputElement;
 const speedBtn = document.getElementById("speed-btn") as HTMLButtonElement;
 const speedMenu = document.getElementById("speed-menu") as HTMLElement;
+const audioLoopBtn = document.getElementById("audio-loop-btn") as HTMLButtonElement;
 const transcribeBtn = document.getElementById("transcribe-btn") as HTMLButtonElement;
 let currentPlaybackSpeed = loadStoredSpeed(window.localStorage);
 
@@ -274,25 +287,6 @@ function startFileTreeWatcher() {
     }, FILE_TREE_WATCH_INTERVAL_MS);
 }
 
-function compareFileInfoForSort(a: FileInfo, b: FileInfo): number {
-    if (a.isDir !== b.isDir) {
-        return a.isDir ? -1 : 1;
-    }
-    if (a.isDir) {
-        return a.name.localeCompare(b.name);
-    }
-    return b.name.localeCompare(a.name);
-}
-
-function normalizeAndSortFileTree(files: FileInfo[]): FileInfo[] {
-    return files
-        .map((file) => ({
-            ...file,
-            children: file.children?.length ? normalizeAndSortFileTree(file.children) : [],
-        }))
-        .sort(compareFileInfoForSort);
-}
-
 function buildFileTreeSignature(files: FileInfo[]): string {
     const parts: string[] = [];
 
@@ -323,12 +317,14 @@ type FileTreeSnapshotOptions = {
 
 function applyFileTreeSnapshot(files: FileInfo[], options: FileTreeSnapshotOptions = {}) {
     const expandedFolders = getExpandedFolderPaths();
+    latestFileTree = files;
     fileTreeSignature = buildFileTreeSignature(files);
     renderFileTree(files);
     restoreExpandedFolders(expandedFolders);
     if (options.revealActiveFile !== false) {
         restoreActiveFileTreeSelection();
     }
+    syncAudioPlaybackBadges();
 }
 
 function getExpandedFolderPaths(): Set<string> {
@@ -413,6 +409,8 @@ function setupEventListeners() {
     document.getElementById("refresh-btn")!.addEventListener("click", refresh);
     document.getElementById("timeline-submit")!.addEventListener("click", submitTimeline);
     miniPlayerClose.addEventListener("click", stopAudioPlayback);
+    audioLoopBtn.addEventListener("click", toggleAudioLoopMode);
+    syncAudioLoopButton();
 
     // 倍速メニュー
     speedBtn.textContent = formatSpeedLabel(currentPlaybackSpeed);
@@ -1932,6 +1930,20 @@ function toggleSpeedMenu() {
     }
 }
 
+function toggleAudioLoopMode() {
+    audioLoopMode = audioLoopMode === "loop" ? "one" : "loop";
+    storeAudioLoopMode(window.localStorage, audioLoopMode);
+    syncAudioLoopButton();
+}
+
+function syncAudioLoopButton() {
+    const isOneLoop = audioLoopMode === "one";
+    audioLoopBtn.textContent = isOneLoop ? "1Loop" : "Loop";
+    audioLoopBtn.setAttribute("aria-pressed", isOneLoop ? "true" : "false");
+    audioLoopBtn.title = isOneLoop ? "Repeat current audio" : "Loop through this folder";
+    audioLoopBtn.setAttribute("aria-label", audioLoopBtn.title);
+}
+
 async function openAudio(path: string): Promise<void> {
     try {
         currentAudioPath = path;
@@ -1942,9 +1954,12 @@ async function openAudio(path: string): Promise<void> {
         miniPlayer.style.display = "flex";
         // 新しいソースを読み込むと playbackRate が 1 にリセットされるため、選択中の速度を再適用
         applyPlaybackSpeed(currentPlaybackSpeed);
-        await miniAudioPlayer.play().catch(() => undefined);
 
         updateFileTreeSelection(path);
+        syncAudioPlaybackBadges();
+        void miniAudioPlayer.play()
+            .catch(() => undefined)
+            .then(syncAudioPlaybackBadges);
         void refreshTranscribeButton(path);
     } catch (err) {
         console.error("Failed to open audio:", err);
@@ -2015,7 +2030,9 @@ function setupCustomAudioControls() {
 
     miniAudioPlayer.addEventListener("play", syncPlayPauseIcon);
     miniAudioPlayer.addEventListener("pause", syncPlayPauseIcon);
-    miniAudioPlayer.addEventListener("ended", syncPlayPauseIcon);
+    miniAudioPlayer.addEventListener("play", syncAudioPlaybackBadges);
+    miniAudioPlayer.addEventListener("pause", syncAudioPlaybackBadges);
+    miniAudioPlayer.addEventListener("ended", () => void handleAudioEnded());
 
     miniAudioPlayer.addEventListener("durationchange", updatePlayerDuration);
     miniAudioPlayer.addEventListener("timeupdate", () => {
@@ -2036,6 +2053,57 @@ function setupCustomAudioControls() {
         }
         isSeeking = false;
         updatePlayerProgress();
+    });
+}
+
+async function handleAudioEnded(): Promise<void> {
+    const endedPath = currentAudioPath;
+    if (!endedPath) {
+        syncPlayPauseIcon();
+        syncAudioPlaybackBadges();
+        return;
+    }
+
+    markAudioDone(endedPath);
+    syncPlayPauseIcon();
+
+    const nextPath = getNextAudioPath(latestFileTree, endedPath, audioLoopMode);
+    if (!nextPath) {
+        syncAudioPlaybackBadges();
+        return;
+    }
+
+    await openAudio(nextPath);
+}
+
+function markAudioDone(path: string) {
+    doneAudioPaths.add(path);
+    storeDoneAudioPaths(window.localStorage, doneAudioPaths);
+}
+
+function syncAudioPlaybackBadges() {
+    document.querySelectorAll<HTMLElement>(".file-item.file").forEach((item) => {
+        const path = item.dataset.path || "";
+        const badge = item.querySelector<HTMLElement>("[data-playback-badge]");
+        if (!badge) {
+            return;
+        }
+
+        const isPlaying = path === currentAudioPath && !miniAudioPlayer.paused && !miniAudioPlayer.ended;
+        const isDone = doneAudioPaths.has(path);
+        badge.classList.toggle("is-playing", isPlaying);
+        badge.classList.toggle("is-done", !isPlaying && isDone);
+
+        if (isPlaying) {
+            badge.textContent = "再生中";
+            badge.hidden = false;
+        } else if (isDone) {
+            badge.textContent = "済み";
+            badge.hidden = false;
+        } else {
+            badge.textContent = "";
+            badge.hidden = true;
+        }
     });
 }
 
@@ -2075,6 +2143,7 @@ function updateSeekFill() {
 }
 
 function stopAudioPlayback() {
+    const previousAudioPath = currentAudioPath;
     miniAudioPlayer.pause();
     miniAudioPlayer.removeAttribute("src");
     miniAudioPlayer.load();
@@ -2088,6 +2157,9 @@ function stopAudioPlayback() {
     miniPlayerDuration.textContent = "0:00";
     updateSeekFill();
     syncPlayPauseIcon();
+    if (previousAudioPath) {
+        syncAudioPlaybackBadges();
+    }
 }
 
 // Open image file
@@ -2687,7 +2759,10 @@ function createFileElement(file: FileInfo): HTMLElement {
     }
 
     const icon = getFileIcon(file);
-    el.innerHTML = `<span class="folder-icon">${icon}</span><span class="file-name">${file.name}</span>`;
+    const badgeHTML = !file.isDir && resolveFileType(file.fileType || "", file.path) === "audio"
+        ? '<span class="file-playback-badge" data-playback-badge hidden></span>'
+        : "";
+    el.innerHTML = `<span class="folder-icon">${icon}</span><span class="file-name">${file.name}</span>${badgeHTML}`;
 
     // Make files draggable (not folders for now)
     if (!file.isDir) {

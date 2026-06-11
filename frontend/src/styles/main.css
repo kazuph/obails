@@ -609,6 +609,13 @@ body {
     flex-shrink: 0;
 }
 
+.file-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .folder-children {
     padding-left: 1rem;
     margin-left: 0.5rem;
@@ -737,7 +744,7 @@ body {
 
 .mini-player-title {
     min-width: 0;
-    max-width: 10rem;
+    max-width: 8rem;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -903,6 +910,26 @@ body {
     font-weight: 600;
 }
 
+.toolbar .mini-player .audio-loop-btn {
+    flex: 0 0 auto;
+    min-width: 3.2rem;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    font-size: 0.78rem;
+    font-weight: 700;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.toolbar .mini-player .audio-loop-btn[aria-pressed="true"] {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+}
+
 /* Transcribe button */
 .toolbar .mini-player .transcribe-btn {
     flex: 0 0 auto;
@@ -937,6 +964,29 @@ body {
     .mini-player-title {
         max-width: 5rem;
     }
+}
+
+.file-playback-badge {
+    flex: 0 0 auto;
+    margin-left: auto;
+    padding: 0.06rem 0.32rem;
+    border-radius: 4px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    line-height: 1.35;
+    color: var(--text-secondary);
+    background: var(--bg-tertiary);
+}
+
+.file-playback-badge.is-playing {
+    color: #fff;
+    background: var(--accent);
+}
+
+.file-playback-badge.is-done {
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+    background: transparent;
 }
 
 /* Editor Container */

@@ -100,6 +100,42 @@ test.describe('Obails App', () => {
     await expect(page.locator('.file-tree')).toBeVisible();
   });
 
+  test('should show audio-majority folder files in ascending order', async ({ page }) => {
+    await setupMockBindings(page, {
+      fileInfos: [
+        {
+          name: 'recordings',
+          path: 'recordings',
+          isDir: true,
+          children: [
+            { name: '03.wav', path: 'recordings/03.wav', isDir: false, fileType: 'audio', children: null },
+            { name: '01.wav', path: 'recordings/01.wav', isDir: false, fileType: 'audio', children: null },
+            { name: 'memo.md', path: 'recordings/memo.md', isDir: false, fileType: 'markdown', children: null },
+            { name: '02.wav', path: 'recordings/02.wav', isDir: false, fileType: 'audio', children: null },
+          ],
+        },
+      ],
+    });
+
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+
+    await page.locator('.file-item.folder[data-path="recordings"]').click();
+
+    await expect(page.locator('.file-item.file[data-path="recordings/01.wav"]')).toBeVisible();
+    await expect(page.locator('.file-item.file[data-path="recordings/memo.md"]')).toBeVisible();
+    await expect(page.locator('.file-item.file[data-path^="recordings/"] .file-name')).toHaveText([
+      '01.wav',
+      '02.wav',
+      '03.wav',
+      'memo.md',
+    ]);
+
+    if (process.env.OBAILS_EVIDENCE_SCREENSHOT) {
+      await page.screenshot({ path: process.env.OBAILS_EVIDENCE_SCREENSHOT, fullPage: true });
+    }
+  });
+
   test('should play audio in the mini player without replacing the current note', async ({ page }) => {
     await setupMockBindings(page);
     await page.goto('/');
@@ -226,6 +262,50 @@ test.describe('Obails App', () => {
     await page.locator('.file-item.file[data-path="audio/test-tone.wav"]').click();
     await expect(page.locator('#speed-btn')).toHaveText('2×');
     await expect.poll(() => audio.evaluate((el: HTMLMediaElement) => el.playbackRate)).toBe(2);
+  });
+
+  test('should auto-play the next folder audio and support one-loop mode with playback badges', async ({ page }) => {
+    await setupMockBindings(page, {
+      fileInfos: [
+        {
+          name: 'audio',
+          path: 'audio',
+          isDir: true,
+          children: [
+            { name: 'long-tone.wav', path: 'audio/long-tone.wav', isDir: false, fileType: 'audio', children: null },
+            { name: 'test-tone.wav', path: 'audio/test-tone.wav', isDir: false, fileType: 'audio', children: null },
+          ],
+        },
+      ],
+    });
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+
+    await page.locator('.file-item.folder[data-path="audio"]').click();
+    await page.locator('.file-item.file[data-path="audio/long-tone.wav"]').click();
+    await expect(page.locator('#mini-player-title')).toHaveText('long-tone.wav');
+    await expect(page.locator('.file-item.file[data-path="audio/long-tone.wav"] [data-playback-badge]')).toHaveText('再生中');
+    await expect(page.locator('#audio-loop-btn')).toHaveText('Loop');
+
+    await page.locator('#mini-audio-player').evaluate((el) => {
+      el.dispatchEvent(new Event('ended'));
+    });
+
+    await expect(page.locator('#mini-player-title')).toHaveText('test-tone.wav');
+    await expect(page.locator('.file-item.file[data-path="audio/long-tone.wav"] [data-playback-badge]')).toHaveText('済み');
+
+    await page.locator('#audio-loop-btn').click();
+    await expect(page.locator('#audio-loop-btn')).toHaveText('1Loop');
+    await page.locator('#mini-audio-player').evaluate((el) => {
+      el.dispatchEvent(new Event('ended'));
+    });
+
+    await expect(page.locator('#mini-player-title')).toHaveText('test-tone.wav');
+    await expect(page.locator('#mini-audio-player')).toHaveAttribute('src', /\/media\/audio\?path=audio%2Ftest-tone\.wav$/);
+
+    if (process.env.OBAILS_AUDIO_EVIDENCE_SCREENSHOT) {
+      await page.screenshot({ path: process.env.OBAILS_AUDIO_EVIDENCE_SCREENSHOT, fullPage: true });
+    }
   });
 
   test('should hide the right sidebar for non-markdown files and show it for markdown', async ({ page }) => {
