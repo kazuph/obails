@@ -390,6 +390,11 @@ test.describe('Visual Regression - Feature Tests', () => {
   });
 
   test('Editor resize handles', async ({ page }) => {
+    // ソースエディタを表示してから操作する
+    const sourceContainer = page.locator('.editor-container');
+    if (await sourceContainer.evaluate((el) => el.classList.contains('source-hidden'))) {
+      await page.locator('#source-toggle-btn').click();
+    }
     // エディタを入力状態に
     const editor = page.locator('#editor');
     await editor.fill('# Resize Demo\n\nDrag the resize handles to adjust pane sizes.');

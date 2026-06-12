@@ -245,6 +245,7 @@ function setupToolbarIcons() {
     setButtonIcon(document.getElementById("timeline-btn")!, "timeline");
     setButtonIcon(document.getElementById("graph-btn")!, "graph");
     setButtonIcon(document.getElementById("refresh-btn")!, "refresh");
+    setButtonIcon(document.getElementById("source-toggle-btn")!, "code");
     setButtonIcon(document.getElementById("collapse-all-folders-btn")!, "folder-closed");
     setButtonIcon(document.getElementById("expand-all-folders-btn")!, "folder-open");
     setButtonIcon(document.getElementById("mini-player-close")!, "close");
@@ -421,6 +422,19 @@ async function prefetchGraphData() {
     }
 }
 
+// Source editor visibility (default: preview only, < > toggles the source pane)
+function toggleSourceEditor() {
+    const hidden = editorContainer.classList.toggle("source-hidden");
+    const btn = document.getElementById("source-toggle-btn");
+    if (btn) {
+        btn.setAttribute("aria-pressed", hidden ? "false" : "true");
+        btn.classList.toggle("active", !hidden);
+    }
+    if (!hidden) {
+        editor.focus();
+    }
+}
+
 // Event Listeners
 function setupEventListeners() {
     document.getElementById("settings-btn")!.addEventListener("click", openSettings);
@@ -429,6 +443,7 @@ function setupEventListeners() {
     document.getElementById("timeline-btn")!.addEventListener("click", toggleTimeline);
     document.getElementById("graph-btn")!.addEventListener("click", toggleGraphView);
     document.getElementById("refresh-btn")!.addEventListener("click", refresh);
+    document.getElementById("source-toggle-btn")!.addEventListener("click", toggleSourceEditor);
     document.getElementById("timeline-submit")!.addEventListener("click", submitTimeline);
     miniPlayerClose.addEventListener("click", stopAudioPlayback);
     audioLoopBtn.addEventListener("click", toggleAudioLoopMode);
@@ -560,6 +575,10 @@ function setupEventListeners() {
         if (isModKey(e) && e.key === "g") {
             e.preventDefault();
             toggleGraphView();
+        }
+        if (isModKey(e) && e.key === "e") {
+            e.preventDefault();
+            toggleSourceEditor();
         }
         // ESC to close overlays (skip if file tree is focused - handled separately)
         if (e.key === "Escape" && !fileTreeFocused) {

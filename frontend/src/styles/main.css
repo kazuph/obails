@@ -1813,6 +1813,17 @@ body {
     color: var(--error);
 }
 
+/* Source editor toggle: デフォルトはプレビューのみ表示 */
+.editor-container.source-hidden .editor-pane,
+.editor-container.source-hidden .resize-handle.vertical {
+    display: none;
+}
+
+.toolbar-icon-btn.active {
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
 /* Preview images: ノート幅に収める（原寸描画による横スクロール防止） */
 #preview img {
     max-width: 100%;

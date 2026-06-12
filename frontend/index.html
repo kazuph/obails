@@ -34,6 +34,7 @@
                     <button id="timeline-btn" class="toolbar-icon-btn" title="Timeline" aria-label="Timeline"></button>
                     <button id="graph-btn" class="toolbar-icon-btn" title="Graph View (⌘G)" aria-label="Graph View"></button>
                     <button id="refresh-btn" class="toolbar-icon-btn" title="Refresh" aria-label="Refresh"></button>
+                    <button id="source-toggle-btn" class="toolbar-icon-btn" title="Toggle Source (⌘E)" aria-label="Toggle Source" aria-pressed="false"></button>
                 </div>
                 <div class="toolbar-center">
                     <div class="mini-player" id="mini-player" style="display: none;">
@@ -67,7 +68,7 @@
                 </div>
             </div>
 
-            <div class="editor-container">
+            <div class="editor-container source-hidden">
                 <div class="editor-pane" id="editor-pane">
                     <div class="pane-header" id="editor-header">
                         <span class="pane-title" id="editor-title">Select a note...</span>
@@ -290,6 +291,10 @@
                     <div class="shortcut-row">
                         <span class="shortcut-keys"><kbd class="mod-key">⌘</kbd> + <kbd>G</kbd></span>
                         <span class="shortcut-desc">Toggle Graph View</span>
+                    </div>
+                    <div class="shortcut-row">
+                        <span class="shortcut-keys"><kbd class="mod-key">⌘</kbd> + <kbd>E</kbd></span>
+                        <span class="shortcut-desc">Toggle Source Editor</span>
                     </div>
                     <div class="shortcut-row">
                         <span class="shortcut-keys"><kbd class="mod-key">⌘</kbd> + <kbd>,</kbd></span>

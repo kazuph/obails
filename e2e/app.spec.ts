@@ -1,6 +1,13 @@
 import { test, expect, Page } from '@playwright/test';
 import { setupMockBindings } from './helpers/mock-bindings';
 
+async function showSourceEditor(page: Page): Promise<void> {
+  const container = page.locator('.editor-container');
+  if (await container.evaluate((el) => el.classList.contains('source-hidden'))) {
+    await page.locator('#source-toggle-btn').click();
+  }
+}
+
 async function selectThemeFromMenu(page: Page, theme: string): Promise<void> {
   await page.evaluate((selectedTheme) => {
     const wails = (window as any)._wails;
@@ -498,6 +505,45 @@ test.describe('Obails App', () => {
     await expect(preview.locator('code', { hasText: '$not_math$' })).toBeVisible();
   });
 
+  test('should show preview only by default and toggle source with the code button', async ({ page }) => {
+    await setupMockBindings(page);
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+
+    await page.locator('.file-item[data-path="Welcome.md"]').click();
+
+    // デフォルトはプレビューのみ（ソースは非表示）
+    await expect(page.locator('#preview-pane')).toBeVisible();
+    await expect(page.locator('#editor-pane')).toBeHidden();
+    await expect(page.locator('#source-toggle-btn')).toHaveAttribute('aria-pressed', 'false');
+
+    // < > トグルでソース表示
+    await page.locator('#source-toggle-btn').click();
+    await expect(page.locator('#editor-pane')).toBeVisible();
+    await expect(page.locator('#editor')).toHaveValue(/Welcome/);
+    await expect(page.locator('#source-toggle-btn')).toHaveAttribute('aria-pressed', 'true');
+
+    // もう一度押すと非表示に戻る
+    await page.locator('#source-toggle-btn').click();
+    await expect(page.locator('#editor-pane')).toBeHidden();
+    await expect(page.locator('#preview-pane')).toBeVisible();
+  });
+
+  test('should toggle source editor with Cmd+E', async ({ page }) => {
+    await setupMockBindings(page);
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+
+    await page.locator('.file-item[data-path="Welcome.md"]').click();
+    await expect(page.locator('#editor-pane')).toBeHidden();
+
+    await page.keyboard.press('ControlOrMeta+e');
+    await expect(page.locator('#editor-pane')).toBeVisible();
+
+    await page.keyboard.press('ControlOrMeta+e');
+    await expect(page.locator('#editor-pane')).toBeHidden();
+  });
+
   test('should show Open Finder for folder context menu', async ({ page }) => {
     await setupMockBindings(page);
     await page.goto('/');
@@ -783,6 +829,7 @@ test.describe('Obails App', () => {
   test('should have resize handles that work', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
+    await showSourceEditor(page);
 
     // Verify resize handles exist
     const sidebarResize = page.locator('#sidebar-resize');
@@ -822,6 +869,7 @@ test.describe('Editor', () => {
   test('should have editor textarea and accept input', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
+    await showSourceEditor(page);
 
     const editor = page.locator('#editor');
     await expect(editor).toBeVisible();
@@ -838,6 +886,7 @@ test.describe('Editor', () => {
   test('should render markdown in preview pane', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
+    await showSourceEditor(page);
 
     const preview = page.locator('#preview-pane #preview');
     await expect(page.locator('#preview-pane')).toBeVisible();
@@ -859,6 +908,7 @@ test.describe('Editor', () => {
   test('should convert wiki links in preview', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
+    await showSourceEditor(page);
 
     const editor = page.locator('#editor');
     const preview = page.locator('.preview-pane #preview');
@@ -1078,6 +1128,7 @@ test.describe('Outline', () => {
   test('should display outline with headings from content', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
+    await showSourceEditor(page);
 
     const editor = page.locator('#editor');
 
@@ -1120,6 +1171,7 @@ Final content.`);
   test('should scroll to correct position on single outline click', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
+    await showSourceEditor(page);
 
     const editor = page.locator('#editor');
 
@@ -1196,6 +1248,7 @@ Final content.`);
   test('should set cursor position when clicking outline item', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
+    await showSourceEditor(page);
 
     const editor = page.locator('#editor');
 
@@ -1237,6 +1290,7 @@ test.describe('Keyboard Navigation', () => {
   test('should focus file tree with Shift+Tab from editor', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
+    await showSourceEditor(page);
 
     // First focus the editor
     const editor = page.locator('#editor');
@@ -1255,6 +1309,7 @@ test.describe('Keyboard Navigation', () => {
   test('should focus editor with Shift+Tab from file tree', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
+    await showSourceEditor(page);
 
     const editor = page.locator('#editor');
     const fileTree = page.locator('#file-tree');
@@ -1318,6 +1373,7 @@ test.describe('Keyboard Navigation', () => {
   test('keyboard navigation state should be isolated per focus cycle', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
+    await showSourceEditor(page);
 
     const editor = page.locator('#editor');
     const fileTree = page.locator('#file-tree');
@@ -1342,6 +1398,7 @@ test.describe('Keyboard Navigation', () => {
   test('should reset cursor and scroll when editor value changes', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
+    await showSourceEditor(page);
 
     const editor = page.locator('#editor');
 
@@ -1838,6 +1895,7 @@ test.describe('Title Editing', () => {
   test('should not allow editing when no file is open', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
+    await showSourceEditor(page);
 
     // Title should show default text when no file is open
     const editorTitle = page.locator('#editor-title');
@@ -1855,6 +1913,7 @@ test.describe('Title Editing', () => {
   test('should have clickable title with cursor pointer style', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
+    await showSourceEditor(page);
 
     // Title should exist
     const editorTitle = page.locator('#editor-title');
