@@ -1,0 +1,150 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 760" width="1200" height="760">
+  <defs>
+    <!-- Drop Shadow Filter -->
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-opacity="0.06" flood-color="#0f172a" />
+    </filter>
+    <!-- Connector Arrow -->
+    <marker id="arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 10 5 L 0 8.5 z" fill="#94a3b8" />
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="760" fill="#ffffff" />
+
+  <!-- Header Section -->
+  <text x="40" y="45" font-family="sans-serif" font-size="22" font-weight="bold" fill="#0f172a">obails 改善ロードマップ 2026-06</text>
+  <text x="40" y="70" font-family="sans-serif" font-size="14" fill="#64748b">Obsidian互換ビューア ＋ ob CLI 開発計画</text>
+
+  <!-- Timeline Column Headers -->
+  <line x1="220" y1="90" x2="1160" y2="90" stroke="#e2e8f0" stroke-width="1" />
+  <text x="335" y="82" font-family="sans-serif" font-size="13" font-weight="bold" fill="#475569" text-anchor="middle">Phase 0 (6/12 完了)</text>
+  <text x="565" y="82" font-family="sans-serif" font-size="13" font-weight="bold" fill="#475569" text-anchor="middle">Phase 1 (6/12 完了)</text>
+  <text x="795" y="82" font-family="sans-serif" font-size="13" font-weight="bold" fill="#475569" text-anchor="middle">Phase 2 (6/12 完了)</text>
+  <text x="1035" y="82" font-family="sans-serif" font-size="13" font-weight="bold" fill="#475569" text-anchor="middle">Phase 3 (計画)</text>
+
+  <!-- Vertical Grid Lines -->
+  <line x1="450" y1="90" x2="450" y2="685" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4" />
+  <line x1="680" y1="90" x2="680" y2="685" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4" />
+  <line x1="910" y1="90" x2="910" y2="685" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4" />
+
+  <!-- Lane 1: Rendering Correction -->
+  <rect x="40" y="100" width="1120" height="135" fill="#f8fafc" rx="8" stroke="#e2e8f0" stroke-width="1" />
+  <path d="M 40 108 A 8 8 0 0 1 48 100 L 220 100 L 220 235 L 48 235 A 8 8 0 0 1 40 227 Z" fill="#f1f5f9" stroke="#e2e8f0" stroke-width="1" />
+  <rect x="48" y="115" width="4" height="105" fill="#2563eb" rx="2" />
+  <text x="65" y="155" font-family="sans-serif" font-size="14" font-weight="bold" fill="#1e293b">レンダリング修正</text>
+  <text x="65" y="180" font-family="sans-serif" font-size="11" fill="#64748b">担当: %27 claude</text>
+  <line x1="220" y1="167.5" x2="1160" y2="167.5" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4" />
+
+  <!-- Lane 2: ob CLI -->
+  <rect x="40" y="250" width="1120" height="135" fill="#f8fafc" rx="8" stroke="#e2e8f0" stroke-width="1" />
+  <path d="M 40 258 A 8 8 0 0 1 48 250 L 220 250 L 220 385 L 48 385 A 8 8 0 0 1 40 377 Z" fill="#f1f5f9" stroke="#e2e8f0" stroke-width="1" />
+  <rect x="48" y="265" width="4" height="105" fill="#7c3aed" rx="2" />
+  <text x="65" y="305" font-family="sans-serif" font-size="14" font-weight="bold" fill="#1e293b">ob CLI</text>
+  <text x="65" y="330" font-family="sans-serif" font-size="11" fill="#64748b">担当: %37 codex</text>
+  <line x1="220" y1="317.5" x2="1160" y2="317.5" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4" />
+
+  <!-- Lane 3: UX Functions -->
+  <rect x="40" y="400" width="1120" height="135" fill="#f8fafc" rx="8" stroke="#e2e8f0" stroke-width="1" />
+  <path d="M 40 408 A 8 8 0 0 1 48 400 L 220 400 L 220 535 L 48 535 A 8 8 0 0 1 40 527 Z" fill="#f1f5f9" stroke="#e2e8f0" stroke-width="1" />
+  <rect x="48" y="415" width="4" height="105" fill="#7c3aed" rx="2" />
+  <text x="65" y="455" font-family="sans-serif" font-size="14" font-weight="bold" fill="#1e293b">UX機能</text>
+  <text x="65" y="480" font-family="sans-serif" font-size="11" fill="#64748b">担当: %37 codex</text>
+  <line x1="220" y1="467.5" x2="1160" y2="467.5" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4" />
+
+  <!-- Lane 4: Future Candidates -->
+  <rect x="40" y="550" width="1120" height="135" fill="#f8fafc" rx="8" stroke="#e2e8f0" stroke-width="1" />
+  <path d="M 40 558 A 8 8 0 0 1 48 550 L 220 550 L 220 685 L 48 685 A 8 8 0 0 1 40 677 Z" fill="#f1f5f9" stroke="#e2e8f0" stroke-width="1" />
+  <rect x="48" y="565" width="4" height="105" fill="#475569" rx="2" />
+  <text x="65" y="605" font-family="sans-serif" font-size="14" font-weight="bold" fill="#1e293b">次期候補</text>
+  <text x="65" y="630" font-family="sans-serif" font-size="11" fill="#64748b">📋計画・未着手</text>
+  <line x1="220" y1="617.5" x2="1160" y2="617.5" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4" />
+
+  <!-- Connector Lines -->
+  <path d="M 440 167.5 L 450 167.5 L 450 317.5 L 460 317.5" stroke="#cbd5e1" stroke-width="2" fill="none" marker-end="url(#arrow)" />
+  <path d="M 670 317.5 L 680 317.5 L 680 467.5 L 690 467.5" stroke="#cbd5e1" stroke-width="2" fill="none" marker-end="url(#arrow)" />
+  <path d="M 900 467.5 L 910 467.5 L 910 617.5 L 920 617.5" stroke="#cbd5e1" stroke-width="2" fill="none" marker-end="url(#arrow)" />
+
+  <!-- Phase 0 Card -->
+  <g filter="url(#shadow)">
+    <rect x="230" y="105" width="210" height="125" fill="#f0fdf4" stroke="#bbf7d0" stroke-width="1" rx="6" />
+    <path d="M 236 105 A 6 6 0 0 0 230 111 L 230 224 A 6 6 0 0 0 236 230 Z" fill="#10b981" />
+    <text x="245" y="125" font-family="sans-serif" font-size="13" font-weight="bold" fill="#065f46">Phase 0</text>
+    <text x="430" y="125" font-family="sans-serif" font-size="11" font-weight="bold" fill="#059669" text-anchor="end">✅ 完了 (6/12)</text>
+    <text x="245" y="150" font-family="sans-serif" font-size="11.5" fill="#0f172a">
+      <tspan x="245" dy="0">• ![[画像]]アンダースコア破壊修正</tspan>
+      <tspan x="245" dy="18">• KaTeX数式 / 画像max-width</tspan>
+      <tspan x="245" dy="18">• Obsidian callout (折畳対応)</tspan>
+      <tspan x="245" dy="18">• 空先頭セル表</tspan>
+    </text>
+  </g>
+
+  <!-- Phase 1 Card -->
+  <g filter="url(#shadow)">
+    <rect x="460" y="255" width="210" height="125" fill="#f0fdf4" stroke="#bbf7d0" stroke-width="1" rx="6" />
+    <path d="M 466 255 A 6 6 0 0 0 460 261 L 460 374 A 6 6 0 0 0 466 380 Z" fill="#10b981" />
+    <text x="475" y="275" font-family="sans-serif" font-size="13" font-weight="bold" fill="#065f46">Phase 1</text>
+    <text x="660" y="275" font-family="sans-serif" font-size="11" font-weight="bold" fill="#059669" text-anchor="end">✅ 完了 (6/12)</text>
+    <text x="475" y="290" font-family="sans-serif" font-size="10" fill="#64748b">commit e54a88f</text>
+    <text x="475" y="312" font-family="sans-serif" font-size="11.5" fill="#0f172a">
+      <tspan x="475" dy="0">• --content-file＆stdin無加工入力</tspan>
+      <tspan x="485" dy="16">( \n変換の恒久対策 )</tspan>
+      <tspan x="475" dy="18">• ob delete / ob move</tspan>
+      <tspan x="475" dy="18">• go test PASS</tspan>
+    </text>
+  </g>
+
+  <!-- Phase 2 Card -->
+  <g filter="url(#shadow)">
+    <rect x="690" y="405" width="210" height="125" fill="#f0fdf4" stroke="#bbf7d0" stroke-width="1" rx="6" />
+    <path d="M 696 405 A 6 6 0 0 0 690 411 L 690 524 A 6 6 0 0 0 696 530 Z" fill="#16a34a" />
+    <text x="705" y="423" font-family="sans-serif" font-size="13" font-weight="bold" fill="#14532d">Phase 2</text>
+    <text x="890" y="423" font-family="sans-serif" font-size="11" font-weight="bold" fill="#16a34a" text-anchor="end">✅ 完了 (6/12)</text>
+    <text x="705" y="437" font-family="sans-serif" font-size="9.5" fill="#64748b">commit 105bbd3 (マージ・本番反映・push済)</text>
+    <text x="705" y="457" font-family="sans-serif" font-size="11" fill="#0f172a">
+      <tspan x="705" dy="0">• サイドバー折畳＋縦リサイズ永続化</tspan>
+      <tspan x="705" dy="15.5">• 画像ライトボックス＋中央寄せ</tspan>
+      <tspan x="705" dy="15.5">• アウトライン現在位置追従・HL</tspan>
+      <tspan x="705" dy="15.5">• ノート内検索 / Mermaidズーム・パン</tspan>
+      <tspan x="705" dy="15.5">• コードコピー / wiki-link / 脚注</tspan>
+    </text>
+  </g>
+
+  <!-- Phase 3 Card -->
+  <g filter="url(#shadow)">
+    <rect x="920" y="555" width="230" height="125" fill="#f9fafb" stroke="#e5e7eb" stroke-width="1" rx="6" />
+    <path d="M 926 555 A 6 6 0 0 0 920 561 L 920 674 A 6 6 0 0 0 926 680 Z" fill="#94a3b8" />
+    <text x="935" y="575" font-family="sans-serif" font-size="13" font-weight="bold" fill="#374151">Phase 3</text>
+    <text x="1135" y="575" font-family="sans-serif" font-size="11" font-weight="bold" fill="#6b7280" text-anchor="end">📋 計画</text>
+    <text x="935" y="598" font-family="sans-serif" font-size="11.5" fill="#0f172a">
+      <tspan x="935" dy="0">• 長文レンダリング仮想化 (91KB対策)</tspan>
+      <tspan x="935" dy="18">• 数式のLaTeXソースコピー</tspan>
+      <tspan x="935" dy="18">• ob create のfrontmatterフラグ</tspan>
+      <tspan x="935" dy="18">• E2Eテスト整備</tspan>
+      <tspan x="945" dy="16">(91KB教材ノートをフィクスチャ化)</tspan>
+    </text>
+  </g>
+
+  <!-- Legend Section -->
+  <!-- Completed Legend -->
+  <rect x="40" y="716" width="16" height="16" rx="4" fill="#059669" />
+  <path d="M 44 724 L 47 727 L 52 720" stroke="#ffffff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+  <text x="62" y="729" font-family="sans-serif" font-size="12" fill="#475569" font-weight="bold">完了</text>
+
+  <!-- Active Legend -->
+  <rect x="110" y="716" width="16" height="16" rx="4" fill="#ea580c" />
+  <path d="M 115 724 A 3 3 0 1 1 118 727" stroke="#ffffff" stroke-width="2" fill="none" stroke-linecap="round" />
+  <path d="M 118 723 L 118 726 L 115 726" stroke="#ffffff" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+  <text x="132" y="729" font-family="sans-serif" font-size="12" fill="#475569" font-weight="bold">レビュー・検証中</text>
+
+  <!-- Planned Legend -->
+  <rect x="270" y="716" width="16" height="16" rx="4" fill="#6b7280" />
+  <rect x="274" y="720" width="8" height="8" stroke="#ffffff" stroke-width="1.5" fill="none" />
+  <line x1="276" y1="723" x2="280" y2="723" stroke="#ffffff" stroke-width="1" />
+  <line x1="276" y1="725" x2="280" y2="725" stroke="#ffffff" stroke-width="1" />
+  <text x="292" y="729" font-family="sans-serif" font-size="12" fill="#475569" font-weight="bold">計画</text>
+
+  <!-- Credits Section -->
+  <text x="1160" y="729" font-family="sans-serif" font-size="12" fill="#64748b" text-anchor="end">計画/レビュー: p_33 Claude ・ 実装: %37 Codex ・ レンダリング: %27 Claude ・ 作図: agy</text>
+</svg>
