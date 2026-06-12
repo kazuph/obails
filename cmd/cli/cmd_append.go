@@ -28,7 +28,7 @@ Examples:
 func init() {
 	appendCmd.Flags().String("file", "", "Note name (resolved via wiki-link)")
 	appendCmd.Flags().String("path", "", "Relative path to the note")
-	appendCmd.Flags().String("content", "", "Content to append (required)")
+	addContentFlags(appendCmd)
 	appendCmd.Flags().String("section", "", "Section heading to append to")
 	appendCmd.Flags().String("inline", "false", "Append without newline (true/false)")
 	appendCmd.Flags().String("silent", "false", "Suppress output (true/false)")
@@ -44,7 +44,11 @@ func runAppend(cmd *cobra.Command, args []string) error {
 
 	file, _ := cmd.Flags().GetString("file")
 	path, _ := cmd.Flags().GetString("path")
-	content, _ := cmd.Flags().GetString("content")
+	content, contentErr := resolveContent(cmd)
+	if contentErr != nil {
+		outputError(contentErr)
+		return nil
+	}
 	section, _ := cmd.Flags().GetString("section")
 	inlineStr, _ := cmd.Flags().GetString("inline")
 	silentStr, _ := cmd.Flags().GetString("silent")
@@ -53,11 +57,9 @@ func runAppend(cmd *cobra.Command, args []string) error {
 	silent := silentStr == "true"
 
 	if content == "" {
-		outputError(fmt.Errorf("content is required: use content=<text>"))
+		outputError(fmt.Errorf("content is required: use content=<text> or content-file=<path|->"))
 		return nil
 	}
-
-	content = unescapeContent(content)
 
 	// Resolve file path
 	relativePath, err := resolveFilePath(file, path)

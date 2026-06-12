@@ -3,6 +3,7 @@
 package main
 
 import (
+	"os"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -129,6 +130,78 @@ func TestUnescapeContent(t *testing.T) {
 		result := unescapeContent("")
 		if result != "" {
 			t.Errorf("expected empty string, got '%s'", result)
+		}
+	})
+}
+
+func TestResolveContent(t *testing.T) {
+	newCmd := func() *cobra.Command {
+		cmd := &cobra.Command{Use: "test"}
+		addContentFlags(cmd)
+		return cmd
+	}
+
+	t.Run("content= keeps legacy literal \\n conversion", func(t *testing.T) {
+		cmd := newCmd()
+		cmd.Flags().Set("content", `line1\nline2`)
+		got, err := resolveContent(cmd)
+		if err != nil {
+			t.Fatalf("resolveContent failed: %v", err)
+		}
+		if got != "line1\nline2" {
+			t.Errorf("expected newline conversion, got %q", got)
+		}
+	})
+
+	t.Run("content-file reads LaTeX verbatim without escape processing", func(t *testing.T) {
+		tmp, err := os.CreateTemp("", "ob-content-*.md")
+		if err != nil {
+			t.Fatalf("CreateTemp failed: %v", err)
+		}
+		defer os.Remove(tmp.Name())
+		latex := `数式 $\nabla^2 u \neq \nu$ と \not と改行リテラル \n はそのまま`
+		if _, err := tmp.WriteString(latex); err != nil {
+			t.Fatalf("WriteString failed: %v", err)
+		}
+		tmp.Close()
+
+		cmd := newCmd()
+		cmd.Flags().Set("content-file", tmp.Name())
+		got, err := resolveContent(cmd)
+		if err != nil {
+			t.Fatalf("resolveContent failed: %v", err)
+		}
+		if got != latex {
+			t.Errorf("content-file must be verbatim.\nwant %q\ngot  %q", latex, got)
+		}
+	})
+
+	t.Run("content-file takes precedence over content", func(t *testing.T) {
+		tmp, err := os.CreateTemp("", "ob-content-*.md")
+		if err != nil {
+			t.Fatalf("CreateTemp failed: %v", err)
+		}
+		defer os.Remove(tmp.Name())
+		tmp.WriteString("from file")
+		tmp.Close()
+
+		cmd := newCmd()
+		cmd.Flags().Set("content", "from flag")
+		cmd.Flags().Set("content-file", tmp.Name())
+		got, err := resolveContent(cmd)
+		if err != nil {
+			t.Fatalf("resolveContent failed: %v", err)
+		}
+		if got != "from file" {
+			t.Errorf("expected file content to win, got %q", got)
+		}
+	})
+
+	t.Run("missing content-file returns error", func(t *testing.T) {
+		cmd := newCmd()
+		cmd.Flags().Set("content-file", "/nonexistent/path.md")
+		if _, err := resolveContent(cmd); err == nil {
+			t.Error("expected error for missing content-file")
 		}
 	})
 }

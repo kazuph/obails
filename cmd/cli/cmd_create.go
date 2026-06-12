@@ -28,7 +28,7 @@ Examples:
 func init() {
 	createCmd.Flags().String("name", "", "Name of the note to create (required)")
 	createCmd.Flags().String("template", "", "Template to use (filename without .md)")
-	createCmd.Flags().String("content", "", "Initial content for the note")
+	addContentFlags(createCmd)
 	createCmd.Flags().String("folder", "", "Folder path within vault")
 	createCmd.Flags().String("overwrite", "false", "Overwrite existing file (true/false)")
 	createCmd.Flags().String("silent", "false", "Suppress output (true/false)")
@@ -44,7 +44,11 @@ func runCreate(cmd *cobra.Command, args []string) error {
 
 	name, _ := cmd.Flags().GetString("name")
 	templateName, _ := cmd.Flags().GetString("template")
-	content, _ := cmd.Flags().GetString("content")
+	content, err := resolveContent(cmd)
+	if err != nil {
+		outputError(err)
+		return nil
+	}
 	folder, _ := cmd.Flags().GetString("folder")
 	overwriteStr, _ := cmd.Flags().GetString("overwrite")
 	silentStr, _ := cmd.Flags().GetString("silent")
@@ -87,7 +91,6 @@ func runCreate(cmd *cobra.Command, args []string) error {
 
 	// If content is provided, append it (or use as initial if no template)
 	if content != "" {
-		content = unescapeContent(content)
 		if initialContent != "" {
 			initialContent = initialContent + "\n" + content
 		} else {
@@ -101,7 +104,6 @@ func runCreate(cmd *cobra.Command, args []string) error {
 	}
 
 	// Create or overwrite the file
-	var err error
 	if overwrite {
 		err = fileService.WriteFile(relativePath, initialContent)
 	} else {

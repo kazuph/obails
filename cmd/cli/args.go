@@ -3,6 +3,9 @@
 package main
 
 import (
+	"fmt"
+	"io"
+	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -60,4 +63,38 @@ func parseKeyValueArgs(cmd *cobra.Command, args []string) error {
 // This allows multiline content to be passed via CLI arguments.
 func unescapeContent(s string) string {
 	return strings.ReplaceAll(s, `\n`, "\n")
+}
+
+// resolveContent returns the note content for create/append/prepend.
+//
+// content-file=<path> (or "-" for stdin) reads the content verbatim with NO
+// escape processing — required for LaTeX like \nabla where the legacy
+// content= flag's \n conversion would corrupt the text.
+// content= keeps the historical literal-\n-to-newline behavior.
+func resolveContent(cmd *cobra.Command) (string, error) {
+	contentFile, _ := cmd.Flags().GetString("content-file")
+	if contentFile != "" {
+		var data []byte
+		var err error
+		if contentFile == "-" {
+			data, err = io.ReadAll(os.Stdin)
+		} else {
+			data, err = os.ReadFile(contentFile)
+		}
+		if err != nil {
+			return "", fmt.Errorf("failed to read content-file %q: %w", contentFile, err)
+		}
+		return string(data), nil
+	}
+
+	content, _ := cmd.Flags().GetString("content")
+	if content == "" {
+		return "", nil
+	}
+	return unescapeContent(content), nil
+}
+
+func addContentFlags(cmd *cobra.Command) {
+	cmd.Flags().String("content", "", "Content text (literal \\n becomes a newline)")
+	cmd.Flags().String("content-file", "", "Read content verbatim from a file, or '-' for stdin (no escape processing)")
 }

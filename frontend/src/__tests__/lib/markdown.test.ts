@@ -326,3 +326,12 @@ describe("pipeline regression guards", () => {
     expect(result).not.toMatch(/OBAILSTK/);
   });
 });
+
+describe("unicode math symbols (KaTeX)", () => {
+  it("renders ∇ and ≠ inside math mode", () => {
+    const result = parseMarkdown("$∇^2 u ≠ ν$");
+    expect(result).toContain("math-inline");
+    expect(result).toContain("katex");
+    expect(result).not.toContain("math-error");
+  });
+});
