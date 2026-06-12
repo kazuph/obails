@@ -295,6 +295,24 @@ export async function setupMockBindings(page: Page, options: MockBindingOptions 
           : null;
         break;
       }
+      // NoteService.GetTodayDailyNote
+      case 4090292734: {
+        const today = new Date();
+        const yyyy = today.getFullYear();
+        const mm = String(today.getMonth() + 1).padStart(2, '0');
+        const dd = String(today.getDate()).padStart(2, '0');
+        const dailyPath = `dailynotes/${yyyy}-${mm}-${dd}.md`;
+        if (!Object.prototype.hasOwnProperty.call(files, dailyPath)) {
+          addMockMarkdownFile(files, fileInfos, dailyPath, `# ${yyyy}-${mm}-${dd}\n\n## Memos\n\n`);
+        }
+        value = {
+          title: `${yyyy}-${mm}-${dd}`,
+          path: dailyPath,
+          content: files[dailyPath],
+          modifiedAt: new Date().toISOString(),
+        };
+        break;
+      }
       // LinkService.GetBacklinks
       case 1256122864:
       // LinkService.GetLinkInfo

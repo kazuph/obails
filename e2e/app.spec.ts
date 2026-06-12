@@ -432,6 +432,38 @@ test.describe('Obails App', () => {
     await expect(folder).toHaveClass(/expanded/);
   });
 
+  test('should expand parent folder and highlight the restored file on startup', async ({ page }) => {
+    await setupMockBindings(page, {
+      initialLastOpenedFile: { path: 'dailynotes/2025-01-19.md', fileType: 'markdown' },
+    });
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+
+    const folder = page.locator('.file-item.folder[data-path="dailynotes"]');
+    await expect(folder).toHaveClass(/expanded/);
+
+    const file = page.locator('.file-item[data-path="dailynotes/2025-01-19.md"]');
+    await expect(file).toBeVisible();
+    await expect(file).toHaveClass(/active/);
+  });
+
+  test('should expand parent folder when opening a nested note from outside the tree', async ({ page }) => {
+    await setupMockBindings(page);
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+
+    const folder = page.locator('.file-item.folder[data-path="dailynotes"]');
+    await expect(folder).toBeVisible();
+    await expect(folder).not.toHaveClass(/expanded/);
+
+    // Daily Noteボタンはツリー外からネストされたファイルを開く
+    await page.locator('#daily-note-btn').click();
+
+    await expect(folder).toHaveClass(/expanded/);
+    const activeItem = page.locator('.file-item.active');
+    await expect(activeItem).toHaveAttribute('data-path', /^dailynotes\//);
+  });
+
   test('should show Open Finder for folder context menu', async ({ page }) => {
     await setupMockBindings(page);
     await page.goto('/');

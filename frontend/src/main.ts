@@ -327,7 +327,8 @@ function buildFileTreeSignature(files: FileInfo[]): string {
 
 function restoreActiveFileTreeSelection() {
     if (currentFilePath) {
-        updateFileTreeSelection(currentFilePath);
+        // Snapshot restore (watcher refresh etc.) must not undo user-collapsed folders.
+        updateFileTreeSelection(currentFilePath, { reveal: false });
     }
 }
 
@@ -2770,9 +2771,15 @@ type FileTreeSelectionOptions = {
     reveal?: boolean;
 };
 
-function updateFileTreeSelection(path: string, _options: FileTreeSelectionOptions = {}) {
+function updateFileTreeSelection(path: string, options: FileTreeSelectionOptions = {}) {
     // Remove previous selection
     document.querySelectorAll(".file-item").forEach(el => el.classList.remove("active"));
+
+    // Expand parent folders to reveal the file.
+    // Watcher-driven refreshes pass { reveal: false } so user-collapsed folders stay closed.
+    if (options.reveal !== false) {
+        expandParentFolders(path);
+    }
 
     // Highlight the file
     const fileItem = document.querySelector(`.file-item[data-path="${path}"]`);
@@ -3121,7 +3128,7 @@ async function syncOpenFileWithVault() {
                 loadOutgoingLinks(note.path),
             ]);
             updatePaneTitles(getDisplayName(note.path, "file"));
-            updateFileTreeSelection(note.path);
+            updateFileTreeSelection(note.path, { reveal: false });
         } catch (err) {
             console.warn("Failed to refresh markdown note from vault:", err);
             clearCurrentSelection();
@@ -3531,7 +3538,7 @@ async function refresh() {
 
     // Restore selection without changing user-controlled folder expansion.
     if (currentFilePath) {
-        updateFileTreeSelection(currentFilePath);
+        updateFileTreeSelection(currentFilePath, { reveal: false });
     }
 
     // If graph view is showing, refresh the graph data
