@@ -67,6 +67,15 @@ import {
 } from "./lib/playback-speed";
 import { transcriptPathForAudio } from "./lib/transcript";
 import { formatPlaybackTime } from "./lib/time";
+import {
+  RIGHT_SIDEBAR_LAYOUT_KEY,
+  RIGHT_SIDEBAR_SECTIONS,
+  defaultRightSidebarLayout,
+  normalizeRightSidebarLayout,
+  toggleRightSidebarSection,
+  type RightSidebarLayout,
+  type RightSidebarSectionId,
+} from "./lib/right-sidebar-layout";
 import * as pdfjsLib from "pdfjs-dist";
 
 // Setup PDF.js worker
@@ -127,6 +136,12 @@ let searchSelectionIndex = -1; // For Ctrl+N/P navigation in search input
 const fileTree = document.getElementById("file-tree")!;
 const editor = document.getElementById("editor") as HTMLTextAreaElement;
 const preview = document.getElementById("preview")!;
+const noteSearch = document.getElementById("note-search") as HTMLElement;
+const noteSearchInput = document.getElementById("note-search-input") as HTMLInputElement;
+const noteSearchCount = document.getElementById("note-search-count") as HTMLElement;
+const noteSearchPrev = document.getElementById("note-search-prev") as HTMLButtonElement;
+const noteSearchNext = document.getElementById("note-search-next") as HTMLButtonElement;
+const noteSearchClose = document.getElementById("note-search-close") as HTMLButtonElement;
 const timelinePanel = document.getElementById("timeline-panel")!;
 const editorContainer = document.querySelector(".editor-container") as HTMLElement;
 const timelineInput = document.getElementById("timeline-input") as HTMLTextAreaElement;
@@ -150,6 +165,11 @@ const speedMenu = document.getElementById("speed-menu") as HTMLElement;
 const audioLoopBtn = document.getElementById("audio-loop-btn") as HTMLButtonElement;
 const transcribeBtn = document.getElementById("transcribe-btn") as HTMLButtonElement;
 let currentPlaybackSpeed = loadStoredSpeed(window.localStorage);
+let noteSearchQuery = "";
+let noteSearchMatches: HTMLElement[] = [];
+let noteSearchIndex = -1;
+let activeOutlineIndex = -1;
+let rightSidebarLayout: RightSidebarLayout = loadRightSidebarLayout();
 
 // New viewer elements
 const imageViewer = document.getElementById("image-viewer")!;
@@ -506,6 +526,7 @@ function setupEventListeners() {
 
     editor.addEventListener("input", debounce(saveEditorContent, 500));
     editor.addEventListener("input", updatePreview);
+    preview.addEventListener("scroll", updateActiveOutlineFromPreview);
 
     // HTML Editor events
     htmlEditor.addEventListener("input", debounce(saveHtmlFile, 500));
@@ -539,6 +560,7 @@ function setupEventListeners() {
     });
 
     // Handle external links in preview - open in external browser
+    setupPreviewInteractions();
     preview.addEventListener("click", async (e) => {
         const target = e.target as HTMLElement;
         const link = target.closest("a");
@@ -584,7 +606,9 @@ function setupEventListeners() {
         if (e.key === "Escape" && !fileTreeFocused) {
             const shortcutsOverlay = document.getElementById("shortcuts-overlay");
             const deleteConfirmOverlay = document.getElementById("delete-confirm-overlay");
-            if (shortcutsOverlay?.classList.contains("visible")) {
+            if (!noteSearch.hidden) {
+                closeNoteSearch();
+            } else if (shortcutsOverlay?.classList.contains("visible")) {
                 hideShortcutsHelp();
             } else if (deleteConfirmOverlay?.style.display !== "none") {
                 hideDeleteConfirmDialog();
@@ -603,20 +627,21 @@ function setupEventListeners() {
             fileSearchInput.focus();
             fileSearchInput.select();
         }
-        // Cmd+F (or Ctrl+F on non-Mac) to focus file search (when not in editor)
-        if (isModKey(e) && e.key === "f" && !editor.matches(":focus")) {
+        // Cmd+F (or Ctrl+F on non-Mac) to search within the current note preview.
+        if (isModKey(e) && e.key === "f") {
             e.preventDefault();
-            fileSearchInput.focus();
-            fileSearchInput.select();
+            openNoteSearch();
         }
     });
 
     setupResizeHandles();
+    setupRightSidebarLayoutControls();
     setupThemeMenu();
     setupContextMenu();
     setupFileTreeDropTarget();
     setupFolderTreeControls();
     setupFileSearch();
+    setupNoteSearch();
     setupFileTreeKeyboardNavigation();
     setupShortcutsHelp();
 }
@@ -3244,6 +3269,7 @@ function updatePreview() {
     if (currentTextPath) {
         preview.innerHTML = `<pre class="plain-text-preview">${escapeHtml(content)}</pre>`;
         outlineList.innerHTML = '<div class="outline-empty">Headings you write will gather here</div>';
+        refreshNoteSearchHighlights();
         return;
     }
 
@@ -3252,12 +3278,14 @@ function updatePreview() {
     preview.querySelectorAll("pre code").forEach((block) => {
         hljs.highlightElement(block as HTMLElement);
     });
+    enhanceCodeBlocks();
     // Initialize mermaid diagrams after rendering
     setTimeout(() => initMermaidDiagrams(), 100);
     // Update outline
     updateOutline(content);
     // Resolve vault images to base64 data URLs
     resolvePreviewImages();
+    refreshNoteSearchHighlights();
 }
 
 async function resolvePreviewImages() {
@@ -3286,18 +3314,315 @@ async function resolvePreviewImages() {
     }
 }
 
+function setupPreviewInteractions() {
+    preview.addEventListener("click", (e) => {
+        const target = e.target as HTMLElement;
+
+        const image = target.closest("img") as HTMLImageElement | null;
+        if (image && preview.contains(image)) {
+            e.preventDefault();
+            e.stopPropagation();
+            openPreviewImageLightbox(image);
+            return;
+        }
+
+        const wikiLink = target.closest(".wiki-link") as HTMLElement | null;
+        if (wikiLink && preview.contains(wikiLink)) {
+            e.preventDefault();
+            e.stopPropagation();
+            void openWikiLink(wikiLink);
+        }
+    });
+}
+
+function openPreviewImageLightbox(image: HTMLImageElement) {
+    if (!image.src || image.alt.startsWith("[Image not found:")) {
+        return;
+    }
+    imageFsPreview.src = image.src;
+    imageFsTitle.textContent =
+        image.alt || image.getAttribute("data-vault-path") || image.getAttribute("src") || "Image";
+    imageFullscreenOverlay.style.display = "flex";
+}
+
+async function openWikiLink(linkEl: HTMLElement) {
+    const linkTarget = linkEl.getAttribute("data-link") || "";
+    if (!linkTarget) return;
+
+    try {
+        const [resolvedPath, found] = await LinkService.ResolveLink(linkTarget) as [string, boolean];
+        linkEl.classList.toggle("broken", !found);
+        if (found && resolvedPath) {
+            await openNote(resolvedPath);
+        }
+    } catch (err) {
+        console.error("Failed to open wiki link:", err);
+        linkEl.classList.add("broken");
+    }
+}
+
+function enhanceCodeBlocks() {
+    preview.querySelectorAll<HTMLPreElement>("pre").forEach((pre) => {
+        const code = pre.querySelector("code");
+        if (!code || pre.querySelector(":scope > .code-copy-btn")) {
+            return;
+        }
+
+        pre.classList.add("code-block");
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "code-copy-btn";
+        button.title = "Copy code";
+        button.setAttribute("aria-label", "Copy code");
+        button.innerHTML = renderIcon("copy");
+        button.addEventListener("click", async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            try {
+                await Clipboard.SetText(code.textContent || "");
+                button.classList.add("copied");
+                button.title = "Copied";
+                window.setTimeout(() => {
+                    button.classList.remove("copied");
+                    button.title = "Copy code";
+                }, 1200);
+            } catch (err) {
+                console.error("Failed to copy code:", err);
+            }
+        });
+        pre.appendChild(button);
+    });
+}
+
 // Outline
 function updateOutline(content: string) {
     const headings = extractHeadings(content);
     outlineList.innerHTML = renderOutlineHTML(headings);
+    activeOutlineIndex = -1;
+    syncPreviewHeadingAnchors(headings.length);
 
     // Click to jump to heading
     outlineList.querySelectorAll(".outline-item").forEach(item => {
         item.addEventListener("click", () => {
             const line = parseInt(item.getAttribute("data-line") || "0");
+            const index = parseInt(item.getAttribute("data-heading-index") || "-1", 10);
             jumpToLine(line);
+            scrollPreviewHeadingIntoView(index);
+            setActiveOutlineIndex(index, true);
         });
     });
+    updateActiveOutlineFromPreview();
+}
+
+function syncPreviewHeadingAnchors(count: number) {
+    const previewHeadings = Array.from(preview.querySelectorAll<HTMLElement>("h1, h2, h3, h4, h5, h6"));
+    const outlineItems = Array.from(outlineList.querySelectorAll<HTMLElement>(".outline-item"));
+    const max = Math.min(count, previewHeadings.length, outlineItems.length);
+
+    for (let index = 0; index < max; index++) {
+        previewHeadings[index].dataset.headingIndex = String(index);
+        outlineItems[index].dataset.headingIndex = String(index);
+    }
+}
+
+function scrollPreviewHeadingIntoView(index: number) {
+    if (index < 0) return;
+    const heading = preview.querySelector<HTMLElement>(`[data-heading-index="${index}"]`);
+    if (!heading) return;
+    preview.scrollTo({
+        top: Math.max(0, heading.offsetTop - 16),
+        behavior: "smooth",
+    });
+}
+
+function updateActiveOutlineFromPreview() {
+    const headings = Array.from(preview.querySelectorAll<HTMLElement>("[data-heading-index]"));
+    if (headings.length === 0) {
+        setActiveOutlineIndex(-1, false);
+        return;
+    }
+
+    const marker = preview.scrollTop + 80;
+    let nextIndex = parseInt(headings[0].dataset.headingIndex || "0", 10);
+    for (const heading of headings) {
+        if (heading.offsetTop <= marker) {
+            nextIndex = parseInt(heading.dataset.headingIndex || "0", 10);
+        } else {
+            break;
+        }
+    }
+    setActiveOutlineIndex(nextIndex, true);
+}
+
+function setActiveOutlineIndex(index: number, reveal: boolean) {
+    if (activeOutlineIndex === index) return;
+    activeOutlineIndex = index;
+
+    outlineList.querySelectorAll(".outline-item.active").forEach((item) => {
+        item.classList.remove("active");
+    });
+
+    if (index < 0) return;
+    const item = outlineList.querySelector<HTMLElement>(`.outline-item[data-heading-index="${index}"]`);
+    if (!item) return;
+    item.classList.add("active");
+    if (reveal) {
+        item.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+}
+
+function setupNoteSearch() {
+    noteSearch.hidden = true;
+
+    noteSearchInput.addEventListener("input", () => {
+        noteSearchQuery = noteSearchInput.value;
+        runNoteSearch(0);
+    });
+
+    noteSearchInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+            e.preventDefault();
+            selectNoteSearchMatch(noteSearchIndex + (e.shiftKey ? -1 : 1));
+        } else if (e.key === "Escape") {
+            e.preventDefault();
+            closeNoteSearch();
+        }
+    });
+
+    noteSearchPrev.addEventListener("click", () => selectNoteSearchMatch(noteSearchIndex - 1));
+    noteSearchNext.addEventListener("click", () => selectNoteSearchMatch(noteSearchIndex + 1));
+    noteSearchClose.addEventListener("click", closeNoteSearch);
+}
+
+function openNoteSearch() {
+    noteSearch.hidden = false;
+    noteSearchInput.value = noteSearchQuery;
+    refreshNoteSearchHighlights();
+    window.requestAnimationFrame(() => {
+        noteSearchInput.focus();
+        noteSearchInput.select();
+    });
+}
+
+function closeNoteSearch() {
+    noteSearch.hidden = true;
+    noteSearchQuery = "";
+    noteSearchInput.value = "";
+    clearNoteSearchHighlights();
+    updateNoteSearchCount();
+}
+
+function refreshNoteSearchHighlights() {
+    if (noteSearch.hidden && !noteSearchQuery) {
+        return;
+    }
+    const previousIndex = noteSearchIndex;
+    runNoteSearch(previousIndex < 0 ? 0 : previousIndex);
+}
+
+function runNoteSearch(preferredIndex: number) {
+    clearNoteSearchHighlights();
+    noteSearchQuery = noteSearchInput.value;
+    const query = noteSearchQuery.trim();
+    if (!query) {
+        updateNoteSearchCount();
+        return;
+    }
+
+    noteSearchMatches = highlightTextMatches(preview, query);
+    if (noteSearchMatches.length > 0) {
+        selectNoteSearchMatch(Math.min(preferredIndex, noteSearchMatches.length - 1));
+    } else {
+        noteSearchIndex = -1;
+        updateNoteSearchCount();
+    }
+}
+
+function clearNoteSearchHighlights() {
+    const marks = Array.from(preview.querySelectorAll<HTMLElement>("mark.note-search-match"));
+    for (const mark of marks) {
+        const parent = mark.parentNode;
+        mark.replaceWith(document.createTextNode(mark.textContent || ""));
+        parent?.normalize();
+    }
+    noteSearchMatches = [];
+    noteSearchIndex = -1;
+}
+
+function highlightTextMatches(root: HTMLElement, query: string): HTMLElement[] {
+    const matches: HTMLElement[] = [];
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+        acceptNode(node) {
+            const parent = node.parentElement;
+            if (!parent || !node.textContent) {
+                return NodeFilter.FILTER_REJECT;
+            }
+            if (parent.closest("script, style, textarea, button, .code-copy-btn, .note-search-match")) {
+                return NodeFilter.FILTER_REJECT;
+            }
+            return node.textContent.toLowerCase().includes(query.toLowerCase())
+                ? NodeFilter.FILTER_ACCEPT
+                : NodeFilter.FILTER_REJECT;
+        },
+    });
+
+    const textNodes: Text[] = [];
+    while (walker.nextNode()) {
+        textNodes.push(walker.currentNode as Text);
+    }
+
+    const lowerQuery = query.toLowerCase();
+    for (const textNode of textNodes) {
+        const text = textNode.textContent || "";
+        const lowerText = text.toLowerCase();
+        const fragment = document.createDocumentFragment();
+        let lastIndex = 0;
+        let index = lowerText.indexOf(lowerQuery);
+
+        while (index !== -1) {
+            if (index > lastIndex) {
+                fragment.appendChild(document.createTextNode(text.slice(lastIndex, index)));
+            }
+            const mark = document.createElement("mark");
+            mark.className = "note-search-match";
+            mark.textContent = text.slice(index, index + query.length);
+            fragment.appendChild(mark);
+            matches.push(mark);
+            lastIndex = index + query.length;
+            index = lowerText.indexOf(lowerQuery, lastIndex);
+        }
+
+        if (lastIndex < text.length) {
+            fragment.appendChild(document.createTextNode(text.slice(lastIndex)));
+        }
+        textNode.replaceWith(fragment);
+    }
+
+    return matches;
+}
+
+function selectNoteSearchMatch(nextIndex: number) {
+    if (noteSearchMatches.length === 0) {
+        noteSearchIndex = -1;
+        updateNoteSearchCount();
+        return;
+    }
+
+    noteSearchMatches.forEach((match) => match.classList.remove("active"));
+    noteSearchIndex = (nextIndex + noteSearchMatches.length) % noteSearchMatches.length;
+    const activeMatch = noteSearchMatches[noteSearchIndex];
+    activeMatch.classList.add("active");
+    activeMatch.scrollIntoView({ block: "center", behavior: "smooth" });
+    updateNoteSearchCount();
+}
+
+function updateNoteSearchCount() {
+    if (!noteSearchQuery.trim()) {
+        noteSearchCount.textContent = "0/0";
+        return;
+    }
+    noteSearchCount.textContent =
+        noteSearchMatches.length === 0 ? "0/0" : `${noteSearchIndex + 1}/${noteSearchMatches.length}`;
 }
 
 function jumpToLine(lineNumber: number) {
@@ -3478,10 +3803,6 @@ function setupResizeHandles() {
     const sidebarResize = document.getElementById("sidebar-resize")!;
     const editorPane = document.getElementById("editor-pane")!;
     const editorResize = document.getElementById("editor-resize")!;
-    const outlinePanel = document.getElementById("outline-panel")!;
-    const backlinksPanel = document.getElementById("backlinks-panel")!;
-    // Use outline-resize for right sidebar panel resizing
-    const outlineResize = document.getElementById("outline-resize");
 
     // Sidebar resize
     let isResizingSidebar = false;
@@ -3498,16 +3819,6 @@ function setupResizeHandles() {
         editorResize.classList.add("dragging");
         e.preventDefault();
     });
-
-    // Right sidebar (outline/backlinks) resize
-    let isResizingRightSidebar = false;
-    if (outlineResize) {
-        outlineResize.addEventListener("mousedown", (e) => {
-            isResizingRightSidebar = true;
-            outlineResize.classList.add("dragging");
-            e.preventDefault();
-        });
-    }
 
     document.addEventListener("mousemove", (e) => {
         if (isResizingSidebar) {
@@ -3526,29 +3837,148 @@ function setupResizeHandles() {
                 editorPane.style.width = `${newWidth}px`;
             }
         }
-        if (isResizingRightSidebar) {
-            const rightSidebar = document.getElementById("right-sidebar")!;
-            const rightSidebarRect = rightSidebar.getBoundingClientRect();
-            const newOutlineHeight = e.clientY - rightSidebarRect.top;
-            const totalHeight = rightSidebarRect.height;
-            if (newOutlineHeight >= 80 && newOutlineHeight <= totalHeight - 80) {
-                outlinePanel.style.flex = "none";
-                outlinePanel.style.height = `${newOutlineHeight}px`;
-                backlinksPanel.style.flex = "1";
-            }
-        }
     });
 
     document.addEventListener("mouseup", () => {
         isResizingSidebar = false;
         isResizingEditor = false;
-        isResizingRightSidebar = false;
         sidebarResize.classList.remove("dragging");
         editorResize.classList.remove("dragging");
-        if (outlineResize) {
-            outlineResize.classList.remove("dragging");
-        }
     });
+}
+
+function loadRightSidebarLayout(): RightSidebarLayout {
+    try {
+        return normalizeRightSidebarLayout(JSON.parse(window.localStorage.getItem(RIGHT_SIDEBAR_LAYOUT_KEY) || "null"));
+    } catch {
+        return defaultRightSidebarLayout();
+    }
+}
+
+function saveRightSidebarLayout() {
+    window.localStorage.setItem(RIGHT_SIDEBAR_LAYOUT_KEY, JSON.stringify(rightSidebarLayout));
+}
+
+function setupRightSidebarLayoutControls() {
+    applyRightSidebarLayout();
+
+    rightSidebar.querySelectorAll<HTMLElement>("[data-sidebar-section-toggle]").forEach((header) => {
+        header.addEventListener("click", () => {
+            const section = header.dataset.sidebarSectionToggle as RightSidebarSectionId | undefined;
+            if (!section) return;
+            rightSidebarLayout = toggleRightSidebarSection(rightSidebarLayout, section);
+            applyRightSidebarLayout();
+            saveRightSidebarLayout();
+        });
+    });
+
+    setupRightSidebarResizeHandle("outline-resize", "outline", "outgoing");
+    setupRightSidebarResizeHandle("outgoing-resize", "outgoing", "backlinks");
+}
+
+function getRightSidebarSectionElement(section: RightSidebarSectionId): HTMLElement {
+    return document.querySelector<HTMLElement>(`[data-sidebar-section="${section}"]`)!;
+}
+
+function applyRightSidebarLayout() {
+    for (const section of RIGHT_SIDEBAR_SECTIONS) {
+        const sectionEl = getRightSidebarSectionElement(section);
+        const header = rightSidebar.querySelector<HTMLElement>(`[data-sidebar-section-toggle="${section}"]`);
+        const collapsed = rightSidebarLayout.collapsed[section];
+        sectionEl.classList.toggle("collapsed", collapsed);
+        sectionEl.style.flex = collapsed
+            ? "0 0 auto"
+            : `${Math.max(1, rightSidebarLayout.sizes[section])} 1 0`;
+        header?.setAttribute("aria-expanded", collapsed ? "false" : "true");
+    }
+
+    updateRightSidebarResizeHandleVisibility();
+}
+
+function updateRightSidebarResizeHandleVisibility() {
+    setRightSidebarResizeHandleVisible(
+        "outline-resize",
+        !rightSidebarLayout.collapsed.outline && !rightSidebarLayout.collapsed.outgoing,
+    );
+    setRightSidebarResizeHandleVisible(
+        "outgoing-resize",
+        !rightSidebarLayout.collapsed.outgoing && !rightSidebarLayout.collapsed.backlinks,
+    );
+}
+
+function setRightSidebarResizeHandleVisible(id: string, visible: boolean) {
+    const handle = document.getElementById(id);
+    handle?.classList.toggle("hidden", !visible);
+}
+
+function setupRightSidebarResizeHandle(
+    handleId: string,
+    beforeSection: RightSidebarSectionId,
+    afterSection: RightSidebarSectionId,
+) {
+    const handle = document.getElementById(handleId);
+    if (!handle) return;
+
+    let startY = 0;
+    let startBeforeHeight = 0;
+    let startAfterHeight = 0;
+    let isDragging = false;
+
+    handle.addEventListener("mousedown", (e) => {
+        if (rightSidebarLayout.collapsed[beforeSection] || rightSidebarLayout.collapsed[afterSection]) {
+            return;
+        }
+
+        isDragging = true;
+        startY = e.clientY;
+        startBeforeHeight = getRightSidebarSectionElement(beforeSection).getBoundingClientRect().height;
+        startAfterHeight = getRightSidebarSectionElement(afterSection).getBoundingClientRect().height;
+        captureRightSidebarCurrentSizes();
+        handle.classList.add("dragging");
+        e.preventDefault();
+    });
+
+    document.addEventListener("mousemove", (e) => {
+        if (!isDragging) return;
+
+        const delta = e.clientY - startY;
+        const beforeHeight = startBeforeHeight + delta;
+        const afterHeight = startAfterHeight - delta;
+        if (beforeHeight < 80 || afterHeight < 80) {
+            return;
+        }
+
+        rightSidebarLayout = {
+            ...rightSidebarLayout,
+            sizes: {
+                ...rightSidebarLayout.sizes,
+                [beforeSection]: beforeHeight,
+                [afterSection]: afterHeight,
+            },
+        };
+        applyRightSidebarLayout();
+    });
+
+    document.addEventListener("mouseup", () => {
+        if (!isDragging) return;
+        isDragging = false;
+        handle.classList.remove("dragging");
+        saveRightSidebarLayout();
+    });
+}
+
+function captureRightSidebarCurrentSizes() {
+    const sizes = { ...rightSidebarLayout.sizes };
+    for (const section of RIGHT_SIDEBAR_SECTIONS) {
+        if (rightSidebarLayout.collapsed[section]) {
+            continue;
+        }
+        const height = getRightSidebarSectionElement(section).getBoundingClientRect().height;
+        if (height > 0) {
+            sizes[section] = height;
+        }
+    }
+    rightSidebarLayout = { ...rightSidebarLayout, sizes };
 }
 
 // Utilities
@@ -3969,7 +4399,7 @@ async function initMermaidDiagrams() {
             mermaidDiv.innerHTML = svg;
             mermaidDiv.title = "Click to view fullscreen";
 
-            mermaidDiv.addEventListener("click", () => openMermaidFullscreen(mermaidDiv));
+            container.addEventListener("click", () => openMermaidFullscreen(mermaidDiv));
             container.appendChild(mermaidDiv);
         } catch (err: unknown) {
             // Show error inline below the code block (copyable)
@@ -4161,8 +4591,10 @@ function setupMermaidFullscreenControls() {
     // Pan with mouse drag
     fsContent.addEventListener("mousedown", (e) => {
         isMermaidPanning = true;
+        fsContent.classList.add("panning");
         mermaidStartX = e.clientX - mermaidPanX;
         mermaidStartY = e.clientY - mermaidPanY;
+        e.preventDefault();
     });
 
     document.addEventListener("mousemove", (e) => {
@@ -4174,6 +4606,7 @@ function setupMermaidFullscreenControls() {
 
     document.addEventListener("mouseup", () => {
         isMermaidPanning = false;
+        fsContent.classList.remove("panning");
     });
 
     // Figma-style: Two-finger scroll = pan, Pinch = zoom
@@ -4181,7 +4614,7 @@ function setupMermaidFullscreenControls() {
         if (!fsOverlay.classList.contains("visible")) return;
         e.preventDefault();
 
-        if (e.ctrlKey) {
+        if (e.ctrlKey || e.metaKey || e.shiftKey) {
             // Pinch gesture (macOS trackpad sends ctrlKey=true for pinch)
             const factor = e.deltaY > 0 ? 0.95 : 1.05;
             mermaidZoomAt(factor, e.clientX, e.clientY);

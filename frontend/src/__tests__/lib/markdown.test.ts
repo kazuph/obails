@@ -327,6 +327,33 @@ describe("pipeline regression guards", () => {
   });
 });
 
+describe("footnotes", () => {
+  it("renders footnote references and definitions", () => {
+    const result = parseMarkdown("本文です[^1]\n\n[^1]: 注釈本文");
+
+    expect(result).toContain('class="footnote-ref"');
+    expect(result).toContain('href="#fn-1"');
+    expect(result).toContain('<section class="footnotes">');
+    expect(result).toContain('id="fn-1"');
+    expect(result).toContain("注釈本文");
+    expect(result).toContain('class="footnote-backref"');
+  });
+
+  it("supports markdown inside footnote definitions", () => {
+    const result = parseMarkdown("本文[^note]\n\n[^note]: **強調** と $x_i$");
+
+    expect(result).toContain("<strong>強調</strong>");
+    expect(result).toContain("math-inline");
+  });
+
+  it("does not convert footnotes inside code blocks", () => {
+    const result = parseMarkdown("```\n[^1]\n```\n\n[^1]: note");
+
+    expect(result).toContain("[^1]");
+    expect(result).not.toContain('id="fnref-1"');
+  });
+});
+
 describe("unicode math symbols (KaTeX)", () => {
   it("renders ∇ and ≠ inside math mode", () => {
     const result = parseMarkdown("$∇^2 u ≠ ν$");

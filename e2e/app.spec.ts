@@ -107,6 +107,54 @@ test.describe('Obails App', () => {
     await expect(page.locator('.file-tree')).toBeVisible();
   });
 
+  test('should collapse and resize right sidebar sections persistently', async ({ page }) => {
+    await setupMockBindings(page);
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+
+    const outlinePanel = page.locator('#outline-panel');
+    const outgoingPanel = page.locator('#outgoing-links-panel');
+    const backlinksPanel = page.locator('#backlinks-panel');
+    const rightSidebar = page.locator('#right-sidebar');
+
+    await expect(outlinePanel).toBeVisible();
+    await expect(outgoingPanel).not.toHaveClass(/collapsed/);
+    await expect(backlinksPanel).not.toHaveClass(/collapsed/);
+
+    const outlineBefore = await outlinePanel.evaluate((el) => el.getBoundingClientRect().height);
+    const handleBox = await page.locator('#outline-resize').boundingBox();
+    expect(handleBox).not.toBeNull();
+    await page.mouse.move(handleBox!.x + handleBox!.width / 2, handleBox!.y + handleBox!.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(handleBox!.x + handleBox!.width / 2, handleBox!.y + handleBox!.height / 2 + 90);
+    await page.mouse.up();
+
+    const outlineAfterResize = await outlinePanel.evaluate((el) => el.getBoundingClientRect().height);
+    expect(outlineAfterResize).toBeGreaterThan(outlineBefore + 50);
+
+    const storedAfterResize = await page.evaluate(() =>
+      JSON.parse(window.localStorage.getItem('obails:right-sidebar-layout') || '{}'),
+    );
+    expect(storedAfterResize.sizes.outline).toBeGreaterThan(storedAfterResize.sizes.outgoing);
+
+    await page.locator('[data-sidebar-section-toggle="outgoing"]').click();
+    await page.locator('[data-sidebar-section-toggle="backlinks"]').click();
+    await expect(outgoingPanel).toHaveClass(/collapsed/);
+    await expect(backlinksPanel).toHaveClass(/collapsed/);
+
+    const outlineCollapsedHeight = await outlinePanel.evaluate((el) => el.getBoundingClientRect().height);
+    const sidebarHeight = await rightSidebar.evaluate((el) => el.getBoundingClientRect().height);
+    expect(outlineCollapsedHeight).toBeGreaterThan(sidebarHeight * 0.75);
+
+    await page.reload();
+    await page.waitForLoadState('domcontentloaded');
+    await expect(page.locator('#outgoing-links-panel')).toHaveClass(/collapsed/);
+    await expect(page.locator('#backlinks-panel')).toHaveClass(/collapsed/);
+    const outlineAfterReload = await page.locator('#outline-panel').evaluate((el) => el.getBoundingClientRect().height);
+    const sidebarAfterReload = await page.locator('#right-sidebar').evaluate((el) => el.getBoundingClientRect().height);
+    expect(outlineAfterReload).toBeGreaterThan(sidebarAfterReload * 0.75);
+  });
+
   test('should show audio-majority folder files in ascending order', async ({ page }) => {
     await setupMockBindings(page, {
       fileInfos: [
@@ -505,6 +553,78 @@ test.describe('Obails App', () => {
     await expect(preview.locator('code', { hasText: '$not_math$' })).toBeVisible();
   });
 
+  test('should open preview images in a lightbox', async ({ page }) => {
+    await setupMockBindings(page);
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+
+    await page.locator('.file-item[data-path="Image Test.md"]').click();
+    const img = page.locator('#preview img').first();
+    await expect(img).toHaveAttribute('src', /^data:image\/png;base64,/);
+    const isCentered = await img.evaluate((el) => {
+      const imageRect = el.getBoundingClientRect();
+      const previewRect = el.parentElement!.getBoundingClientRect();
+      const imageCenter = imageRect.left + imageRect.width / 2;
+      const previewCenter = previewRect.left + previewRect.width / 2;
+      return Math.abs(imageCenter - previewCenter) < 2;
+    });
+    expect(isCentered).toBe(true);
+
+    await img.click();
+    await expect(page.locator('#image-fullscreen-overlay')).toBeVisible();
+    await expect(page.locator('#image-fs-preview')).toHaveAttribute('src', /^data:image\/png;base64,/);
+
+    await page.locator('#image-fs-close').click();
+    await expect(page.locator('#image-fullscreen-overlay')).toBeHidden();
+  });
+
+  test('should search within a note with Cmd+F', async ({ page }) => {
+    await setupMockBindings(page);
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+
+    await page.locator('.file-item[data-path="Welcome.md"]').click();
+    await page.keyboard.press('ControlOrMeta+f');
+    await expect(page.locator('#note-search')).toBeVisible();
+
+    await page.locator('#note-search-input').fill('Features');
+    await expect(page.locator('.note-search-match')).toHaveCount(3);
+    await expect(page.locator('#note-search-count')).toHaveText('1/3');
+
+    await page.keyboard.press('Enter');
+    await expect(page.locator('#note-search-count')).toHaveText('2/3');
+
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#note-search')).toBeHidden();
+    await expect(page.locator('.note-search-match')).toHaveCount(0);
+  });
+
+  test('should copy code blocks from the preview', async ({ page }) => {
+    await setupMockBindings(page);
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+
+    await page.locator('.file-item[data-path="Code Examples.md"]').click();
+    const copyButton = page.locator('#preview pre.code-block .code-copy-btn').first();
+    await expect(copyButton).toBeAttached();
+    await copyButton.click({ force: true });
+
+    const copiedTexts = await page.evaluate(() => (window as any).__wailsMockClipboardTexts());
+    expect(copiedTexts.at(-1)).toContain('interface Note');
+  });
+
+  test('should jump to another note when clicking a wiki link', async ({ page }) => {
+    await setupMockBindings(page);
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+
+    await page.locator('.file-item[data-path="Welcome.md"]').click();
+    await page.locator('#preview .wiki-link[data-link="Features"]').first().click();
+
+    await expect(page.locator('#editor-title')).toHaveText('Features');
+    await expect(page.locator('.file-item[data-path="Features.md"]')).toHaveClass(/active/);
+  });
+
   test('should show preview only by default and toggle source with the code button', async ({ page }) => {
     await setupMockBindings(page);
     await page.goto('/');
@@ -861,7 +981,7 @@ test.describe('Obails App', () => {
     await page.waitForLoadState('networkidle');
 
     await expect(page.locator('.backlinks-panel')).toBeVisible();
-    await expect(page.locator('.backlinks-panel h3')).toHaveText('Backlinks');
+    await expect(page.locator('.backlinks-panel .sidebar-section-header')).toContainText('Backlinks');
   });
 });
 
@@ -924,6 +1044,20 @@ test.describe('Editor', () => {
     await expect(wikiLink).toBeVisible();
     await expect(wikiLink).toHaveAttribute('data-link', 'my-note');
   });
+
+  test('should render footnotes in preview', async ({ page }) => {
+    await setupMockBindings(page);
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+    await showSourceEditor(page);
+
+    await page.locator('#editor').fill('本文です[^1]\n\n[^1]: 注釈本文');
+
+    await expect(page.locator('#preview .footnote-ref')).toBeVisible();
+    await expect(page.locator('#preview .footnotes')).toBeVisible();
+    await expect(page.locator('#preview .footnotes')).toContainText('注釈本文');
+    await expect(page.locator('#preview .footnote-backref')).toBeVisible();
+  });
 });
 
 test.describe('Mermaid', () => {
@@ -945,6 +1079,37 @@ test.describe('Mermaid', () => {
     await expect(page.locator('#mermaid-reset')).toBeAttached();
     await expect(page.locator('#mermaid-close')).toBeAttached();
     await expect(page.locator('#mermaid-maximize-window')).toBeAttached();
+  });
+
+  test('should zoom and pan mermaid diagrams in fullscreen', async ({ page }) => {
+    await setupMockBindings(page);
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+
+    await page.locator('.file-item[data-path="Mermaid Demo.md"]').click();
+    const diagram = page.locator('#preview .mermaid-container').last();
+    await expect(diagram.locator('svg')).toBeVisible({ timeout: 10000 });
+
+    await diagram.scrollIntoViewIfNeeded();
+    await diagram.click();
+    await expect(page.locator('#mermaid-fullscreen')).toHaveClass(/visible/);
+    const zoomBefore = await page.locator('#mermaid-zoom-info').textContent();
+
+    await page.locator('#mermaid-zoom-in').click();
+    await expect(page.locator('#mermaid-zoom-info')).not.toHaveText(zoomBefore || '');
+
+    const transformBeforePan = await page.locator('#mermaid-fs-wrapper').evaluate((el) => getComputedStyle(el).transform);
+    const box = await page.locator('#mermaid-fs-content').boundingBox();
+    expect(box).not.toBeNull();
+    await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+    await page.mouse.down();
+    await expect(page.locator('#mermaid-fs-content')).toHaveClass(/panning/);
+    await page.mouse.move(box!.x + box!.width / 2 + 80, box!.y + box!.height / 2 + 40);
+    await page.mouse.up();
+    await expect(page.locator('#mermaid-fs-content')).not.toHaveClass(/panning/);
+
+    const transformAfterPan = await page.locator('#mermaid-fs-wrapper').evaluate((el) => getComputedStyle(el).transform);
+    expect(transformAfterPan).not.toBe(transformBeforePan);
   });
 });
 
@@ -1166,6 +1331,31 @@ Final content.`);
     // Verify text content
     await expect(outlineItems.nth(0)).toContainText('First Heading');
     await expect(outlineItems.nth(1)).toContainText('Second Heading');
+  });
+
+  test('should highlight the active outline item while scrolling the preview', async ({ page }) => {
+    await setupMockBindings(page);
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+    await showSourceEditor(page);
+
+    const lines = ['# Top Heading'];
+    for (let i = 0; i < 45; i++) lines.push(`Top paragraph ${i + 1}.`);
+    lines.push('## Middle Heading');
+    for (let i = 0; i < 45; i++) lines.push(`Middle paragraph ${i + 1}.`);
+    lines.push('## Bottom Heading');
+    for (let i = 0; i < 30; i++) lines.push(`Bottom paragraph ${i + 1}.`);
+
+    await page.locator('#editor').fill(lines.join('\n\n'));
+    await expect(page.locator('#outline-list .outline-item')).toHaveCount(3);
+    await expect(page.locator('#outline-list .outline-item.active')).toContainText('Top Heading');
+
+    await page.locator('#preview').evaluate((el) => {
+      el.scrollTop = el.scrollHeight;
+      el.dispatchEvent(new Event('scroll', { bubbles: true }));
+    });
+
+    await expect(page.locator('#outline-list .outline-item.active')).toContainText('Bottom Heading');
   });
 
   test('should scroll to correct position on single outline click', async ({ page }) => {

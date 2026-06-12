@@ -30,6 +30,11 @@ type FrontMatterCell = {
   values: string[];
 };
 
+type FootnoteDefinition = {
+  label: string;
+  body: string;
+};
+
 function splitFrontMatterRows(block: string): FrontMatterCell[] {
   const rows: FrontMatterCell[] = [];
   const lines = block.split(/\r?\n/);
@@ -95,6 +100,40 @@ function renderFrontMatter(block: string): string {
         <tbody>${rowsHtml}</tbody>
       </table>
     </div>`;
+}
+
+function extractFootnotes(content: string): { body: string; footnotes: FootnoteDefinition[] } {
+  const lines = content.split("\n");
+  const bodyLines: string[] = [];
+  const footnotes: FootnoteDefinition[] = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const match = /^\[\^([^\]\s]+)\]:[ \t]*(.*)$/.exec(lines[i]);
+    if (!match) {
+      bodyLines.push(lines[i]);
+      i++;
+      continue;
+    }
+
+    const noteLines = [match[2]];
+    i++;
+    while (i < lines.length && /^(?:[ \t]{2,4}|\t)/.test(lines[i])) {
+      noteLines.push(lines[i].replace(/^(?:[ \t]{2,4}|\t)/, ""));
+      i++;
+    }
+    footnotes.push({
+      label: match[1],
+      body: noteLines.join("\n").trim(),
+    });
+  }
+
+  return { body: bodyLines.join("\n").trimEnd(), footnotes };
+}
+
+function footnoteDomId(label: string): string {
+  const normalized = label.trim().replace(/\s+/g, "-").replace(/[^A-Za-z0-9_-]/g, "-");
+  return normalized || "note";
 }
 
 const IMAGE_EXTENSIONS = /\.(png|jpg|jpeg|gif|webp|svg|bmp)$/i;
@@ -278,6 +317,17 @@ function protectWikiLinks(src: string, store: TokenStore): string {
   });
 }
 
+function protectFootnoteRefs(src: string, store: TokenStore): string {
+  return src.replace(/\[\^([^\]\s]+)\]/g, (_, label) => {
+    const id = footnoteDomId(label);
+    return makeToken(
+      store,
+      "F",
+      `<sup class="footnote-ref" id="fnref-${escapeHtml(id)}"><a href="#fn-${escapeHtml(id)}" data-footnote-ref="${escapeHtml(label)}">${escapeHtml(label)}</a></sup>`,
+    );
+  });
+}
+
 // Obsidian callout タイプ → アイコン
 const CALLOUT_ICONS: Record<string, string> = {
   note: "📝",
@@ -396,20 +446,48 @@ function renderMarkdownBody(body: string, store: TokenStore): string {
   return toHtml(fixed);
 }
 
+function renderFootnoteBody(body: string): string {
+  const store = newStore();
+  let processed = protectCode(body, store);
+  processed = protectMath(processed, store);
+  processed = protectWikiLinks(processed, store);
+  processed = protectFootnoteRefs(processed, store);
+  const codeRestored = restoreTokensOfKind(processed, store, "C");
+  return restoreTokens(renderMarkdownBody(codeRestored, store), store);
+}
+
+function renderFootnotes(footnotes: FootnoteDefinition[]): string {
+  if (footnotes.length === 0) {
+    return "";
+  }
+
+  const items = footnotes
+    .map((footnote) => {
+      const id = footnoteDomId(footnote.label);
+      const bodyHtml = renderFootnoteBody(footnote.body || " ");
+      return `<li id="fn-${escapeHtml(id)}" data-footnote-label="${escapeHtml(footnote.label)}">${bodyHtml}<a class="footnote-backref" href="#fnref-${escapeHtml(id)}" aria-label="Back to reference">↩</a></li>`;
+    })
+    .join("");
+
+  return `<section class="footnotes"><ol>${items}</ol></section>`;
+}
+
 /**
  * Parses markdown content to HTML with wiki-link support
  */
 export function parseMarkdown(content: string): string {
   const { block, body } = extractFrontMatter(content);
   const trimmedBody = body.replace(/^\r?\n+/, "");
+  const { body: bodyWithoutFootnotes, footnotes } = extractFootnotes(trimmedBody);
   const frontMatterHtml = block
     ? `<section class="frontmatter"><details class="frontmatter-details"><summary class="frontmatter-summary" aria-label="Toggle metadata"><span class="frontmatter-summary-label">Metadata</span><span class="frontmatter-summary-icon" aria-hidden="true"></span></summary>${renderFrontMatter(block)}</details></section>`
     : "";
 
   const store = newStore();
-  let processed = protectCode(trimmedBody.replace(/\r\n/g, "\n"), store);
+  let processed = protectCode(bodyWithoutFootnotes.replace(/\r\n/g, "\n"), store);
   processed = protectMath(processed, store);
   processed = protectWikiLinks(processed, store);
+  processed = protectFootnoteRefs(processed, store);
 
   // コードは toHtml に普通に処理させたいので先に復元する
   // （数式・wiki・callout のトークンはコード退避後に作られたため衝突しない）
@@ -418,7 +496,7 @@ export function parseMarkdown(content: string): string {
 
   // 数式・wiki・callout の HTML を復元
   // （旧 convertWikiLinks の後段適用はコードブロック内まで変換してしまうため廃止）
-  return restoreTokens(html, store);
+  return `${restoreTokens(html, store)}${renderFootnotes(footnotes)}`;
 }
 
 function restoreTokensOfKind(src: string, store: TokenStore, kind: string): string {

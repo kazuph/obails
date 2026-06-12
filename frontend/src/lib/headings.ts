@@ -41,8 +41,8 @@ export function extractHeadings(content: string): Heading[] {
 export function renderOutlineHTML(headings: Heading[]): string {
   return headings
     .map(
-      (h) => `
-        <div class="outline-item h${h.level}" data-line="${h.line}">
+      (h, index) => `
+        <div class="outline-item h${h.level}" data-line="${h.line}" data-heading-index="${index}">
             ${h.text}
         </div>
     `

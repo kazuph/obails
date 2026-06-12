@@ -24,6 +24,7 @@ Examples:
   ob upsert file=MyNote content="New entry"
   ob upsert file=MyNote --content-file entry.md
   cat entry.md | ob upsert file=MyNote --content-file -
+  # content= and --content-file cannot be used together.
   ob upsert file=MyNote template=meeting content="## Agenda"
   ob upsert file=MyNote content="Section item" section="## Notes"`,
 	RunE: runUpsert,

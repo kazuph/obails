@@ -80,6 +80,13 @@
                 <div class="preview-pane" id="preview-pane">
                     <div class="pane-header" id="preview-header">
                         <span class="pane-title" id="preview-title">Preview</span>
+                        <div id="note-search" class="note-search" hidden>
+                            <input id="note-search-input" type="search" placeholder="Find in note" aria-label="Find in note" />
+                            <span id="note-search-count" class="note-search-count">0/0</span>
+                            <button id="note-search-prev" type="button" title="Previous match" aria-label="Previous match">↑</button>
+                            <button id="note-search-next" type="button" title="Next match" aria-label="Next match">↓</button>
+                            <button id="note-search-close" type="button" title="Close find" aria-label="Close find">×</button>
+                        </div>
                     </div>
                     <div id="preview"></div>
                 </div>
@@ -148,23 +155,32 @@
         </div>
 
         <div class="right-sidebar" id="right-sidebar">
-            <div class="outline-panel" id="outline-panel">
-                <h3>Outline</h3>
-                <div id="outline-list">
+            <div class="outline-panel sidebar-section" id="outline-panel" data-sidebar-section="outline">
+                <button class="sidebar-section-header" type="button" data-sidebar-section-toggle="outline" aria-expanded="true" aria-controls="outline-list">
+                    <span>Outline</span>
+                    <span class="sidebar-section-chevron" aria-hidden="true">▾</span>
+                </button>
+                <div id="outline-list" class="sidebar-section-body">
                     <!-- Outline will be rendered here -->
                 </div>
             </div>
             <div class="resize-handle horizontal" id="outline-resize"></div>
-            <div class="outgoing-links-panel" id="outgoing-links-panel">
-                <h3>Outgoing Links</h3>
-                <div id="outgoing-links-list">
+            <div class="outgoing-links-panel sidebar-section" id="outgoing-links-panel" data-sidebar-section="outgoing">
+                <button class="sidebar-section-header" type="button" data-sidebar-section-toggle="outgoing" aria-expanded="true" aria-controls="outgoing-links-list">
+                    <span>Outgoing Links</span>
+                    <span class="sidebar-section-chevron" aria-hidden="true">▾</span>
+                </button>
+                <div id="outgoing-links-list" class="sidebar-section-body">
                     <!-- Outgoing links will be rendered here -->
                 </div>
             </div>
             <div class="resize-handle horizontal" id="outgoing-resize"></div>
-            <div class="backlinks-panel" id="backlinks-panel">
-                <h3>Backlinks</h3>
-                <div id="backlinks-list">
+            <div class="backlinks-panel sidebar-section" id="backlinks-panel" data-sidebar-section="backlinks">
+                <button class="sidebar-section-header" type="button" data-sidebar-section-toggle="backlinks" aria-expanded="true" aria-controls="backlinks-list">
+                    <span>Backlinks</span>
+                    <span class="sidebar-section-chevron" aria-hidden="true">▾</span>
+                </button>
+                <div id="backlinks-list" class="sidebar-section-body">
                     <!-- Backlinks will be rendered here -->
                 </div>
             </div>
@@ -287,6 +303,10 @@
                     <div class="shortcut-row">
                         <span class="shortcut-keys"><kbd class="mod-key">⌘</kbd> + <kbd>P</kbd></span>
                         <span class="shortcut-desc">Quick Open (Search Files)</span>
+                    </div>
+                    <div class="shortcut-row">
+                        <span class="shortcut-keys"><kbd class="mod-key">⌘</kbd> + <kbd>F</kbd></span>
+                        <span class="shortcut-desc">Find in Note</span>
                     </div>
                     <div class="shortcut-row">
                         <span class="shortcut-keys"><kbd class="mod-key">⌘</kbd> + <kbd>G</kbd></span>

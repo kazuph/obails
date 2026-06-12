@@ -117,6 +117,26 @@ function addMockMarkdownFile(files: Record<string, string>, fileInfos: any[], re
   });
 }
 
+function resolveMockLink(files: Record<string, string>, linkText: string): [string, boolean] {
+  const normalized = linkText.trim().replace(/^\/+/, '');
+  const withoutAnchor = normalized.split('#')[0];
+  const candidates = [
+    withoutAnchor,
+    withoutAnchor.endsWith('.md') ? withoutAnchor : `${withoutAnchor}.md`,
+  ];
+
+  for (const candidate of candidates) {
+    if (Object.prototype.hasOwnProperty.call(files, candidate)) {
+      return [candidate, true];
+    }
+  }
+
+  const basename = withoutAnchor.split('/').pop() || withoutAnchor;
+  const basenameWithExt = basename.endsWith('.md') ? basename : `${basename}.md`;
+  const hit = Object.keys(files).find((key) => key.split('/').pop() === basenameWithExt);
+  return hit ? [hit, true] : ['', false];
+}
+
 type MockLastOpenedFile = { path: string; fileType: string } | null;
 
 type MockBindingOptions = {
@@ -336,6 +356,10 @@ export async function setupMockBindings(page: Page, options: MockBindingOptions 
       case 1099033032:
         value = [];
         break;
+      // LinkService.ResolveLink
+      case 685326756:
+        value = resolveMockLink(files, String(args[0] || ''));
+        break;
       // StateService.GetLastOpenedFile
       case 235349142:
         value = lastOpenedFile;
@@ -364,7 +388,7 @@ export async function setupMockBindings(page: Page, options: MockBindingOptions 
   });
 
   // Wailsランタイムをモック
-  await page.addInitScript(({ files, fileInfos, initialLastOpenedFile }) => {
+    await page.addInitScript(({ files, fileInfos, initialLastOpenedFile }) => {
     // @wailsio/runtime の $Call.ByID をモック
     (window as any).__wails_mock_files = files;
     (window as any).__wails_mock_fileInfos = fileInfos;
@@ -373,11 +397,31 @@ export async function setupMockBindings(page: Page, options: MockBindingOptions 
     (window as any).__wails_mock_readBinaryCalls = [];
 
     // CancellablePromise風のオブジェクトを作成
-    const createMockPromise = <T>(value: T): Promise<T> & { cancel: () => void } => {
-      const p = Promise.resolve(value) as Promise<T> & { cancel: () => void };
-      p.cancel = () => {};
-      return p;
-    };
+      const createMockPromise = <T>(value: T): Promise<T> & { cancel: () => void } => {
+        const p = Promise.resolve(value) as Promise<T> & { cancel: () => void };
+        p.cancel = () => {};
+        return p;
+      };
+
+      const resolveMockLink = (files: Record<string, string>, linkText: string): [string, boolean] => {
+        const normalized = linkText.trim().replace(/^\/+/, '');
+        const withoutAnchor = normalized.split('#')[0];
+        const candidates = [
+          withoutAnchor,
+          withoutAnchor.endsWith('.md') ? withoutAnchor : `${withoutAnchor}.md`,
+        ];
+
+        for (const candidate of candidates) {
+          if (Object.prototype.hasOwnProperty.call(files, candidate)) {
+            return [candidate, true];
+          }
+        }
+
+        const basename = withoutAnchor.split('/').pop() || withoutAnchor;
+        const basenameWithExt = basename.endsWith('.md') ? basename : `${basename}.md`;
+        const hit = Object.keys(files).find((key) => key.split('/').pop() === basenameWithExt);
+        return hit ? [hit, true] : ['', false];
+      };
 
     // Wailsランタイムのモック
     const mockRuntime = {
@@ -519,6 +563,10 @@ export async function setupMockBindings(page: Page, options: MockBindingOptions 
             // LinkService.GetLinkInfo
             case 1099033032:
               return createMockPromise([]);
+
+            // LinkService.ResolveLink
+            case 685326756:
+              return createMockPromise(resolveMockLink(files, String(args[0] || '')));
 
             // StateService.GetLastOpenedFile
             case 235349142:
