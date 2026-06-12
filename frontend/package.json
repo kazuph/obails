@@ -16,10 +16,12 @@
     "@mizchi/markdown": "^0.4.1",
     "@wailsio/runtime": "latest",
     "force-graph": "^1.51.0",
+    "katex": "^0.17.0",
     "mermaid": "^11.12.2",
     "pdfjs-dist": "^5.4.530"
   },
   "devDependencies": {
+    "@types/katex": "^0.16.8",
     "@vitest/coverage-v8": "^4.0.17",
     "jsdom": "^27.4.0",
     "typescript": "^5.0.0",

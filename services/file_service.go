@@ -571,7 +571,44 @@ func (s *FileService) ResolveImagePath(imagePath string, notePath string) (strin
 		}
 	}
 
+	// 4. Obsidian resolves bare filenames anywhere in the vault — walk as a last resort.
+	if base := filepath.Base(filepath.FromSlash(imagePath)); base == filepath.FromSlash(imagePath) {
+		if found, err := s.findFileByName(vaultPath, base); err == nil && found != "" {
+			return found, nil
+		}
+	}
+
 	return "", errors.New("image not found: " + imagePath)
+}
+
+// findFileByName walks the vault looking for the first file whose name matches exactly.
+// Hidden directories (e.g. .obsidian, .git) are skipped.
+func (s *FileService) findFileByName(vaultPath, name string) (string, error) {
+	var found string
+	err := filepath.WalkDir(vaultPath, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			if path != vaultPath && strings.HasPrefix(d.Name(), ".") {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if d.Name() == name {
+			rel, relErr := filepath.Rel(vaultPath, path)
+			if relErr != nil {
+				return nil
+			}
+			found = filepath.ToSlash(rel)
+			return filepath.SkipAll
+		}
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	return found, nil
 }
 
 // ImportExternalFile copies a file from an absolute path on disk into the vault.

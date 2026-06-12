@@ -749,6 +749,29 @@ func TestFileService_ResolveImagePath(t *testing.T) {
 		}
 	})
 
+	t.Run("resolve bare filename anywhere in the vault (recursive)", func(t *testing.T) {
+		os.MkdirAll(filepath.Join(tmpDir, "attachment", "kimura-scattering"), 0755)
+		os.WriteFile(filepath.Join(tmpDir, "attachment", "kimura-scattering", "fig1_geometry_3d.png"), []byte("PNG"), 0644)
+
+		resolved, err := fs.ResolveImagePath("fig1_geometry_3d.png", "03_papers/note.md")
+		if err != nil {
+			t.Fatalf("ResolveImagePath failed: %v", err)
+		}
+		if resolved != "attachment/kimura-scattering/fig1_geometry_3d.png" {
+			t.Errorf("Expected recursive hit, got %q", resolved)
+		}
+	})
+
+	t.Run("recursive search skips hidden directories", func(t *testing.T) {
+		os.MkdirAll(filepath.Join(tmpDir, ".obsidian"), 0755)
+		os.WriteFile(filepath.Join(tmpDir, ".obsidian", "hidden-only.png"), []byte("PNG"), 0644)
+
+		_, err := fs.ResolveImagePath("hidden-only.png", "")
+		if err == nil {
+			t.Error("Expected error for image only present in hidden directory")
+		}
+	})
+
 	t.Run("not found returns error", func(t *testing.T) {
 		_, err := fs.ResolveImagePath("nonexistent.png", "")
 		if err == nil {

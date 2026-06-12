@@ -1813,6 +1813,106 @@ body {
     color: var(--error);
 }
 
+/* Math (KaTeX) */
+.math-block {
+    margin: 16px 0;
+    padding: 8px 12px;
+    overflow-x: auto;
+    overflow-y: hidden;
+}
+
+.math-block .katex-display {
+    margin: 0;
+}
+
+.math-inline .katex {
+    font-size: 1.05em;
+}
+
+code.math-error {
+    color: var(--error);
+    background: color-mix(in srgb, var(--error) 12%, transparent);
+    border-radius: 4px;
+    padding: 1px 5px;
+}
+
+/* Obsidian Callouts */
+.callout {
+    --callout-color: var(--accent);
+    margin: 16px 0;
+    border-radius: var(--radius-m, 8px);
+    border: 1px solid color-mix(in srgb, var(--callout-color) 35%, transparent);
+    border-left: 4px solid var(--callout-color);
+    background: color-mix(in srgb, var(--callout-color) 8%, var(--bg-secondary));
+    overflow: hidden;
+}
+
+.callout-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    font-weight: 600;
+    color: color-mix(in srgb, var(--callout-color) 75%, var(--text-primary));
+}
+
+details.callout > summary.callout-title {
+    cursor: pointer;
+    list-style: none;
+}
+
+details.callout > summary.callout-title::-webkit-details-marker {
+    display: none;
+}
+
+details.callout .callout-fold {
+    margin-left: auto;
+    transition: transform 0.15s ease;
+}
+
+details.callout .callout-fold::before {
+    content: "›";
+    display: inline-block;
+    font-size: 18px;
+    transform: rotate(90deg);
+}
+
+details.callout:not([open]) .callout-fold::before {
+    transform: rotate(0deg);
+}
+
+.callout-icon {
+    flex: none;
+    line-height: 1;
+}
+
+.callout-content {
+    padding: 2px 14px 12px;
+}
+
+.callout-content > :first-child {
+    margin-top: 0;
+}
+
+.callout-content > :last-child {
+    margin-bottom: 0;
+}
+
+/* Callout color per type */
+.callout[data-callout="note"] { --callout-color: #448aff; }
+.callout[data-callout="abstract"], .callout[data-callout="summary"], .callout[data-callout="tldr"] { --callout-color: #00b0ff; }
+.callout[data-callout="info"] { --callout-color: #00b8d4; }
+.callout[data-callout="todo"] { --callout-color: #00b8d4; }
+.callout[data-callout="tip"], .callout[data-callout="hint"], .callout[data-callout="important"] { --callout-color: #00bfa5; }
+.callout[data-callout="success"], .callout[data-callout="check"], .callout[data-callout="done"] { --callout-color: #00c853; }
+.callout[data-callout="question"], .callout[data-callout="help"], .callout[data-callout="faq"] { --callout-color: #ffb300; }
+.callout[data-callout="warning"], .callout[data-callout="caution"], .callout[data-callout="attention"] { --callout-color: #ff9100; }
+.callout[data-callout="failure"], .callout[data-callout="fail"], .callout[data-callout="missing"] { --callout-color: #ff5252; }
+.callout[data-callout="danger"], .callout[data-callout="error"] { --callout-color: #ff1744; }
+.callout[data-callout="bug"] { --callout-color: #f50057; }
+.callout[data-callout="example"] { --callout-color: #7c4dff; }
+.callout[data-callout="quote"], .callout[data-callout="cite"] { --callout-color: #9e9e9e; }
+
 /* Mermaid Container */
 .mermaid-container {
     position: relative;

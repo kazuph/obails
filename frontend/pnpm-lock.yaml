@@ -17,6 +17,9 @@ importers:
       force-graph:
         specifier: ^1.51.0
         version: 1.51.0
+      katex:
+        specifier: ^0.17.0
+        version: 0.17.0
       mermaid:
         specifier: ^11.12.2
         version: 11.12.2
@@ -24,6 +27,9 @@ importers:
         specifier: ^5.4.530
         version: 5.4.530
     devDependencies:
+      '@types/katex':
+        specifier: ^0.16.8
+        version: 0.16.8
       '@vitest/coverage-v8':
         specifier: ^4.0.17
         version: 4.0.17(vitest@4.0.17(jsdom@27.4.0))
@@ -777,6 +783,9 @@ packages:
   '@types/geojson@7946.0.16':
     resolution: {integrity: sha512-6C8nqWur3j98U6+lXDfTUWIfgvZU+EumvpHKcYjujKH7woYyLj2sUmff0tRhrqM7BohUw7Pz3ZB1jj2gW9Fvmg==}
 
+  '@types/katex@0.16.8':
+    resolution: {integrity: sha512-trgaNyfU+Xh2Tc+ABIb44a5AYUpicB3uwirOioeOkNPPbmgRNtcWyDeeFRzjPZENO9Vq8gvVqfhaaXWLlevVwg==}
+
   '@types/trusted-types@2.0.7':
     resolution: {integrity: sha512-ScaPdn1dQczgbl0QFTeTOmVHFULt394XJgOQNoyVhZ6r2vLnMLJfBPd53SB52T/3G36VI1/g2MZaX0cwDuXsfw==}
 
@@ -1195,6 +1204,10 @@ packages:
 
   katex@0.16.27:
     resolution: {integrity: sha512-aeQoDkuRWSqQN6nSvVCEFvfXdqo1OQiCmmW1kc9xSdjutPv7BGO7pqY9sQRJpMOGrEdfDgF2TfRXe5eUAD2Waw==}
+    hasBin: true
+
+  katex@0.17.0:
+    resolution: {integrity: sha512-Vdw0ATsQ9V+LuegM/BTwQqV/6cTl5lbGcIrU+BCgLxyf6bo38ybOr372tuSIxir3CN720flu1meYR6XzNMwQnw==}
     hasBin: true
 
   khroma@2.1.0:
@@ -2075,6 +2088,8 @@ snapshots:
 
   '@types/geojson@7946.0.16': {}
 
+  '@types/katex@0.16.8': {}
+
   '@types/trusted-types@2.0.7':
     optional: true
 
@@ -2598,6 +2613,10 @@ snapshots:
       lodash-es: 4.17.22
 
   katex@0.16.27:
+    dependencies:
+      commander: 8.3.0
+
+  katex@0.17.0:
     dependencies:
       commander: 8.3.0
 

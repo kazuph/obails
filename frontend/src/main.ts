@@ -11,6 +11,7 @@ import { Clipboard, Events } from "@wailsio/runtime";
 import mermaid from "mermaid";
 import hljs from "highlight.js";
 import "highlight.js/styles/github-dark.css";
+import "katex/dist/katex.min.css";
 import ForceGraph from "force-graph";
 import { debounce } from "./lib/utils";
 import {

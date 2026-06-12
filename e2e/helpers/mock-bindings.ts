@@ -228,6 +228,23 @@ export async function setupMockBindings(page: Page, options: MockBindingOptions 
         readBinaryCalls.push(String(args[0] || ''));
         value = files[args[0]] || '';
         break;
+      // FileService.ResolveImagePath（実装と同様にベースネームをvault全体から解決）
+      case 2923647032: {
+        const imagePath = String(args[0] || '');
+        if (Object.prototype.hasOwnProperty.call(files, imagePath)) {
+          value = imagePath;
+        } else {
+          const base = imagePath.split('/').pop();
+          const hit = Object.keys(files).find((key) => key.split('/').pop() === base);
+          if (hit) {
+            value = hit;
+          } else {
+            await route.fulfill({ status: 500, contentType: 'text/plain', body: 'image not found' });
+            return;
+          }
+        }
+        break;
+      }
       // FileService.ImportExternalFile
       case 3954866026: {
         const sourcePath = String(args[0] || '');

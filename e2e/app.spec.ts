@@ -464,6 +464,32 @@ test.describe('Obails App', () => {
     await expect(activeItem).toHaveAttribute('data-path', /^dailynotes\//);
   });
 
+  test('should render math, callouts, underscore wiki images and empty-header tables in preview', async ({ page }) => {
+    await setupMockBindings(page);
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+
+    await page.locator('.file-item[data-path="Math Callout Test.md"]').click();
+    await expect(page.locator('#editor-title')).toHaveText('Math Callout Test');
+
+    const preview = page.locator('#preview');
+    // 数式（KaTeX）
+    await expect(preview.locator('.math-block .katex').first()).toBeVisible();
+    await expect(preview.locator('.math-inline .katex').first()).toBeVisible();
+    // Callout
+    await expect(preview.locator('.callout[data-callout="tip"]')).toBeVisible();
+    await expect(preview.locator('details.callout[data-callout="question"]')).toHaveCount(1);
+    await expect(preview.locator('.callout[data-callout="warning"] .callout-title-text')).toHaveText('Warning');
+    // アンダースコア入り画像が data URI で解決される
+    const img = preview.locator('img.vault-image');
+    await expect(img).toHaveAttribute('data-vault-path', 'fig_sample_image_3d.png');
+    await expect(img).toHaveAttribute('src', /^data:image\/png;base64,/);
+    // 空ヘッダ表
+    await expect(preview.locator('table td', { hasText: '解像度' })).toBeVisible();
+    // コードブロックは無傷
+    await expect(preview.locator('code', { hasText: '$not_math$' })).toBeVisible();
+  });
+
   test('should show Open Finder for folder context menu', async ({ page }) => {
     await setupMockBindings(page);
     await page.goto('/');
