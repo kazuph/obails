@@ -19,6 +19,8 @@ heading of the same or higher level).
 
 Examples:
   ob append file=MyNote content="New paragraph"
+  ob append file=MyNote --content-file paragraph.md
+  cat paragraph.md | ob append file=MyNote --content-file -
   ob append path=folder/note.md content="Added text"
   ob append file=MyNote content="Section content" section="## Notes"
   ob append file=MyNote content="inline text" inline=true`,

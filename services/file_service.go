@@ -132,6 +132,31 @@ func (s *FileService) DeletePath(relativePath string) error {
 	return os.Remove(fullPath)
 }
 
+// TrashPath moves a file or directory to the macOS Trash using the configured
+// trash command. It never falls back to permanent deletion.
+func (s *FileService) TrashPath(relativePath string) error {
+	fullPath, err := s.resolveFullPath(relativePath, false)
+	if err != nil {
+		return err
+	}
+	if _, err := os.Stat(fullPath); err != nil {
+		return err
+	}
+	if _, err := exec.LookPath("trash"); err != nil {
+		return fmt.Errorf("trash command not found; install trash or use --force for permanent delete: %w", err)
+	}
+
+	output, err := exec.Command("trash", fullPath).CombinedOutput()
+	if err != nil {
+		detail := strings.TrimSpace(string(output))
+		if detail != "" {
+			return fmt.Errorf("failed to move to trash: %w: %s", err, detail)
+		}
+		return fmt.Errorf("failed to move to trash: %w", err)
+	}
+	return nil
+}
+
 // MoveFile moves a file from one location to another
 func (s *FileService) MoveFile(sourcePath string, destPath string) error {
 	sourceFullPath, err := s.resolveFullPath(sourcePath, false)

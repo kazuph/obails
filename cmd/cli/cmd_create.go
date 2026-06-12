@@ -19,6 +19,8 @@ var createCmd = &cobra.Command{
 Examples:
   ob create name=MyNote
   ob create name=MyNote content="Hello world"
+  ob create name=MyNote --content-file note.md
+  cat note.md | ob create name=MyNote --content-file -
   ob create name=MyNote template=daily_note
   ob create name=MyNote folder=subfolder
   ob create name=MyNote overwrite=true`,

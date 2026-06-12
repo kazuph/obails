@@ -74,6 +74,11 @@ func unescapeContent(s string) string {
 func resolveContent(cmd *cobra.Command) (string, error) {
 	contentFile, _ := cmd.Flags().GetString("content-file")
 	if contentFile != "" {
+		content, _ := cmd.Flags().GetString("content")
+		if content != "" {
+			return "", fmt.Errorf("content and content-file cannot be used together")
+		}
+
 		var data []byte
 		var err error
 		if contentFile == "-" {

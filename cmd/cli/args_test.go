@@ -176,7 +176,7 @@ func TestResolveContent(t *testing.T) {
 		}
 	})
 
-	t.Run("content-file takes precedence over content", func(t *testing.T) {
+	t.Run("content-file conflicts with content", func(t *testing.T) {
 		tmp, err := os.CreateTemp("", "ob-content-*.md")
 		if err != nil {
 			t.Fatalf("CreateTemp failed: %v", err)
@@ -188,12 +188,40 @@ func TestResolveContent(t *testing.T) {
 		cmd := newCmd()
 		cmd.Flags().Set("content", "from flag")
 		cmd.Flags().Set("content-file", tmp.Name())
+		if _, err := resolveContent(cmd); err == nil {
+			t.Fatal("expected error when content and content-file are both set")
+		}
+	})
+
+	t.Run("content-file stdin reads verbatim", func(t *testing.T) {
+		readPipe, writePipe, err := os.Pipe()
+		if err != nil {
+			t.Fatalf("Pipe failed: %v", err)
+		}
+		stdin := os.Stdin
+		defer func() {
+			os.Stdin = stdin
+		}()
+
+		input := `$\nabla^2$ and literal \n`
+		if _, err := writePipe.WriteString(input); err != nil {
+			t.Fatalf("WriteString failed: %v", err)
+		}
+		if err := writePipe.Close(); err != nil {
+			t.Fatalf("Close write pipe failed: %v", err)
+		}
+
+		os.Stdin = readPipe
+		defer readPipe.Close()
+
+		cmd := newCmd()
+		cmd.Flags().Set("content-file", "-")
 		got, err := resolveContent(cmd)
 		if err != nil {
 			t.Fatalf("resolveContent failed: %v", err)
 		}
-		if got != "from file" {
-			t.Errorf("expected file content to win, got %q", got)
+		if got != input {
+			t.Errorf("stdin content must be verbatim.\nwant %q\ngot  %q", input, got)
 		}
 	})
 

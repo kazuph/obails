@@ -249,6 +249,24 @@ func TestFileService_DeletePath(t *testing.T) {
 	})
 }
 
+func TestFileService_TrashPathDoesNotFallBackToPermanentDelete(t *testing.T) {
+	cs, tmpDir := newTestConfigService(t)
+	defer os.RemoveAll(tmpDir)
+	t.Setenv("PATH", "")
+
+	fs := NewFileService(cs)
+	if err := fs.CreateFile("keep-me.md", "important"); err != nil {
+		t.Fatalf("Setup failed: %v", err)
+	}
+
+	if err := fs.TrashPath("keep-me.md"); err == nil {
+		t.Fatal("expected TrashPath to fail when trash command is unavailable")
+	}
+	if !fs.FileExists("keep-me.md") {
+		t.Fatal("TrashPath must not permanently delete when trash command is unavailable")
+	}
+}
+
 func TestFileService_MoveFile(t *testing.T) {
 	cs, tmpDir := newTestConfigService(t)
 	defer os.RemoveAll(tmpDir)

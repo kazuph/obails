@@ -22,6 +22,8 @@ then appends content if provided.
 
 Examples:
   ob upsert file=MyNote content="New entry"
+  ob upsert file=MyNote --content-file entry.md
+  cat entry.md | ob upsert file=MyNote --content-file -
   ob upsert file=MyNote template=meeting content="## Agenda"
   ob upsert file=MyNote content="Section item" section="## Notes"`,
 	RunE: runUpsert,
@@ -30,7 +32,7 @@ Examples:
 func init() {
 	upsertCmd.Flags().String("file", "", "Note name (required)")
 	upsertCmd.Flags().String("template", "", "Template to use for creation (filename without .md)")
-	upsertCmd.Flags().String("content", "", "Content to append")
+	addContentFlags(upsertCmd)
 	upsertCmd.Flags().String("section", "", "Section heading to append to")
 	upsertCmd.Flags().String("silent", "false", "Suppress output (true/false)")
 
@@ -45,7 +47,11 @@ func runUpsert(cmd *cobra.Command, args []string) error {
 
 	file, _ := cmd.Flags().GetString("file")
 	templateName, _ := cmd.Flags().GetString("template")
-	content, _ := cmd.Flags().GetString("content")
+	content, contentErr := resolveContent(cmd)
+	if contentErr != nil {
+		outputError(contentErr)
+		return nil
+	}
 	section, _ := cmd.Flags().GetString("section")
 	silentStr, _ := cmd.Flags().GetString("silent")
 
@@ -54,10 +60,6 @@ func runUpsert(cmd *cobra.Command, args []string) error {
 	if file == "" {
 		outputError(fmt.Errorf("file is required: use file=<name>"))
 		return nil
-	}
-
-	if content != "" {
-		content = unescapeContent(content)
 	}
 
 	// Try to resolve the file
