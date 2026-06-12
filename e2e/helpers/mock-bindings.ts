@@ -132,8 +132,12 @@ export async function setupMockBindings(page: Page, options: MockBindingOptions 
   const fileInfos = options.fileInfos ?? generateFileInfos();
   let lastOpenedFile: MockLastOpenedFile = options.initialLastOpenedFile ?? null;
   const readBinaryCalls: string[] = [];
+  const openWithDefaultAppCalls: string[] = [];
+  const clipboardTexts: string[] = [];
 
   await page.exposeFunction('__wailsMockReadBinaryCalls', () => readBinaryCalls.slice());
+  await page.exposeFunction('__wailsMockOpenWithDefaultAppCalls', () => openWithDefaultAppCalls.slice());
+  await page.exposeFunction('__wailsMockClipboardTexts', () => clipboardTexts.slice());
 
   // 本番の file_service.go は http.ServeContent + "Accept-Ranges: bytes" で
   // Range リクエストに対応している。シーク（頭出し）は Range が無いとブラウザが
@@ -182,6 +186,18 @@ export async function setupMockBindings(page: Page, options: MockBindingOptions 
     }
 
     const body = JSON.parse(request.postData() || '{}');
+
+    // Clipboard.SetText (object: 1, method: 0)
+    if (body.object === 1 && body.method === 0) {
+      clipboardTexts.push(String(body.args?.text ?? ''));
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: 'null',
+      });
+      return;
+    }
+
     const call = body.args || {};
     const methodID = call.methodID;
     const args = call.args || [];
@@ -232,6 +248,15 @@ export async function setupMockBindings(page: Page, options: MockBindingOptions 
       // FileService.RevealInFinder
       case 3963746572:
         value = null;
+        break;
+      // FileService.OpenWithDefaultApp
+      case 1039929574:
+        openWithDefaultAppCalls.push(String(args[0] || ''));
+        value = null;
+        break;
+      // FileService.GetAbsolutePath
+      case 2829025920:
+        value = `/test-vault/${String(args[0] || '')}`;
         break;
       // FileService.OpenExternal
       case 1598367945:
@@ -398,6 +423,14 @@ export async function setupMockBindings(page: Page, options: MockBindingOptions 
             // FileService.RevealInFinder
             case 3963746572:
               return createMockPromise(undefined);
+
+            // FileService.OpenWithDefaultApp
+            case 1039929574:
+              return createMockPromise(undefined);
+
+            // FileService.GetAbsolutePath
+            case 2829025920:
+              return createMockPromise('/test-vault/' + String(args[0] || ''));
 
             // FileService.OpenExternal
             case 1598367945:

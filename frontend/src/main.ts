@@ -7,7 +7,7 @@ import * as GraphService from "../bindings/github.com/kazuph/obails/services/gra
 import * as StateService from "../bindings/github.com/kazuph/obails/services/stateservice.js";
 import * as TranscribeService from "../bindings/github.com/kazuph/obails/services/transcribeservice.js";
 import { FileInfo, Note, Timeline, Backlink, Link, Config, Graph } from "../bindings/github.com/kazuph/obails/models/models.js";
-import { Events } from "@wailsio/runtime";
+import { Clipboard, Events } from "@wailsio/runtime";
 import mermaid from "mermaid";
 import hljs from "highlight.js";
 import "highlight.js/styles/github-dark.css";
@@ -1397,6 +1397,8 @@ function setupContextMenu() {
     const ctxNewFile = document.getElementById("ctx-new-file")!;
     const ctxNewFolder = document.getElementById("ctx-new-folder")!;
     const ctxOpenFinder = document.getElementById("ctx-open-finder")!;
+    const ctxOpenFile = document.getElementById("ctx-open-file")!;
+    const ctxCopyPath = document.getElementById("ctx-copy-path")!;
     const ctxRename = document.getElementById("ctx-rename")!;
     const ctxDelete = document.getElementById("ctx-delete")!;
 
@@ -1524,6 +1526,35 @@ function setupContextMenu() {
             alert(`Failed to open Finder: ${err}`);
         }
     });
+
+    ctxOpenFile.addEventListener("click", async () => {
+        const targetPath = contextMenuTargetPath;
+        hideContextMenu();
+        if (!targetPath) {
+            return;
+        }
+        try {
+            await FileService.OpenWithDefaultApp(targetPath);
+        } catch (err) {
+            console.error("Failed to open file:", err);
+            alert(`Failed to open file: ${err}`);
+        }
+    });
+
+    ctxCopyPath.addEventListener("click", async () => {
+        const targetPath = contextMenuTargetPath;
+        hideContextMenu();
+        if (!targetPath) {
+            return;
+        }
+        try {
+            const absolutePath = await FileService.GetAbsolutePath(targetPath);
+            await Clipboard.SetText(absolutePath);
+        } catch (err) {
+            console.error("Failed to copy file path:", err);
+            alert(`Failed to copy file path: ${err}`);
+        }
+    });
 }
 
 function showContextMenu(x: number, y: number, path: string, isDir: boolean) {
@@ -1532,6 +1563,8 @@ function showContextMenu(x: number, y: number, path: string, isDir: boolean) {
     const ctxNewFile = document.getElementById("ctx-new-file")!;
     const ctxNewFolder = document.getElementById("ctx-new-folder")!;
     const ctxOpenFinder = document.getElementById("ctx-open-finder")!;
+    const ctxOpenFile = document.getElementById("ctx-open-file")!;
+    const ctxCopyPath = document.getElementById("ctx-copy-path")!;
     const ctxRename = document.getElementById("ctx-rename")!;
     const ctxDelete = document.getElementById("ctx-delete")!;
     const isRoot = path === "";
@@ -1545,6 +1578,8 @@ function showContextMenu(x: number, y: number, path: string, isDir: boolean) {
     ctxNewFile.style.display = "flex";
     ctxNewFolder.style.display = "flex";
     ctxOpenFinder.style.display = isDir && !isRoot ? "flex" : "none";
+    ctxOpenFile.style.display = !isDir && !isRoot ? "flex" : "none";
+    ctxCopyPath.style.display = isRoot ? "none" : "flex";
     ctxRename.style.display = isRoot ? "none" : "flex";
     ctxDelete.style.display = isRoot ? "none" : "flex";
 

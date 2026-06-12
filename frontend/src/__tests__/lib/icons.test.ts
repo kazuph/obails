@@ -13,6 +13,8 @@ const FILE_TYPE_ICONS: IconName[] = [
 const ACTION_ICONS: IconName[] = [
   "file-plus",
   "folder-plus",
+  "external-link",
+  "copy",
   "trash",
   "page-single",
   "page-continuous",

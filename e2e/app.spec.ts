@@ -444,6 +444,67 @@ test.describe('Obails App', () => {
     await expect(page.locator('#ctx-open-finder')).toBeVisible();
   });
 
+  test('should show Open File and Copy File Path for file context menu', async ({ page }) => {
+    await setupMockBindings(page);
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+
+    const file = page.locator('.file-item[data-path="Welcome.md"]');
+    await expect(file).toBeVisible();
+
+    await file.click({ button: 'right' });
+    await expect(page.locator('#ctx-open-file')).toBeVisible();
+    await expect(page.locator('#ctx-copy-path')).toBeVisible();
+    await expect(page.locator('#ctx-open-finder')).toBeHidden();
+  });
+
+  test('should hide Open File but keep Copy File Path for folder context menu', async ({ page }) => {
+    await setupMockBindings(page);
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+
+    const folder = page.locator('.file-item.folder[data-path="docs"]');
+    await expect(folder).toBeVisible();
+
+    await folder.click({ button: 'right' });
+    await expect(page.locator('#ctx-open-file')).toBeHidden();
+    await expect(page.locator('#ctx-copy-path')).toBeVisible();
+  });
+
+  test('should open a file with the default app from the context menu', async ({ page }) => {
+    await setupMockBindings(page);
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+
+    const file = page.locator('.file-item[data-path="Welcome.md"]');
+    await expect(file).toBeVisible();
+
+    await file.click({ button: 'right' });
+    await page.locator('#ctx-open-file').click();
+    await expect(page.locator('#context-menu')).toBeHidden();
+
+    await expect.poll(async () =>
+      page.evaluate(() => (window as any).__wailsMockOpenWithDefaultAppCalls())
+    ).toEqual(['Welcome.md']);
+  });
+
+  test('should copy the absolute file path from the context menu', async ({ page }) => {
+    await setupMockBindings(page);
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+
+    const file = page.locator('.file-item[data-path="Welcome.md"]');
+    await expect(file).toBeVisible();
+
+    await file.click({ button: 'right' });
+    await page.locator('#ctx-copy-path').click();
+    await expect(page.locator('#context-menu')).toBeHidden();
+
+    await expect.poll(async () =>
+      page.evaluate(() => (window as any).__wailsMockClipboardTexts())
+    ).toEqual(['/test-vault/Welcome.md']);
+  });
+
   test('should accept external file drops on the file tree', async ({ page }) => {
     await setupMockBindings(page);
     await page.goto('/');

@@ -640,6 +640,35 @@ func (s *FileService) RevealInFinder(relativePath string) error {
 	return cmd.Start()
 }
 
+// OpenWithDefaultApp opens a file or directory with the OS default application (macOS open command).
+func (s *FileService) OpenWithDefaultApp(relativePath string) error {
+	fullPath, err := s.resolveFullPath(relativePath, false)
+	if err != nil {
+		return err
+	}
+
+	if _, err := os.Stat(fullPath); err != nil {
+		return err
+	}
+
+	cmd := exec.Command("open", fullPath)
+	return cmd.Start()
+}
+
+// GetAbsolutePath returns the absolute filesystem path for a vault-relative path.
+func (s *FileService) GetAbsolutePath(relativePath string) (string, error) {
+	fullPath, err := s.resolveFullPath(relativePath, false)
+	if err != nil {
+		return "", err
+	}
+
+	if _, err := os.Stat(fullPath); err != nil {
+		return "", err
+	}
+
+	return fullPath, nil
+}
+
 func (s *FileService) uniqueRelativePath(targetFolder, fileName string) (string, error) {
 	fileName = strings.TrimSpace(fileName)
 	if fileName == "" || fileName == "." || fileName == ".." {

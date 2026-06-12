@@ -930,3 +930,84 @@ func TestFileService_RevealInFinder(t *testing.T) {
 		t.Fatalf("RevealInFinder() error = %v", err)
 	}
 }
+
+func TestFileService_OpenWithDefaultApp(t *testing.T) {
+	cs, tmpDir := newTestConfigService(t)
+	defer os.RemoveAll(tmpDir)
+
+	fs := NewFileService(cs)
+	if err := fs.CreateFile("open-me.md", "# open"); err != nil {
+		t.Fatalf("CreateFile() error = %v", err)
+	}
+
+	t.Run("starts open command for existing file", func(t *testing.T) {
+		if err := fs.OpenWithDefaultApp("open-me.md"); err != nil {
+			t.Fatalf("OpenWithDefaultApp() error = %v", err)
+		}
+	})
+
+	t.Run("returns error for missing file", func(t *testing.T) {
+		if err := fs.OpenWithDefaultApp("missing.md"); err == nil {
+			t.Fatal("expected error for missing file")
+		}
+	})
+
+	t.Run("returns error for path traversal", func(t *testing.T) {
+		if err := fs.OpenWithDefaultApp("../outside.md"); err == nil {
+			t.Fatal("expected error for path traversal")
+		}
+	})
+
+	t.Run("returns error for empty path", func(t *testing.T) {
+		if err := fs.OpenWithDefaultApp(""); err == nil {
+			t.Fatal("expected error for empty path")
+		}
+	})
+}
+
+func TestFileService_GetAbsolutePath(t *testing.T) {
+	cs, tmpDir := newTestConfigService(t)
+	defer os.RemoveAll(tmpDir)
+
+	fs := NewFileService(cs)
+	if err := fs.CreateFile("notes/abs-me.md", "# abs"); err != nil {
+		t.Fatalf("CreateFile() error = %v", err)
+	}
+
+	t.Run("returns absolute path for existing file", func(t *testing.T) {
+		got, err := fs.GetAbsolutePath("notes/abs-me.md")
+		if err != nil {
+			t.Fatalf("GetAbsolutePath() error = %v", err)
+		}
+		want := filepath.Join(tmpDir, "notes", "abs-me.md")
+		if got != want {
+			t.Fatalf("GetAbsolutePath() = %q, want %q", got, want)
+		}
+		if !filepath.IsAbs(got) {
+			t.Fatalf("GetAbsolutePath() = %q, expected absolute path", got)
+		}
+	})
+
+	t.Run("returns absolute path for directory", func(t *testing.T) {
+		got, err := fs.GetAbsolutePath("notes")
+		if err != nil {
+			t.Fatalf("GetAbsolutePath() error = %v", err)
+		}
+		want := filepath.Join(tmpDir, "notes")
+		if got != want {
+			t.Fatalf("GetAbsolutePath() = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("returns error for missing file", func(t *testing.T) {
+		if _, err := fs.GetAbsolutePath("missing.md"); err == nil {
+			t.Fatal("expected error for missing file")
+		}
+	})
+
+	t.Run("returns error for path traversal", func(t *testing.T) {
+		if _, err := fs.GetAbsolutePath("../outside.md"); err == nil {
+			t.Fatal("expected error for path traversal")
+		}
+	})
+}
