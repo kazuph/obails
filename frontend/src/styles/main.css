@@ -1813,6 +1813,13 @@ body {
     color: var(--error);
 }
 
+/* Preview images: ノート幅に収める（原寸描画による横スクロール防止） */
+#preview img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+}
+
 /* Math (KaTeX) */
 .math-block {
     margin: 16px 0;

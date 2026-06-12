@@ -484,6 +484,14 @@ test.describe('Obails App', () => {
     const img = preview.locator('img.vault-image');
     await expect(img).toHaveAttribute('data-vault-path', 'fig_sample_image_3d.png');
     await expect(img).toHaveAttribute('src', /^data:image\/png;base64,/);
+    // 画像はノート幅に収まる（max-width:100% が効いている）
+    const widths = await img.evaluate((el: HTMLImageElement) => ({
+      maxWidth: getComputedStyle(el).maxWidth,
+      clientWidth: el.clientWidth,
+      previewWidth: document.getElementById('preview')!.clientWidth,
+    }));
+    expect(widths.maxWidth).toBe('100%');
+    expect(widths.clientWidth).toBeLessThanOrEqual(widths.previewWidth);
     // 空ヘッダ表
     await expect(preview.locator('table td', { hasText: '解像度' })).toBeVisible();
     // コードブロックは無傷
