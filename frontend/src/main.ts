@@ -1829,13 +1829,7 @@ function applyTheme(themeValue: string, persist: boolean) {
         });
     }
 
-    const isDark = isDarkTheme(theme);
-    mermaid.initialize({
-        startOnLoad: false,
-        theme: isDark ? "dark" : "default",
-        securityLevel: "loose",
-        logLevel: "error"
-    });
+    initializeMermaid(theme);
 
     updatePreview();
 }
@@ -4348,8 +4342,11 @@ interface GestureEvent extends UIEvent {
 
 // Mermaid Setup
 function setupMermaid() {
-    const isDark = isDarkTheme(getAppliedTheme());
+    initializeMermaid(getAppliedTheme());
+}
 
+function initializeMermaid(theme: string) {
+    const isDark = isDarkTheme(theme);
     mermaid.initialize({
         startOnLoad: false,
         theme: isDark ? "dark" : "default",
@@ -4370,6 +4367,8 @@ let mermaidMinimapScale = 1;
 async function initMermaidDiagrams() {
     const previewEl = document.getElementById("preview");
     if (!previewEl) return;
+
+    await document.fonts.ready;
 
     const codeBlocks = previewEl.querySelectorAll("pre code");
 

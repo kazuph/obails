@@ -2126,7 +2126,7 @@ details.callout:not([open]) .callout-fold::before {
     border: 1px solid var(--border);
     border-radius: var(--radius-m);
     padding: 16px;
-    overflow: hidden;
+    overflow: auto;
     cursor: pointer;
 }
 
@@ -2135,13 +2135,21 @@ details.callout:not([open]) .callout-fold::before {
 }
 
 .mermaid-container .mermaid {
-    display: flex;
-    justify-content: center;
+    display: inline-block;
+    min-width: 100%;
+    text-align: center;
 }
 
 .mermaid-container .mermaid svg {
-    max-width: 100%;
+    display: inline-block;
+    max-width: none;
     height: auto;
+}
+
+.mermaid-container .mermaid p {
+    margin: 0;
+    line-height: 1.2;
+    overflow-wrap: normal;
 }
 
 .mermaid-container::after {

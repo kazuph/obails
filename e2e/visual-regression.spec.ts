@@ -163,6 +163,78 @@ test.describe('Visual Regression - README Screenshots', () => {
     });
   });
 
+  test('05b - Mermaid Subgraph Layout Regression', async ({ page }) => {
+    await openFile(page, 'Mermaid Subgraph Layout Regression.md');
+    await switchTheme(page, 'github-light');
+
+    await page.waitForSelector('.preview-pane .mermaid svg', { timeout: 10000 });
+    await page.waitForFunction(() => {
+      const svg = document.querySelector('.preview-pane .mermaid svg');
+      return Boolean(svg?.querySelector('g.node') && svg?.querySelector('g.cluster'));
+    });
+
+    const layout = await page.evaluate(() => {
+      const svg = document.querySelector('.preview-pane .mermaid svg') as SVGSVGElement | null;
+      if (!svg) {
+        throw new Error('Mermaid SVG was not rendered');
+      }
+
+      const mermaid = document.querySelector('.preview-pane .mermaid') as HTMLElement | null;
+      const text = mermaid?.textContent || '';
+
+      function boxes(selector: string) {
+        return Array.from(svg.querySelectorAll(selector)).map((element, index) => {
+          const box = element.getBoundingClientRect();
+          return {
+            index,
+            x: box.left,
+            y: box.top,
+            width: box.width,
+            height: box.height,
+          };
+        }).filter((box) => box.width > 1 && box.height > 1);
+      }
+
+      function overlaps(a: ReturnType<typeof boxes>[number], b: ReturnType<typeof boxes>[number]) {
+        const inset = 2;
+        return a.x + inset < b.x + b.width - inset &&
+          a.x + a.width - inset > b.x + inset &&
+          a.y + inset < b.y + b.height - inset &&
+          a.y + a.height - inset > b.y + inset;
+      }
+
+      function overlapPairs(items: ReturnType<typeof boxes>) {
+        const pairs: string[] = [];
+        for (let i = 0; i < items.length; i++) {
+          for (let j = i + 1; j < items.length; j++) {
+            if (overlaps(items[i], items[j])) {
+              pairs.push(`${items[i].index}-${items[j].index}`);
+            }
+          }
+        }
+        return pairs;
+      }
+
+      return {
+        text,
+        nodeOverlapPairs: overlapPairs(boxes('g.node')),
+        clusterOverlapPairs: overlapPairs(boxes('g.cluster')),
+      };
+    });
+
+    expect(layout.text).toContain('dotfiles/claude/skills');
+    expect(layout.text).toContain('yunomi-plugin 2.0.0');
+    expect(layout.text).toContain('唯一の正');
+    expect(layout.text).not.toContain('…');
+    expect(layout.nodeOverlapPairs).toEqual([]);
+    expect(layout.clusterOverlapPairs).toEqual([]);
+
+    await page.screenshot({
+      path: path.join(SCREENSHOT_DIR, 'mermaid-subgraph-regression.png'),
+      fullPage: false,
+    });
+  });
+
   test('06 - Code Syntax Highlighting', async ({ page }) => {
     await openFile(page, 'Code Examples.md');
     await switchTheme(page, 'github-light');
