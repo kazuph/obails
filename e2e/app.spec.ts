@@ -1158,6 +1158,7 @@ test.describe('Graph View', () => {
 
     // Check header elements
     await expect(page.locator('.graph-header h3')).toHaveText('Knowledge Graph');
+    await expect(page.locator('#graph-relayout')).toBeVisible();
     await expect(page.locator('#graph-close')).toBeVisible();
     await expect(page.locator('#graph-stats')).toBeVisible();
   });
@@ -1248,6 +1249,86 @@ test.describe('Graph View', () => {
     // Stats should show some numbers (files and links count)
     expect(statsText).toBeTruthy();
     expect(statsText!.length).toBeGreaterThan(0);
+  });
+
+  test('should zoom graph with trackpad pinch wheel gesture', async ({ page }) => {
+    await setupMockBindings(page);
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+
+    await page.evaluate(() => localStorage.removeItem('obails-graph-cache'));
+
+    await page.click('#graph-btn');
+    await expect(page.locator('#graph-overlay')).toHaveClass(/visible/);
+    await page.waitForSelector('#graph-container canvas, #graph-container svg', { timeout: 5000 });
+    await page.waitForTimeout(500);
+    await page.click('#graph-close');
+
+    const initialZoom = await page.evaluate(() => {
+      const cache = JSON.parse(localStorage.getItem('obails-graph-cache') || '{}');
+      return cache.data?.viewState?.zoom ?? 0;
+    });
+    expect(initialZoom).toBeGreaterThan(0);
+
+    await page.click('#graph-btn');
+    await expect(page.locator('#graph-overlay')).toHaveClass(/visible/);
+    await page.waitForSelector('#graph-container canvas, #graph-container svg', { timeout: 5000 });
+
+    const box = await page.locator('#graph-container').boundingBox();
+    expect(box).not.toBeNull();
+    const clientX = box!.x + box!.width / 2;
+    const clientY = box!.y + box!.height / 2;
+
+    await page.locator('#graph-container').dispatchEvent('wheel', {
+      deltaY: -80,
+      deltaX: 0,
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+      clientX,
+      clientY,
+    });
+    await page.locator('#graph-container').dispatchEvent('wheel', {
+      deltaY: -80,
+      deltaX: 0,
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+      clientX,
+      clientY,
+    });
+    await page.locator('#graph-container').dispatchEvent('wheel', {
+      deltaY: -80,
+      deltaX: 0,
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+      clientX,
+      clientY,
+    });
+
+    await page.click('#graph-close');
+
+    const zoomed = await page.evaluate(() => {
+      const cache = JSON.parse(localStorage.getItem('obails-graph-cache') || '{}');
+      return cache.data?.viewState?.zoom ?? 0;
+    });
+    expect(zoomed).toBeGreaterThan(initialZoom * 1.5);
+  });
+
+  test('should re-layout graph from the graph header', async ({ page }) => {
+    await setupMockBindings(page);
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+
+    await page.click('#graph-btn');
+    await expect(page.locator('#graph-overlay')).toHaveClass(/visible/);
+    await page.waitForSelector('#graph-container canvas, #graph-container svg', { timeout: 5000 });
+
+    await page.click('#graph-relayout');
+    await expect(page.locator('#graph-stats')).not.toHaveText(/Failed/i, { timeout: 5000 });
+    await page.waitForSelector('#graph-container canvas, #graph-container svg', { timeout: 5000 });
+    await expect(page.locator('#graph-container')).toBeVisible();
   });
 
   test('graph overlay styling responds to theme', async ({ page }) => {

@@ -9,6 +9,9 @@ import {
   saveCache,
   loadCache,
   clearCache,
+  createGraphStructureSignature,
+  isSameGraphStructure,
+  canReuseGraphLayout,
 } from "../../lib/graph-cache";
 
 // Mock storage for testing
@@ -36,6 +39,58 @@ describe("graph-cache", () => {
     it("returns true for very old cache (no TTL)", () => {
       const cache: CachedGraph = { data: {}, timestamp: Date.now() - 365 * 24 * 60 * 60 * 1000 }; // 1 year old
       expect(isCacheValid(cache)).toBe(true);
+    });
+  });
+
+  describe("graph structure signatures", () => {
+    const graph = {
+      nodes: [{ id: "a" }, { id: "b" }, { id: "c" }],
+      edges: [
+        { source: "a", target: "b" },
+        { source: "b", target: "c" },
+      ],
+    };
+
+    it("creates the same signature regardless of node and edge order", () => {
+      const shuffled = {
+        nodes: [{ id: "c" }, { id: "a" }, { id: "b" }],
+        edges: [
+          { source: "c", target: "b" },
+          { source: "b", target: "a" },
+        ],
+      };
+
+      expect(createGraphStructureSignature(shuffled)).toEqual(createGraphStructureSignature(graph));
+    });
+
+    it("detects added nodes", () => {
+      const previous = createGraphStructureSignature(graph);
+      const current = createGraphStructureSignature({
+        nodes: [...graph.nodes, { id: "d" }],
+        edges: graph.edges,
+      });
+
+      expect(isSameGraphStructure(previous, current)).toBe(false);
+    });
+
+    it("detects added edges when node count is unchanged", () => {
+      const previous = createGraphStructureSignature(graph);
+      const current = createGraphStructureSignature({
+        nodes: graph.nodes,
+        edges: [...graph.edges, { source: "a", target: "c" }],
+      });
+
+      expect(isSameGraphStructure(previous, current)).toBe(false);
+    });
+
+    it("does not reuse layouts from legacy caches without a signature", () => {
+      expect(canReuseGraphLayout(undefined, graph)).toBe(false);
+    });
+
+    it("reuses layouts only when the stored signature matches the current graph", () => {
+      const signature = createGraphStructureSignature(graph);
+      expect(canReuseGraphLayout(signature, graph)).toBe(true);
+      expect(canReuseGraphLayout(signature, { nodes: [{ id: "a" }], edges: [] })).toBe(false);
     });
   });
 

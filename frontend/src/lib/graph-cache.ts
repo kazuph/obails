@@ -14,6 +14,17 @@ export interface GraphCacheStorage {
   remove(key: string): void;
 }
 
+export interface GraphStructureSignature {
+  nodeCount: number;
+  edgeCount: number;
+  hash: string;
+}
+
+export interface GraphLike {
+  nodes?: Array<{ id?: unknown }>;
+  edges?: Array<{ source?: unknown; target?: unknown }>;
+}
+
 const CACHE_KEY = "obails-graph-cache";
 
 /**
@@ -21,6 +32,55 @@ const CACHE_KEY = "obails-graph-cache";
  */
 export function isCacheValid(cachedGraph: CachedGraph | null): boolean {
   return cachedGraph !== null;
+}
+
+function endpointId(endpoint: unknown): string {
+  if (endpoint && typeof endpoint === "object" && "id" in endpoint) {
+    return String((endpoint as { id?: unknown }).id ?? "");
+  }
+  return String(endpoint ?? "");
+}
+
+function hashString(input: string): string {
+  let hash = 2166136261;
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+export function createGraphStructureSignature(graph: GraphLike): GraphStructureSignature {
+  const nodes = graph.nodes ?? [];
+  const edges = graph.edges ?? [];
+  const nodeIds = nodes.map((node) => String(node.id ?? "")).sort();
+  const edgeIds = edges
+    .map((edge) => {
+      const source = endpointId(edge.source);
+      const target = endpointId(edge.target);
+      return source <= target ? `${source}->${target}` : `${target}->${source}`;
+    })
+    .sort();
+
+  return {
+    nodeCount: nodeIds.length,
+    edgeCount: edgeIds.length,
+    hash: hashString(`${nodeIds.join("\n")}\n---\n${edgeIds.join("\n")}`),
+  };
+}
+
+export function isSameGraphStructure(
+  a: GraphStructureSignature | undefined,
+  b: GraphStructureSignature | undefined
+): boolean {
+  return Boolean(a && b && a.nodeCount === b.nodeCount && a.edgeCount === b.edgeCount && a.hash === b.hash);
+}
+
+export function canReuseGraphLayout(
+  cachedSignature: GraphStructureSignature | undefined,
+  currentGraph: GraphLike
+): boolean {
+  return isSameGraphStructure(cachedSignature, createGraphStructureSignature(currentGraph));
 }
 
 /**

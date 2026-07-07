@@ -38,6 +38,9 @@ import {
   saveCache,
   loadCache,
   clearCache,
+  createGraphStructureSignature,
+  canReuseGraphLayout,
+  type GraphStructureSignature,
 } from "./lib/graph-cache";
 import {
   getNextAudioPath,
@@ -428,12 +431,14 @@ async function prefetchGraphData() {
         // Preserve existing positions if any
         const cached = loadCache(graphCacheStorage);
         const cachedData = cached?.data as CachedGraphData | undefined;
+        const canReuseLayout = cachedData ? canReuseGraphLayout(cachedData.graphSignature, graph) : false;
 
         const cacheData: CachedGraphData = {
             graph,
             stats,
-            nodePositions: cachedData?.nodePositions,
-            viewState: cachedData?.viewState,
+            graphSignature: createGraphStructureSignature(graph),
+            nodePositions: canReuseLayout ? cachedData?.nodePositions : undefined,
+            viewState: canReuseLayout ? cachedData?.viewState : undefined,
         };
         saveCache(graphCacheStorage, createCacheEntry(cacheData));
         console.log("[Graph] Prefetch complete - ready for instant display");
@@ -464,6 +469,7 @@ function setupEventListeners() {
     document.getElementById("graph-btn")!.addEventListener("click", toggleGraphView);
     document.getElementById("refresh-btn")!.addEventListener("click", refresh);
     document.getElementById("source-toggle-btn")!.addEventListener("click", toggleSourceEditor);
+    document.getElementById("graph-relayout")!.addEventListener("click", refreshGraphData);
     document.getElementById("timeline-submit")!.addEventListener("click", submitTimeline);
     miniPlayerClose.addEventListener("click", stopAudioPlayback);
     audioLoopBtn.addEventListener("click", toggleAudioLoopMode);
@@ -4085,6 +4091,7 @@ function saveGraphNodePositions() {
     const cached = loadCache(graphCacheStorage);
     if (cached && isCacheValid(cached)) {
         const cachedData = cached.data as CachedGraphData;
+        cachedData.graphSignature = createGraphStructureSignature(cachedData.graph);
         cachedData.nodePositions = positions;
         cachedData.viewState = viewState;
         saveCache(graphCacheStorage, createCacheEntry(cachedData, cached.timestamp));
@@ -4101,6 +4108,7 @@ const graphCacheStorage = {
 interface CachedGraphData {
     graph: Graph;
     stats: { nodeCount: number; edgeCount: number };
+    graphSignature?: GraphStructureSignature;
     nodePositions?: { [id: string]: { x: number; y: number } };
     viewState?: { zoom: number; centerX: number; centerY: number };
 }
@@ -4116,9 +4124,15 @@ async function loadGraphData(forceRefresh: boolean = false) {
         if (cached && isCacheValid(cached) && !forceRefresh) {
             // Show cached data immediately
             const cachedData = cached.data as CachedGraphData;
+            const canReuseLayout = canReuseGraphLayout(cachedData.graphSignature, cachedData.graph);
             const age = getCacheAgeText(cached);
             graphStats.textContent = `${cachedData.stats.nodeCount || 0} notes, ${cachedData.stats.edgeCount || 0} links (${age})`;
-            renderGraph(cachedData.graph, graphContainer, cachedData.nodePositions, cachedData.viewState);
+            renderGraph(
+                cachedData.graph,
+                graphContainer,
+                canReuseLayout ? cachedData.nodePositions : undefined,
+                canReuseLayout ? cachedData.viewState : undefined
+            );
 
             // Background update (don't await, just start it)
             updateGraphDataInBackground().catch(console.error);
@@ -4133,7 +4147,11 @@ async function loadGraphData(forceRefresh: boolean = false) {
         const stats = await GraphService.GetGraphStats();
 
         // Save to cache
-        const cacheData: CachedGraphData = { graph, stats };
+        const cacheData: CachedGraphData = {
+            graph,
+            stats,
+            graphSignature: createGraphStructureSignature(graph),
+        };
         saveCache(graphCacheStorage, createCacheEntry(cacheData));
 
         // Update stats display
@@ -4158,13 +4176,15 @@ async function updateGraphDataInBackground() {
         // Get current positions from cache to preserve them
         const cached = loadCache(graphCacheStorage);
         const cachedData = cached?.data as CachedGraphData | undefined;
+        const canReuseLayout = cachedData ? canReuseGraphLayout(cachedData.graphSignature, graph) : false;
 
         // Save new data to cache, preserving positions and view state
         const cacheData: CachedGraphData = {
             graph,
             stats,
-            nodePositions: cachedData?.nodePositions,
-            viewState: cachedData?.viewState,
+            graphSignature: createGraphStructureSignature(graph),
+            nodePositions: canReuseLayout ? cachedData?.nodePositions : undefined,
+            viewState: canReuseLayout ? cachedData?.viewState : undefined,
         };
         saveCache(graphCacheStorage, createCacheEntry(cacheData));
         console.log("[Graph] Background update complete");
@@ -4180,6 +4200,7 @@ async function refreshGraphData() {
         const cachedData = cached.data as CachedGraphData;
         cachedData.nodePositions = undefined;
         cachedData.viewState = undefined;
+        cachedData.graphSignature = createGraphStructureSignature(cachedData.graph);
         saveCache(graphCacheStorage, createCacheEntry(cachedData, cached.timestamp));
     }
     await loadGraphData(true);
@@ -4191,11 +4212,66 @@ interface GraphNodeData {
     linkCount: number;
     x?: number;
     y?: number;
+    fx?: number;
+    fy?: number;
+}
+
+function getNodeRadius(node: GraphNodeData): number {
+    return Math.max(2, Math.log(node.linkCount + 1) * 2);
+}
+
+function getLargestHub(nodes: GraphNodeData[]): GraphNodeData | undefined {
+    return nodes.reduce<GraphNodeData | undefined>((largest, node) => {
+        if (!largest || node.linkCount > largest.linkCount) {
+            return node;
+        }
+        return largest;
+    }, undefined);
 }
 
 interface GraphEdgeData {
     source: string | GraphNodeData;
     target: string | GraphNodeData;
+}
+
+function hasCompleteGraphPositions(
+    graph: Graph,
+    positions?: { [id: string]: { x: number; y: number } }
+): boolean {
+    if (!positions) return false;
+    return graph.nodes.every((node) => {
+        const position = positions[node.id];
+        return Number.isFinite(position?.x) && Number.isFinite(position?.y);
+    });
+}
+
+function graphZoomAt(clientX: number, clientY: number, zoomFactor: number) {
+    if (!graphInstance) return;
+
+    const container = document.getElementById("graph-container");
+    if (!container) return;
+
+    const currentZoom = graphInstance.zoom();
+    const nextZoom = Math.max(0.1, Math.min(8, currentZoom * zoomFactor));
+    if (nextZoom === currentZoom) return;
+
+    const rect = container.getBoundingClientRect();
+    const center = graphInstance.centerAt() as { x: number; y: number } | undefined;
+    if (!center) {
+        graphInstance.zoom(nextZoom);
+        return;
+    }
+
+    const offsetX = clientX - rect.left - rect.width / 2;
+    const offsetY = clientY - rect.top - rect.height / 2;
+    const graphX = center.x + offsetX / currentZoom;
+    const graphY = center.y + offsetY / currentZoom;
+
+    graphInstance.zoom(nextZoom);
+    graphInstance.centerAt(
+        graphX - offsetX / nextZoom,
+        graphY - offsetY / nextZoom
+    );
 }
 
 function renderGraph(
@@ -4210,11 +4286,12 @@ function renderGraph(
     }
 
     container.innerHTML = "";
+    const reusablePositions = hasCompleteGraphPositions(graph, savedPositions) ? savedPositions : undefined;
 
     // Prepare data for force-graph with restored positions
     // Note: Backend already filters to markdown-only nodes and edges
     const nodes: GraphNodeData[] = graph.nodes.map(n => {
-        const pos = savedPositions?.[n.id];
+        const pos = reusablePositions?.[n.id];
         return {
             id: n.id,
             label: n.label,
@@ -4231,6 +4308,8 @@ function renderGraph(
 
     const width = container.clientWidth;
     const height = container.clientHeight;
+    const hasSavedLayout = Boolean(reusablePositions);
+    const isLargeGraph = nodes.length >= 1000;
 
     // Space/cosmic color scheme
     const isDark = isDarkTheme(getAppliedTheme());
@@ -4248,7 +4327,25 @@ function renderGraph(
         .nodeId("id")
         .nodeLabel("label")
         .nodeColor(() => nodeColor)
-        .nodeVal((node: GraphNodeData) => Math.max(1, Math.log(node.linkCount + 1) * 2))
+        .nodeVal((node: GraphNodeData) => getNodeRadius(node))
+        .nodeCanvasObjectMode(() => "replace")
+        .nodeCanvasObject((node: GraphNodeData, ctx: CanvasRenderingContext2D, globalScale: number) => {
+            const radius = getNodeRadius(node);
+            ctx.beginPath();
+            ctx.arc(node.x ?? 0, node.y ?? 0, radius, 0, 2 * Math.PI, false);
+            ctx.fillStyle = nodeColor;
+            ctx.fill();
+
+            const shouldShowLabel = !isLargeGraph || node.linkCount >= 8 || globalScale >= 1.4;
+            if (!shouldShowLabel) return;
+
+            const fontSize = Math.max(8, Math.min(12, 12 / globalScale));
+            ctx.font = `${fontSize}px sans-serif`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "top";
+            ctx.fillStyle = textColor;
+            ctx.fillText(node.label, node.x ?? 0, (node.y ?? 0) + radius + 2);
+        })
         .linkSource("source")
         .linkTarget("target")
         .linkColor(() => linkColor)
@@ -4266,14 +4363,20 @@ function renderGraph(
         .onNodeHover((node: GraphNodeData | null) => {
             container.style.cursor = node ? "pointer" : "grab";
         })
-        .cooldownTicks(savedPositions ? 0 : 100) // Skip simulation if positions restored
-        .d3AlphaDecay(0.02)
-        .d3VelocityDecay(0.3)
-        .warmupTicks(savedPositions ? 0 : 50); // Skip warmup if positions restored
+        .cooldownTicks(hasSavedLayout ? 0 : (isLargeGraph ? 260 : 120))
+        .d3AlphaDecay(isLargeGraph ? 0.012 : 0.02)
+        .d3VelocityDecay(isLargeGraph ? 0.36 : 0.3)
+        .warmupTicks(hasSavedLayout ? 0 : (isLargeGraph ? 120 : 60));
+
+    const chargeForce = graphInstance.d3Force("charge") as { strength: (value: number) => unknown } | undefined;
+    chargeForce?.strength(isLargeGraph ? -120 : -55);
+
+    const linkForce = graphInstance.d3Force("link") as { distance: (value: number) => unknown } | undefined;
+    linkForce?.distance(isLargeGraph ? 72 : 42);
 
     // Restore view state or zoom to fit
     setTimeout(() => {
-        if (savedViewState && savedPositions) {
+        if (savedViewState && hasSavedLayout) {
             // Restore previous view state
             graphInstance?.zoom(savedViewState.zoom);
             graphInstance?.centerAt(savedViewState.centerX, savedViewState.centerY);
@@ -4288,23 +4391,32 @@ function renderGraph(
                 }
             }, 100);
         } else {
-            // Zoom to fit for new graphs
-            graphInstance?.zoomToFit(400, 50);
+            if (isLargeGraph) {
+                const hub = getLargestHub(nodes);
+                if (hub && Number.isFinite(hub.x) && Number.isFinite(hub.y)) {
+                    graphInstance?.centerAt(hub.x ?? 0, hub.y ?? 0, 600);
+                    graphInstance?.zoom(1.2, 600);
+                } else {
+                    graphInstance?.zoomToFit(400, 50);
+                }
+            } else {
+                // Zoom to fit for small graphs
+                graphInstance?.zoomToFit(400, 50);
+            }
         }
     }, 100);
 
     // Custom wheel handler:
     // - Normal 2-finger scroll = pan (move around)
+    // - Trackpad pinch on Chromium arrives as ctrlKey + wheel.
     // - Ctrl/Cmd/Shift + 2-finger scroll = zoom (standard for design tools)
     container.addEventListener("wheel", (e: WheelEvent) => {
         if (!graphInstance) return;
         e.preventDefault();
 
         if (e.ctrlKey || e.metaKey || e.shiftKey) {
-            // Ctrl/Cmd/Shift + scroll = zoom (supports all platforms)
-            const currentZoom = graphInstance.zoom();
-            const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
-            graphInstance.zoom(currentZoom * zoomFactor);
+            const zoomFactor = Math.exp(-e.deltaY * 0.01);
+            graphZoomAt(e.clientX, e.clientY, zoomFactor);
         } else {
             // Normal scroll = pan
             const { x, y } = graphInstance.centerAt() as { x: number; y: number };
@@ -4313,7 +4425,7 @@ function renderGraph(
             const panSpeed = 1 / zoomLevel;
             graphInstance.centerAt(x + e.deltaX * panSpeed, y + e.deltaY * panSpeed);
         }
-    }, { passive: false });
+    }, { passive: false, capture: true });
 
     // Pinch zoom handler (macOS/Safari gesture events)
     let initialPinchZoom = 1;
@@ -4326,7 +4438,11 @@ function renderGraph(
     container.addEventListener("gesturechange", ((e: GestureEvent) => {
         if (!graphInstance) return;
         e.preventDefault();
-        graphInstance.zoom(initialPinchZoom * e.scale);
+        graphZoomAt(
+            e instanceof MouseEvent ? e.clientX : container.getBoundingClientRect().left + container.clientWidth / 2,
+            e instanceof MouseEvent ? e.clientY : container.getBoundingClientRect().top + container.clientHeight / 2,
+            (initialPinchZoom * e.scale) / graphInstance.zoom()
+        );
     }) as EventListener, { passive: false });
 
     container.addEventListener("gestureend", ((e: GestureEvent) => {

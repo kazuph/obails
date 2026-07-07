@@ -210,6 +210,18 @@ func TestLinkService_RebuildIndex(t *testing.T) {
 			t.Errorf("Expected 1 backlink to note-c, got %d", len(backlinks))
 		}
 	})
+
+	t.Run("resolved links use indexed paths after rebuild", func(t *testing.T) {
+		ls.RebuildIndex()
+
+		path, exists := ls.ResolveLink("note-d")
+		if !exists {
+			t.Fatal("Expected indexed nested note to resolve")
+		}
+		if path != "folder/note-d.md" {
+			t.Errorf("Expected folder/note-d.md, got %q", path)
+		}
+	})
 }
 
 func TestLinkService_GetLinkInfo(t *testing.T) {

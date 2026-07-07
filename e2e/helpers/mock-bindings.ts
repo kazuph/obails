@@ -360,6 +360,28 @@ export async function setupMockBindings(page: Page, options: MockBindingOptions 
       case 685326756:
         value = resolveMockLink(files, String(args[0] || ''));
         break;
+      // LinkService.RebuildIndex
+      case 1852278501:
+        value = null;
+        break;
+      // GraphService.GetFullGraph
+      case 312528985:
+        value = {
+          nodes: fileInfos.filter((f: any) => !(f.isDir ?? f.IsDir)).map((f: any) => ({
+            id: f.path ?? f.Path,
+            label: (f.name ?? f.Name).replace('.md', ''),
+            linkCount: 1,
+          })),
+          edges: [],
+        };
+        break;
+      // GraphService.GetGraphStats
+      case 3975675625:
+        value = {
+          nodeCount: fileInfos.filter((f: any) => !(f.isDir ?? f.IsDir)).length,
+          edgeCount: 0,
+        };
+        break;
       // StateService.GetLastOpenedFile
       case 235349142:
         value = lastOpenedFile;
@@ -568,6 +590,10 @@ export async function setupMockBindings(page: Page, options: MockBindingOptions 
             case 685326756:
               return createMockPromise(resolveMockLink(files, String(args[0] || '')));
 
+            // LinkService.RebuildIndex
+            case 1852278501:
+              return createMockPromise(undefined);
+
             // StateService.GetLastOpenedFile
             case 235349142:
               return createMockPromise((window as any).__wails_mock_lastOpenedFile ?? null);
@@ -591,9 +617,16 @@ export async function setupMockBindings(page: Page, options: MockBindingOptions 
                 nodes: fileInfos.filter((f: any) => !(f.isDir ?? f.IsDir)).map((f: any) => ({
                   id: f.path ?? f.Path,
                   label: (f.name ?? f.Name).replace('.md', ''),
-                  Val: 1,
+                  linkCount: 1,
                 })),
-                links: [],
+                edges: [],
+              });
+
+            // GraphService.GetGraphStats
+            case 3975675625:
+              return createMockPromise({
+                nodeCount: fileInfos.filter((f: any) => !(f.isDir ?? f.IsDir)).length,
+                edgeCount: 0,
               });
 
             // WindowService系は空で返す

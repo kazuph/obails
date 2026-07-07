@@ -19,6 +19,8 @@ type LinkService struct {
 	forwardIndex map[string][]string
 	// Backlink index: file path -> files that link to it
 	backwardIndex map[string][]string
+	// Link target lookup: wiki-link text variants -> vault-relative markdown path
+	pathIndex map[string]string
 
 	mu sync.RWMutex
 }
@@ -30,6 +32,7 @@ func NewLinkService(fileService *FileService, configService *ConfigService) *Lin
 		configService: configService,
 		forwardIndex:  make(map[string][]string),
 		backwardIndex: make(map[string][]string),
+		pathIndex:     make(map[string]string),
 	}
 }
 
@@ -61,6 +64,18 @@ func (s *LinkService) ParseLinks(content string) []string {
 
 // ResolveLink resolves a link text to a file path
 func (s *LinkService) ResolveLink(linkText string) (string, bool) {
+	s.mu.RLock()
+	if resolved, ok := resolveFromPathIndex(s.pathIndex, linkText); ok {
+		s.mu.RUnlock()
+		return resolved, true
+	}
+	indexReady := len(s.pathIndex) > 0
+	s.mu.RUnlock()
+
+	if indexReady {
+		return "", false
+	}
+
 	vaultPath := s.configService.GetVaultPath()
 
 	// Try exact match with .md extension
@@ -142,16 +157,21 @@ func (s *LinkService) RebuildIndex() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Clear existing indices
-	s.forwardIndex = make(map[string][]string)
-	s.backwardIndex = make(map[string][]string)
-
 	vaultPath := s.configService.GetVaultPath()
 	if vaultPath == "" {
 		return nil
 	}
 
-	return filepath.Walk(vaultPath, func(path string, info os.FileInfo, err error) error {
+	type markdownFile struct {
+		fullPath     string
+		relativePath string
+		name         string
+	}
+
+	var files []markdownFile
+	pathIndex := make(map[string]string)
+
+	err := filepath.Walk(vaultPath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return nil // Skip errors
 		}
@@ -174,32 +194,47 @@ func (s *LinkService) RebuildIndex() error {
 		}
 
 		relativePath, _ := filepath.Rel(vaultPath, path)
+		files = append(files, markdownFile{
+			fullPath:     path,
+			relativePath: relativePath,
+			name:         info.Name(),
+		})
 
-		// Read file content
-		content, err := os.ReadFile(path)
+		registerPathIndex(pathIndex, relativePath)
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	forwardIndex := make(map[string][]string, len(files))
+	backwardIndex := make(map[string][]string)
+
+	for _, file := range files {
+		content, err := os.ReadFile(file.fullPath)
 		if err != nil {
-			return nil
+			continue
 		}
 
 		// Parse links
 		links := s.ParseLinks(string(content))
-		s.forwardIndex[relativePath] = links
+		forwardIndex[file.relativePath] = links
 
 		// Build backward index
-		baseName := strings.TrimSuffix(info.Name(), ".md")
 		for _, link := range links {
-			s.backwardIndex[link] = append(s.backwardIndex[link], relativePath)
+			backwardIndex[link] = append(backwardIndex[link], file.relativePath)
 			// Also index by resolved path if different
-			if resolved, ok := s.resolveWithoutLock(link); ok && resolved != link {
-				s.backwardIndex[resolved] = append(s.backwardIndex[resolved], relativePath)
+			if resolved, ok := resolveFromPathIndex(pathIndex, link); ok && resolved != link {
+				backwardIndex[resolved] = append(backwardIndex[resolved], file.relativePath)
 			}
 		}
+	}
 
-		// Also index by base name
-		_ = baseName
+	s.forwardIndex = forwardIndex
+	s.backwardIndex = backwardIndex
+	s.pathIndex = pathIndex
 
-		return nil
-	})
+	return nil
 }
 
 // GetLinkInfo returns information about links in a file
@@ -260,16 +295,41 @@ func (s *LinkService) countTotalLinks() int {
 }
 
 func (s *LinkService) resolveWithoutLock(linkText string) (string, bool) {
-	vaultPath := s.configService.GetVaultPath()
+	return resolveFromPathIndex(s.pathIndex, linkText)
+}
 
-	exactPath := linkText
-	if !strings.HasSuffix(exactPath, ".md") {
-		exactPath += ".md"
+func registerPathIndex(index map[string]string, relativePath string) {
+	keys := []string{
+		relativePath,
+		strings.TrimSuffix(relativePath, ".md"),
+		filepath.Base(relativePath),
+		strings.TrimSuffix(filepath.Base(relativePath), ".md"),
 	}
 
-	fullPath := filepath.Join(vaultPath, exactPath)
-	if _, err := os.Stat(fullPath); err == nil {
-		return exactPath, true
+	for _, key := range keys {
+		if key != "" {
+			if _, exists := index[key]; !exists {
+				index[key] = relativePath
+			}
+		}
+	}
+}
+
+func resolveFromPathIndex(index map[string]string, linkText string) (string, bool) {
+	normalized := strings.TrimSpace(strings.TrimPrefix(linkText, "/"))
+	if normalized == "" {
+		return "", false
+	}
+
+	candidates := []string{normalized}
+	if !strings.HasSuffix(normalized, ".md") {
+		candidates = append(candidates, normalized+".md")
+	}
+
+	for _, candidate := range candidates {
+		if resolved, ok := index[candidate]; ok {
+			return resolved, true
+		}
 	}
 
 	return "", false
