@@ -4319,14 +4319,9 @@ function handleGraphWheel(e: WheelEvent) {
     if (!graphInstance || !isGraphGestureTarget(e.target)) return;
     e.preventDefault();
 
-    if (e.ctrlKey || e.metaKey || e.shiftKey) {
-        const zoomFactor = Math.exp(-e.deltaY * 0.01);
-        graphZoomAt(e.clientX, e.clientY, zoomFactor);
-    } else {
-        const { x, y } = graphInstance.centerAt() as { x: number; y: number };
-        const panSpeed = 1 / graphInstance.zoom();
-        graphInstance.centerAt(x + e.deltaX * panSpeed, y + e.deltaY * panSpeed);
-    }
+    const dominantDelta = Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
+    const zoomFactor = Math.exp(-dominantDelta * 0.01);
+    graphZoomAt(e.clientX, e.clientY, zoomFactor);
 }
 
 function handleGraphGestureStart(e: GestureEvent) {

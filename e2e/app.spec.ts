@@ -1316,6 +1316,54 @@ test.describe('Graph View', () => {
     expect(zoomed).toBeGreaterThan(initialZoom * 1.5);
   });
 
+  test('should zoom graph with unmodified wheel input in Wails webview', async ({ page }) => {
+    await setupMockBindings(page);
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+
+    await page.evaluate(() => localStorage.removeItem('obails-graph-cache'));
+
+    await page.click('#graph-btn');
+    await expect(page.locator('#graph-overlay')).toHaveClass(/visible/);
+    await page.waitForSelector('#graph-container canvas, #graph-container svg', { timeout: 5000 });
+    await page.waitForTimeout(500);
+    await page.click('#graph-close');
+
+    const initialZoom = await page.evaluate(() => {
+      const cache = JSON.parse(localStorage.getItem('obails-graph-cache') || '{}');
+      return cache.data?.viewState?.zoom ?? 0;
+    });
+    expect(initialZoom).toBeGreaterThan(0);
+
+    await page.click('#graph-btn');
+    await expect(page.locator('#graph-overlay')).toHaveClass(/visible/);
+    await page.waitForSelector('#graph-container canvas, #graph-container svg', { timeout: 5000 });
+
+    const box = await page.locator('#graph-container').boundingBox();
+    expect(box).not.toBeNull();
+    const clientX = box!.x + box!.width / 2;
+    const clientY = box!.y + box!.height / 2;
+
+    for (let i = 0; i < 3; i++) {
+      await page.locator('#graph-container').dispatchEvent('wheel', {
+        deltaY: -80,
+        deltaX: 0,
+        bubbles: true,
+        cancelable: true,
+        clientX,
+        clientY,
+      });
+    }
+
+    await page.click('#graph-close');
+
+    const zoomed = await page.evaluate(() => {
+      const cache = JSON.parse(localStorage.getItem('obails-graph-cache') || '{}');
+      return cache.data?.viewState?.zoom ?? 0;
+    });
+    expect(zoomed).toBeGreaterThan(initialZoom * 1.5);
+  });
+
   test('should zoom graph with macOS gesture events', async ({ page }) => {
     await setupMockBindings(page);
     await page.goto('/');
