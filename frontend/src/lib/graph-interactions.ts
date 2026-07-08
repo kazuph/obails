@@ -6,6 +6,7 @@ export interface GraphWheelLike {
   deltaY: number;
   ctrlKey?: boolean;
   metaKey?: boolean;
+  shiftKey?: boolean;
 }
 
 export interface GraphGestureLike {
@@ -24,7 +25,7 @@ export interface GraphTouchPinch {
 }
 
 export function classifyGraphWheel(event: GraphWheelLike): GraphWheelAction {
-  return event.ctrlKey || event.metaKey ? "zoom" : "pan";
+  return event.ctrlKey || event.metaKey || event.shiftKey ? "zoom" : "pan";
 }
 
 export function getGraphWheelZoomFactor(event: Pick<GraphWheelLike, "deltaX" | "deltaY">): number {

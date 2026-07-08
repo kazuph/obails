@@ -40,6 +40,17 @@ describe("classifyGraphWheel", () => {
     // Assert
     expect(action).toBe("zoom");
   });
+
+  it("classifyGraphWheel_WithShiftWheelPinch_ReturnsZoom", () => {
+    // Arrange
+    const wheel = { deltaX: 0, deltaY: -80, ctrlKey: false, metaKey: false, shiftKey: true };
+
+    // Act
+    const action = classifyGraphWheel(wheel);
+
+    // Assert
+    expect(action).toBe("zoom");
+  });
 });
 
 describe("getGraphWheelPanDelta", () => {
