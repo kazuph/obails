@@ -19,6 +19,22 @@ async function selectThemeFromMenu(page: Page, theme: string): Promise<void> {
   }, theme);
 }
 
+function createLargeGraphFixture(nodeCount: number) {
+  const nodes = Array.from({ length: nodeCount }, (_, index) => {
+    const linkCount = index % 50 === 0 ? 30 : index % 20 === 0 ? 16 : index % 10 === 0 ? 9 : 1;
+    return {
+      id: `large-node-${index}.md`,
+      label: `2026-07-08 大規模グラフ確認用ノード ${index}`,
+      linkCount,
+    };
+  });
+  const edges = nodes.slice(1).map((node, index) => ({
+    source: node.id,
+    target: nodes[index % 20].id,
+  }));
+  return { nodes, edges };
+}
+
 test.describe('Obails App', () => {
   test('should close the context menu when clicking elsewhere', async ({ page }) => {
     await page.goto('/');
@@ -1435,6 +1451,96 @@ test.describe('Graph View', () => {
       return cache.data?.viewState?.zoom ?? 0;
     });
     expect(zoomed).toBeGreaterThan(1.5);
+  });
+
+  test('should zoom graph with native macOS magnify event', async ({ page }) => {
+    await setupMockBindings(page);
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+
+    await page.evaluate(() => localStorage.removeItem('obails-graph-cache'));
+
+    await page.click('#graph-btn');
+    await expect(page.locator('#graph-overlay')).toHaveClass(/visible/);
+    await page.waitForSelector('#graph-container canvas, #graph-container svg', { timeout: 5000 });
+    await page.waitForTimeout(500);
+    await page.click('#graph-close');
+
+    const initialZoom = await page.evaluate(() => {
+      const cache = JSON.parse(localStorage.getItem('obails-graph-cache') || '{}');
+      return cache.data?.viewState?.zoom ?? 0;
+    });
+    expect(initialZoom).toBeGreaterThan(0);
+
+    await page.click('#graph-btn');
+    await expect(page.locator('#graph-overlay')).toHaveClass(/visible/);
+    await page.waitForSelector('#graph-container canvas, #graph-container svg', { timeout: 5000 });
+    await page.waitForTimeout(500);
+
+    await page.evaluate(() => {
+      document.dispatchEvent(new CustomEvent('obails:graph-magnify', { detail: 0.3 }));
+    });
+    await page.waitForTimeout(100);
+
+    await page.click('#graph-close');
+
+    const zoomed = await page.evaluate(() => {
+      const cache = JSON.parse(localStorage.getItem('obails-graph-cache') || '{}');
+      return cache.data?.viewState?.zoom ?? 0;
+    });
+    expect(zoomed).toBeGreaterThan(initialZoom * 1.5);
+  });
+
+  test('should keep large graph labels bounded after zooming in', async ({ page }) => {
+    test.setTimeout(60000);
+    await page.addInitScript(() => {
+      const originalFillText = CanvasRenderingContext2D.prototype.fillText;
+      (window as any).__graphLabelDraws = [];
+      CanvasRenderingContext2D.prototype.fillText = function patchedFillText(
+        text: string,
+        x: number,
+        y: number,
+        maxWidth?: number
+      ) {
+        if (this.canvas?.closest?.('#graph-container')) {
+          const fontPx = Number(/([\d.]+)px/.exec(this.font)?.[1] ?? 0);
+          const transformScale = Math.abs(this.getTransform().a) || 1;
+          (window as any).__graphLabelDraws.push({
+            text: String(text),
+            screenFontPx: fontPx * transformScale,
+          });
+        }
+        return originalFillText.call(this, text, x, y, maxWidth as any);
+      };
+    });
+    await setupMockBindings(page, { graph: createLargeGraphFixture(1000) });
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+    await page.evaluate(() => localStorage.removeItem('obails-graph-cache'));
+
+    await page.click('#graph-btn');
+    await expect(page.locator('#graph-overlay')).toHaveClass(/visible/);
+    await page.waitForSelector('#graph-container canvas, #graph-container svg', { timeout: 5000 });
+    await page.waitForTimeout(300);
+
+    await page.evaluate(() => {
+      (window as any).__graphLabelDraws = [];
+      document.dispatchEvent(new CustomEvent('obails:graph-magnify', { detail: 0.8 }));
+    });
+    await page.waitForTimeout(500);
+
+    const labelStats = await page.evaluate(() => {
+      const draws = ((window as any).__graphLabelDraws || []) as Array<{ text: string; screenFontPx: number }>;
+      return {
+        count: draws.length,
+        uniqueCount: new Set(draws.map((draw) => draw.text)).size,
+        maxScreenFontPx: Math.max(0, ...draws.map((draw) => draw.screenFontPx)),
+      };
+    });
+
+    expect(labelStats.count).toBeGreaterThan(0);
+    expect(labelStats.uniqueCount).toBeLessThan(160);
+    expect(labelStats.maxScreenFontPx).toBeLessThanOrEqual(12);
   });
 
   test('should re-layout graph from the graph header', async ({ page }) => {

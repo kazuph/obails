@@ -188,6 +188,7 @@ func main() {
 
 	// Set window reference for window service
 	windowService.SetWindow(mainWindow)
+	setupGraphMagnifyMonitor(mainWindow)
 
 	mainWindow.OnWindowEvent(events.Common.WindowFilesDropped, func(event *application.WindowEvent) {
 		details := event.Context().DropTargetDetails()

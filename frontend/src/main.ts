@@ -45,9 +45,13 @@ import {
 import {
   classifyGraphGesture,
   classifyGraphWheel,
+  getGraphLabelFontSize,
+  getGraphLabelText,
+  getGraphNativeMagnifyZoomFactor,
   getGraphTouchPinch,
   getGraphWheelPanDelta,
   getGraphWheelZoomFactor,
+  shouldShowGraphNodeLabel,
 } from "./lib/graph-interactions";
 import {
   getNextAudioPath,
@@ -481,6 +485,10 @@ function setupEventListeners() {
     document.getElementById("refresh-btn")!.addEventListener("click", refresh);
     document.getElementById("source-toggle-btn")!.addEventListener("click", toggleSourceEditor);
     document.getElementById("graph-relayout")!.addEventListener("click", refreshGraphData);
+    Events.On("obails:graph-magnify", handleGraphNativeMagnify);
+    window.addEventListener("obails:graph-magnify", (event) => {
+        handleGraphNativeMagnify({ data: (event as CustomEvent).detail });
+    });
     document.getElementById("timeline-submit")!.addEventListener("click", submitTimeline);
     miniPlayerClose.addEventListener("click", stopAudioPlayback);
     audioLoopBtn.addEventListener("click", toggleAudioLoopMode);
@@ -4407,6 +4415,18 @@ function handleGraphTouchEnd(e: TouchEvent) {
     graphInitialTouchDistance = 0;
 }
 
+function handleGraphNativeMagnify(event: { data?: unknown }) {
+    if (!graphInstance || !isGraphOverlayVisible()) return;
+
+    const rawData = Array.isArray(event.data) ? event.data[0] : event.data;
+    const magnification = Number(rawData);
+    const factor = getGraphNativeMagnifyZoomFactor(magnification);
+    if (factor === 1) return;
+
+    const point = graphGesturePoint(new Event("obails:graph-magnify"));
+    graphZoomAt(point.x, point.y, factor);
+}
+
 function renderGraph(
     graph: Graph,
     container: HTMLElement,
@@ -4471,15 +4491,14 @@ function renderGraph(
             ctx.fillStyle = nodeColor;
             ctx.fill();
 
-            const shouldShowLabel = !isLargeGraph || node.linkCount >= 8 || globalScale >= 1.4;
-            if (!shouldShowLabel) return;
+            if (!shouldShowGraphNodeLabel(node.linkCount, globalScale, isLargeGraph)) return;
 
-            const fontSize = Math.max(8, Math.min(12, 12 / globalScale));
+            const fontSize = getGraphLabelFontSize(globalScale, isLargeGraph);
             ctx.font = `${fontSize}px sans-serif`;
             ctx.textAlign = "center";
             ctx.textBaseline = "top";
             ctx.fillStyle = textColor;
-            ctx.fillText(node.label, node.x ?? 0, (node.y ?? 0) + radius + 2);
+            ctx.fillText(getGraphLabelText(node.label, isLargeGraph), node.x ?? 0, (node.y ?? 0) + radius + 2);
         })
         .linkSource("source")
         .linkTarget("target")
@@ -4560,6 +4579,9 @@ function renderGraph(
     document.addEventListener("touchmove", handleGraphTouchMove, { passive: false, capture: true, signal: graphInteractionSignal });
     document.addEventListener("touchend", handleGraphTouchEnd, { passive: false, capture: true, signal: graphInteractionSignal });
     document.addEventListener("touchcancel", handleGraphTouchEnd, { passive: false, capture: true, signal: graphInteractionSignal });
+    document.addEventListener("obails:graph-magnify", (event) => {
+        handleGraphNativeMagnify({ data: (event as CustomEvent).detail });
+    }, { signal: graphInteractionSignal });
 }
 
 // GestureEvent type for macOS Safari

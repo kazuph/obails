@@ -33,6 +33,35 @@ export function getGraphWheelZoomFactor(event: Pick<GraphWheelLike, "deltaX" | "
   return Math.exp(-dominantDelta * 0.01);
 }
 
+export function getGraphNativeMagnifyZoomFactor(magnification: number): number {
+  if (!Number.isFinite(magnification)) return 1;
+  return Math.exp(magnification * 3);
+}
+
+export function shouldShowGraphNodeLabel(
+  linkCount: number,
+  globalScale: number,
+  isLargeGraph: boolean
+): boolean {
+  if (!isLargeGraph) return true;
+  if (!Number.isFinite(globalScale) || globalScale < 1.4) return linkCount >= 25;
+  if (globalScale < 2.5) return linkCount >= 15;
+  if (globalScale < 5) return linkCount >= 10;
+  return linkCount >= 8;
+}
+
+export function getGraphLabelFontSize(globalScale: number, isLargeGraph: boolean): number {
+  const screenFontSize = isLargeGraph ? 11 : 12;
+  if (!Number.isFinite(globalScale) || globalScale <= 0) return screenFontSize;
+  return screenFontSize / globalScale;
+}
+
+export function getGraphLabelText(label: string, isLargeGraph: boolean): string {
+  const maxLength = isLargeGraph ? 22 : 48;
+  if (label.length <= maxLength) return label;
+  return `${label.slice(0, maxLength - 3)}...`;
+}
+
 export function getGraphWheelPanDelta(
   event: Pick<GraphWheelLike, "deltaX" | "deltaY">,
   zoom: number

@@ -142,6 +142,7 @@ type MockLastOpenedFile = { path: string; fileType: string } | null;
 type MockBindingOptions = {
   initialLastOpenedFile?: MockLastOpenedFile;
   fileInfos?: any[];
+  graph?: { nodes: any[]; edges: any[] };
 };
 
 /**
@@ -150,6 +151,7 @@ type MockBindingOptions = {
 export async function setupMockBindings(page: Page, options: MockBindingOptions = {}): Promise<void> {
   const files = loadTestFiles();
   const fileInfos = options.fileInfos ?? generateFileInfos();
+  const graph = options.graph;
   let lastOpenedFile: MockLastOpenedFile = options.initialLastOpenedFile ?? null;
   const readBinaryCalls: string[] = [];
   const openWithDefaultAppCalls: string[] = [];
@@ -366,7 +368,7 @@ export async function setupMockBindings(page: Page, options: MockBindingOptions 
         break;
       // GraphService.GetFullGraph
       case 312528985:
-        value = {
+        value = graph ?? {
           nodes: fileInfos.filter((f: any) => !(f.isDir ?? f.IsDir)).map((f: any) => ({
             id: f.path ?? f.Path,
             label: (f.name ?? f.Name).replace('.md', ''),
@@ -378,8 +380,8 @@ export async function setupMockBindings(page: Page, options: MockBindingOptions 
       // GraphService.GetGraphStats
       case 3975675625:
         value = {
-          nodeCount: fileInfos.filter((f: any) => !(f.isDir ?? f.IsDir)).length,
-          edgeCount: 0,
+          nodeCount: graph?.nodes.length ?? fileInfos.filter((f: any) => !(f.isDir ?? f.IsDir)).length,
+          edgeCount: graph?.edges.length ?? 0,
         };
         break;
       // StateService.GetLastOpenedFile
@@ -410,10 +412,11 @@ export async function setupMockBindings(page: Page, options: MockBindingOptions 
   });
 
   // Wailsランタイムをモック
-    await page.addInitScript(({ files, fileInfos, initialLastOpenedFile }) => {
+    await page.addInitScript(({ files, fileInfos, initialLastOpenedFile, graph }) => {
     // @wailsio/runtime の $Call.ByID をモック
     (window as any).__wails_mock_files = files;
     (window as any).__wails_mock_fileInfos = fileInfos;
+    (window as any).__wails_mock_graph = graph;
     (window as any).__wails_mock_lastOpenedFile = initialLastOpenedFile;
     (window as any).__wails_mock_openExternalCalls = [];
     (window as any).__wails_mock_readBinaryCalls = [];
@@ -613,7 +616,7 @@ export async function setupMockBindings(page: Page, options: MockBindingOptions 
 
             // GraphService.GetFullGraph
             case 312528985:
-              return createMockPromise({
+              return createMockPromise((window as any).__wails_mock_graph ?? {
                 nodes: fileInfos.filter((f: any) => !(f.isDir ?? f.IsDir)).map((f: any) => ({
                   id: f.path ?? f.Path,
                   label: (f.name ?? f.Name).replace('.md', ''),
@@ -625,8 +628,8 @@ export async function setupMockBindings(page: Page, options: MockBindingOptions 
             // GraphService.GetGraphStats
             case 3975675625:
               return createMockPromise({
-                nodeCount: fileInfos.filter((f: any) => !(f.isDir ?? f.IsDir)).length,
-                edgeCount: 0,
+                nodeCount: ((window as any).__wails_mock_graph?.nodes.length) ?? fileInfos.filter((f: any) => !(f.isDir ?? f.IsDir)).length,
+                edgeCount: ((window as any).__wails_mock_graph?.edges.length) ?? 0,
               });
 
             // WindowService系は空で返す
@@ -647,7 +650,7 @@ export async function setupMockBindings(page: Page, options: MockBindingOptions 
       value: mockRuntime,
       writable: false,
     });
-  }, { files, fileInfos, initialLastOpenedFile: lastOpenedFile });
+  }, { files, fileInfos, initialLastOpenedFile: lastOpenedFile, graph });
 }
 
 /**

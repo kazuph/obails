@@ -2,9 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   classifyGraphGesture,
   classifyGraphWheel,
+  getGraphLabelFontSize,
+  getGraphLabelText,
+  getGraphNativeMagnifyZoomFactor,
   getGraphTouchPinch,
   getGraphWheelPanDelta,
   getGraphWheelZoomFactor,
+  shouldShowGraphNodeLabel,
 } from "../../lib/graph-interactions";
 
 describe("classifyGraphWheel", () => {
@@ -76,6 +80,77 @@ describe("getGraphWheelZoomFactor", () => {
 
     // Assert
     expect(factor).toBeGreaterThan(1);
+  });
+});
+
+describe("getGraphNativeMagnifyZoomFactor", () => {
+  it("getGraphNativeMagnifyZoomFactor_WithPositiveMagnification_ReturnsZoomInFactor", () => {
+    // Arrange
+    const magnification = 0.2;
+
+    // Act
+    const factor = getGraphNativeMagnifyZoomFactor(magnification);
+
+    // Assert
+    expect(factor).toBeGreaterThan(1);
+  });
+
+  it("getGraphNativeMagnifyZoomFactor_WithNegativeMagnification_ReturnsZoomOutFactor", () => {
+    // Arrange
+    const magnification = -0.2;
+
+    // Act
+    const factor = getGraphNativeMagnifyZoomFactor(magnification);
+
+    // Assert
+    expect(factor).toBeGreaterThan(0);
+    expect(factor).toBeLessThan(1);
+  });
+
+  it("getGraphNativeMagnifyZoomFactor_WithInvalidMagnification_ReturnsNeutralFactor", () => {
+    // Act
+    const factor = getGraphNativeMagnifyZoomFactor(Number.NaN);
+
+    // Assert
+    expect(factor).toBe(1);
+  });
+});
+
+describe("shouldShowGraphNodeLabel", () => {
+  it("shouldShowGraphNodeLabel_WithSmallGraph_ReturnsTrueForEveryNode", () => {
+    expect(shouldShowGraphNodeLabel(0, 1, false)).toBe(true);
+  });
+
+  it("shouldShowGraphNodeLabel_WithLargeGraphAtMediumZoom_HidesLowDegreeLabels", () => {
+    expect(shouldShowGraphNodeLabel(4, 3, true)).toBe(false);
+    expect(shouldShowGraphNodeLabel(12, 3, true)).toBe(true);
+  });
+
+  it("shouldShowGraphNodeLabel_WithLargeGraphAtHighZoom_DoesNotShowEveryNode", () => {
+    expect(shouldShowGraphNodeLabel(2, 8, true)).toBe(false);
+    expect(shouldShowGraphNodeLabel(10, 8, true)).toBe(true);
+  });
+});
+
+describe("getGraphLabelFontSize", () => {
+  it("getGraphLabelFontSize_WithLargeGraphZoomedIn_KeepsScreenSizeBounded", () => {
+    const graphFontSize = getGraphLabelFontSize(8, true);
+    const screenFontSize = graphFontSize * 8;
+
+    expect(screenFontSize).toBeLessThanOrEqual(11);
+  });
+
+  it("getGraphLabelFontSize_WithInvalidScale_ReturnsScreenFontSize", () => {
+    expect(getGraphLabelFontSize(0, true)).toBe(11);
+  });
+});
+
+describe("getGraphLabelText", () => {
+  it("getGraphLabelText_WithLargeGraph_TruncatesLongLabels", () => {
+    const label = "2026-07-08 AI設定最適化（claude-codex スキル・ルール・メモリ整理）文献ノート";
+
+    expect(getGraphLabelText(label, true)).toHaveLength(22);
+    expect(getGraphLabelText(label, true)).toMatch(/\.\.\.$/);
   });
 });
 
