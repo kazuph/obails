@@ -48,6 +48,8 @@ import {
   getGraphLabelFontSize,
   getGraphLabelText,
   getGraphNativeMagnifyZoomFactor,
+  getGraphNodeRadius,
+  getGraphRenderedNodeRadius,
   getGraphTouchPinch,
   getGraphWheelPanDelta,
   getGraphWheelZoomFactor,
@@ -4238,7 +4240,7 @@ interface GraphNodeData {
 }
 
 function getNodeRadius(node: GraphNodeData): number {
-    return Math.max(2, Math.log(node.linkCount + 1) * 2);
+    return getGraphNodeRadius(node.linkCount);
 }
 
 function getLargestHub(nodes: GraphNodeData[]): GraphNodeData | undefined {
@@ -4485,7 +4487,7 @@ function renderGraph(
         .nodeVal((node: GraphNodeData) => getNodeRadius(node))
         .nodeCanvasObjectMode(() => "replace")
         .nodeCanvasObject((node: GraphNodeData, ctx: CanvasRenderingContext2D, globalScale: number) => {
-            const radius = getNodeRadius(node);
+            const radius = getGraphRenderedNodeRadius(node.linkCount, globalScale, isLargeGraph);
             ctx.beginPath();
             ctx.arc(node.x ?? 0, node.y ?? 0, radius, 0, 2 * Math.PI, false);
             ctx.fillStyle = nodeColor;

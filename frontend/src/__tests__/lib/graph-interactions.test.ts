@@ -5,6 +5,8 @@ import {
   getGraphLabelFontSize,
   getGraphLabelText,
   getGraphNativeMagnifyZoomFactor,
+  getGraphNodeRadius,
+  getGraphRenderedNodeRadius,
   getGraphTouchPinch,
   getGraphWheelPanDelta,
   getGraphWheelZoomFactor,
@@ -151,6 +153,26 @@ describe("getGraphLabelText", () => {
 
     expect(getGraphLabelText(label, true)).toHaveLength(22);
     expect(getGraphLabelText(label, true)).toMatch(/\.\.\.$/);
+  });
+});
+
+describe("getGraphRenderedNodeRadius", () => {
+  it("getGraphRenderedNodeRadius_WithSmallGraph_KeepsBaseRadius", () => {
+    const baseRadius = getGraphNodeRadius(45);
+
+    expect(getGraphRenderedNodeRadius(45, 8, false)).toBe(baseRadius);
+  });
+
+  it("getGraphRenderedNodeRadius_WithLargeGraphZoomedIn_CapsScreenRadius", () => {
+    const radius = getGraphRenderedNodeRadius(45, 8, true);
+
+    expect(radius * 8).toBeLessThanOrEqual(18);
+  });
+
+  it("getGraphRenderedNodeRadius_WithLargeGraphLowDegreeNode_KeepsVisibleMinimum", () => {
+    const radius = getGraphRenderedNodeRadius(0, 8, true);
+
+    expect(radius * 8).toBeGreaterThanOrEqual(2);
   });
 });
 

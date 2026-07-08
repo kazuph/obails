@@ -1491,11 +1491,13 @@ test.describe('Graph View', () => {
     expect(zoomed).toBeGreaterThan(initialZoom * 1.5);
   });
 
-  test('should keep large graph labels bounded after zooming in', async ({ page }) => {
+  test('should keep large graph labels and nodes bounded after zooming in', async ({ page }) => {
     test.setTimeout(60000);
     await page.addInitScript(() => {
       const originalFillText = CanvasRenderingContext2D.prototype.fillText;
+      const originalArc = CanvasRenderingContext2D.prototype.arc;
       (window as any).__graphLabelDraws = [];
+      (window as any).__graphNodeDraws = [];
       CanvasRenderingContext2D.prototype.fillText = function patchedFillText(
         text: string,
         x: number,
@@ -1512,6 +1514,22 @@ test.describe('Graph View', () => {
         }
         return originalFillText.call(this, text, x, y, maxWidth as any);
       };
+      CanvasRenderingContext2D.prototype.arc = function patchedArc(
+        x: number,
+        y: number,
+        radius: number,
+        startAngle: number,
+        endAngle: number,
+        counterclockwise?: boolean
+      ) {
+        if (this.canvas?.closest?.('#graph-container')) {
+          const transformScale = Math.abs(this.getTransform().a) || 1;
+          (window as any).__graphNodeDraws.push({
+            screenRadius: radius * transformScale,
+          });
+        }
+        return originalArc.call(this, x, y, radius, startAngle, endAngle, counterclockwise);
+      };
     });
     await setupMockBindings(page, { graph: createLargeGraphFixture(1000) });
     await page.goto('/');
@@ -1525,6 +1543,7 @@ test.describe('Graph View', () => {
 
     await page.evaluate(() => {
       (window as any).__graphLabelDraws = [];
+      (window as any).__graphNodeDraws = [];
       document.dispatchEvent(new CustomEvent('obails:graph-magnify', { detail: 0.8 }));
     });
     await page.waitForTimeout(500);
@@ -1537,10 +1556,19 @@ test.describe('Graph View', () => {
         maxScreenFontPx: Math.max(0, ...draws.map((draw) => draw.screenFontPx)),
       };
     });
+    const nodeStats = await page.evaluate(() => {
+      const draws = ((window as any).__graphNodeDraws || []) as Array<{ screenRadius: number }>;
+      return {
+        count: draws.length,
+        maxScreenRadius: Math.max(0, ...draws.map((draw) => draw.screenRadius)),
+      };
+    });
 
     expect(labelStats.count).toBeGreaterThan(0);
     expect(labelStats.uniqueCount).toBeLessThan(160);
     expect(labelStats.maxScreenFontPx).toBeLessThanOrEqual(12);
+    expect(nodeStats.count).toBeGreaterThan(0);
+    expect(nodeStats.maxScreenRadius).toBeLessThanOrEqual(18);
   });
 
   test('should re-layout graph from the graph header', async ({ page }) => {

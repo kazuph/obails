@@ -62,6 +62,24 @@ export function getGraphLabelText(label: string, isLargeGraph: boolean): string 
   return `${label.slice(0, maxLength - 3)}...`;
 }
 
+export function getGraphNodeRadius(linkCount: number): number {
+  return Math.max(2, Math.log(linkCount + 1) * 2);
+}
+
+export function getGraphRenderedNodeRadius(
+  linkCount: number,
+  globalScale: number,
+  isLargeGraph: boolean
+): number {
+  const radius = getGraphNodeRadius(linkCount);
+  if (!isLargeGraph || !Number.isFinite(globalScale) || globalScale <= 1.4) return radius;
+
+  const maxScreenRadius = 18;
+  const minScreenRadius = 2;
+  const cappedRadius = Math.min(radius, maxScreenRadius / globalScale);
+  return Math.max(minScreenRadius / globalScale, cappedRadius);
+}
+
 export function getGraphWheelPanDelta(
   event: Pick<GraphWheelLike, "deltaX" | "deltaY">,
   zoom: number
