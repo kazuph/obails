@@ -2525,6 +2525,8 @@ details.callout:not([open]) .callout-fold::before {
     z-index: 2000;
     display: none;
     flex-direction: column;
+    overscroll-behavior: contain;
+    touch-action: none;
 }
 
 .graph-overlay.visible {
@@ -2590,6 +2592,8 @@ details.callout:not([open]) .callout-fold::before {
     flex: 1;
     overflow: hidden;
     background: var(--graph-container-bg, var(--bg-primary));
+    overscroll-behavior: contain;
+    touch-action: none;
 }
 
 /* Stars background effect - only for dark themes */

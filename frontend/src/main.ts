@@ -43,6 +43,13 @@ import {
   type GraphStructureSignature,
 } from "./lib/graph-cache";
 import {
+  classifyGraphGesture,
+  classifyGraphWheel,
+  getGraphTouchPinch,
+  getGraphWheelPanDelta,
+  getGraphWheelZoomFactor,
+} from "./lib/graph-interactions";
+import {
   getNextAudioPath,
   loadAudioLoopMode,
   loadDoneAudioPaths,
@@ -120,6 +127,8 @@ let lastContextMenuX = 0;
 let lastContextMenuY = 0;
 let graphInteractionAbortController: AbortController | null = null;
 let graphInitialPinchZoom = 1;
+let graphInitialTouchDistance = 0;
+let graphInitialTouchZoom = 1;
 let pendingDeleteTargetPath = "";
 let pendingDeleteIsDir = false;
 let itemFormMode: "create" | "rename" = "create";
@@ -4303,6 +4312,13 @@ function isGraphGestureTarget(target: EventTarget | null): boolean {
     );
 }
 
+function isGraphOverlayVisible(): boolean {
+    return Boolean(
+        showGraph &&
+        document.getElementById("graph-overlay")?.classList.contains("visible")
+    );
+}
+
 function graphGesturePoint(event: Event): { x: number; y: number } {
     if (event instanceof MouseEvent) {
         return { x: event.clientX, y: event.clientY };
@@ -4318,28 +4334,77 @@ function graphGesturePoint(event: Event): { x: number; y: number } {
 function handleGraphWheel(e: WheelEvent) {
     if (!graphInstance || !isGraphGestureTarget(e.target)) return;
     e.preventDefault();
+    e.stopPropagation();
 
-    const dominantDelta = Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
-    const zoomFactor = Math.exp(-dominantDelta * 0.01);
-    graphZoomAt(e.clientX, e.clientY, zoomFactor);
+    if (classifyGraphWheel(e) === "zoom") {
+        graphZoomAt(e.clientX, e.clientY, getGraphWheelZoomFactor(e));
+        return;
+    }
+
+    const center = graphInstance.centerAt() as { x: number; y: number } | undefined;
+    const zoom = graphInstance.zoom();
+    if (!center || !Number.isFinite(zoom) || zoom <= 0) return;
+    const delta = getGraphWheelPanDelta(e, zoom);
+
+    graphInstance.centerAt(
+        center.x + delta.x,
+        center.y + delta.y
+    );
 }
 
 function handleGraphGestureStart(e: GestureEvent) {
-    if (!graphInstance || !isGraphGestureTarget(e.target)) return;
+    if (!graphInstance || !isGraphOverlayVisible()) return;
     e.preventDefault();
+    e.stopPropagation();
     graphInitialPinchZoom = graphInstance.zoom();
 }
 
 function handleGraphGestureChange(e: GestureEvent) {
-    if (!graphInstance || !isGraphGestureTarget(e.target)) return;
+    if (!graphInstance || !isGraphOverlayVisible()) return;
     e.preventDefault();
+    e.stopPropagation();
+    if (classifyGraphGesture(e) !== "zoom") return;
     const point = graphGesturePoint(e);
     graphZoomAt(point.x, point.y, (graphInitialPinchZoom * e.scale) / graphInstance.zoom());
 }
 
 function handleGraphGestureEnd(e: GestureEvent) {
-    if (!isGraphGestureTarget(e.target)) return;
+    if (!isGraphOverlayVisible()) return;
     e.preventDefault();
+    e.stopPropagation();
+}
+
+function handleGraphTouchStart(e: TouchEvent) {
+    if (!graphInstance || !isGraphOverlayVisible()) return;
+    const pinch = getGraphTouchPinch(e.touches);
+    if (!pinch) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    graphInitialTouchDistance = pinch.distance;
+    graphInitialTouchZoom = graphInstance.zoom();
+}
+
+function handleGraphTouchMove(e: TouchEvent) {
+    if (!graphInstance || !isGraphOverlayVisible()) return;
+    const pinch = getGraphTouchPinch(e.touches);
+    if (!pinch || graphInitialTouchDistance <= 0) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    graphZoomAt(
+        pinch.centerX,
+        pinch.centerY,
+        (graphInitialTouchZoom * (pinch.distance / graphInitialTouchDistance)) / graphInstance.zoom()
+    );
+}
+
+function handleGraphTouchEnd(e: TouchEvent) {
+    if (!isGraphOverlayVisible() || e.touches.length >= 2) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    graphInitialTouchDistance = 0;
 }
 
 function renderGraph(
@@ -4491,6 +4556,10 @@ function renderGraph(
     document.addEventListener("gesturestart", handleGraphGestureStart as EventListener, { passive: false, capture: true, signal: graphInteractionSignal });
     document.addEventListener("gesturechange", handleGraphGestureChange as EventListener, { passive: false, capture: true, signal: graphInteractionSignal });
     document.addEventListener("gestureend", handleGraphGestureEnd as EventListener, { passive: false, capture: true, signal: graphInteractionSignal });
+    document.addEventListener("touchstart", handleGraphTouchStart, { passive: false, capture: true, signal: graphInteractionSignal });
+    document.addEventListener("touchmove", handleGraphTouchMove, { passive: false, capture: true, signal: graphInteractionSignal });
+    document.addEventListener("touchend", handleGraphTouchEnd, { passive: false, capture: true, signal: graphInteractionSignal });
+    document.addEventListener("touchcancel", handleGraphTouchEnd, { passive: false, capture: true, signal: graphInteractionSignal });
 }
 
 // GestureEvent type for macOS Safari

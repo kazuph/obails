@@ -1251,7 +1251,7 @@ test.describe('Graph View', () => {
     expect(statsText!.length).toBeGreaterThan(0);
   });
 
-  test('should zoom graph with trackpad pinch wheel gesture', async ({ page }) => {
+  test('should zoom graph with browser pinch gesture input', async ({ page }) => {
     await setupMockBindings(page);
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
@@ -1273,50 +1273,38 @@ test.describe('Graph View', () => {
     await page.click('#graph-btn');
     await expect(page.locator('#graph-overlay')).toHaveClass(/visible/);
     await page.waitForSelector('#graph-container canvas, #graph-container svg', { timeout: 5000 });
+    await page.waitForTimeout(500);
 
     const box = await page.locator('#graph-container').boundingBox();
     expect(box).not.toBeNull();
     const clientX = box!.x + box!.width / 2;
     const clientY = box!.y + box!.height / 2;
 
-    await page.locator('#graph-container').dispatchEvent('wheel', {
-      deltaY: -80,
-      deltaX: 0,
-      ctrlKey: true,
-      bubbles: true,
-      cancelable: true,
-      clientX,
-      clientY,
+    const client = await page.context().newCDPSession(page);
+    await client.send('Input.synthesizePinchGesture', {
+      x: clientX,
+      y: clientY,
+      scaleFactor: 1.35,
+      relativeSpeed: 10000,
+      gestureSourceType: 'touch',
     });
-    await page.locator('#graph-container').dispatchEvent('wheel', {
-      deltaY: -80,
-      deltaX: 0,
-      ctrlKey: true,
-      bubbles: true,
-      cancelable: true,
-      clientX,
-      clientY,
-    });
-    await page.locator('#graph-container').dispatchEvent('wheel', {
-      deltaY: -80,
-      deltaX: 0,
-      ctrlKey: true,
-      bubbles: true,
-      cancelable: true,
-      clientX,
-      clientY,
-    });
+    await client.detach();
+    await page.waitForTimeout(300);
 
-    await page.click('#graph-close');
+    const pageScale = await page.evaluate(() => window.visualViewport?.scale ?? 1);
+    expect(pageScale).toBeCloseTo(1, 2);
+
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#graph-overlay')).not.toHaveClass(/visible/);
 
     const zoomed = await page.evaluate(() => {
       const cache = JSON.parse(localStorage.getItem('obails-graph-cache') || '{}');
       return cache.data?.viewState?.zoom ?? 0;
     });
-    expect(zoomed).toBeGreaterThan(initialZoom * 1.5);
+    expect(zoomed).toBeGreaterThan(initialZoom * 1.05);
   });
 
-  test('should zoom graph with unmodified wheel input in Wails webview', async ({ page }) => {
+  test('should pan graph with unmodified two-finger wheel input', async ({ page }) => {
     await setupMockBindings(page);
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
@@ -1329,39 +1317,35 @@ test.describe('Graph View', () => {
     await page.waitForTimeout(500);
     await page.click('#graph-close');
 
-    const initialZoom = await page.evaluate(() => {
+    const initialViewState = await page.evaluate(() => {
       const cache = JSON.parse(localStorage.getItem('obails-graph-cache') || '{}');
-      return cache.data?.viewState?.zoom ?? 0;
+      return cache.data?.viewState;
     });
-    expect(initialZoom).toBeGreaterThan(0);
+    expect(initialViewState?.zoom).toBeGreaterThan(0);
 
     await page.click('#graph-btn');
     await expect(page.locator('#graph-overlay')).toHaveClass(/visible/);
     await page.waitForSelector('#graph-container canvas, #graph-container svg', { timeout: 5000 });
+    await page.waitForTimeout(500);
 
     const box = await page.locator('#graph-container').boundingBox();
     expect(box).not.toBeNull();
     const clientX = box!.x + box!.width / 2;
     const clientY = box!.y + box!.height / 2;
 
-    for (let i = 0; i < 3; i++) {
-      await page.locator('#graph-container').dispatchEvent('wheel', {
-        deltaY: -80,
-        deltaX: 0,
-        bubbles: true,
-        cancelable: true,
-        clientX,
-        clientY,
-      });
-    }
+    await page.mouse.move(clientX, clientY);
+    await page.mouse.wheel(80, 120);
+    await page.waitForTimeout(100);
 
     await page.click('#graph-close');
 
-    const zoomed = await page.evaluate(() => {
+    const pannedViewState = await page.evaluate(() => {
       const cache = JSON.parse(localStorage.getItem('obails-graph-cache') || '{}');
-      return cache.data?.viewState?.zoom ?? 0;
+      return cache.data?.viewState;
     });
-    expect(zoomed).toBeGreaterThan(initialZoom * 1.5);
+    expect(pannedViewState?.zoom).toBeCloseTo(initialViewState.zoom, 4);
+    expect(Math.abs(pannedViewState.centerX - initialViewState.centerX)).toBeGreaterThan(20);
+    expect(Math.abs(pannedViewState.centerY - initialViewState.centerY)).toBeGreaterThan(20);
   });
 
   test('should zoom graph with macOS gesture events', async ({ page }) => {
