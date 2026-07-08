@@ -1316,6 +1316,51 @@ test.describe('Graph View', () => {
     expect(zoomed).toBeGreaterThan(initialZoom * 1.5);
   });
 
+  test('should zoom graph with macOS gesture events', async ({ page }) => {
+    await setupMockBindings(page);
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+
+    await page.evaluate(() => localStorage.removeItem('obails-graph-cache'));
+
+    await page.click('#graph-btn');
+    await expect(page.locator('#graph-overlay')).toHaveClass(/visible/);
+    await page.waitForSelector('#graph-container canvas, #graph-container svg', { timeout: 5000 });
+    await page.waitForTimeout(500);
+    await page.click('#graph-close');
+
+    const initialZoom = await page.evaluate(() => {
+      const cache = JSON.parse(localStorage.getItem('obails-graph-cache') || '{}');
+      return cache.data?.viewState?.zoom ?? 0;
+    });
+    expect(initialZoom).toBeGreaterThan(0);
+
+    await page.click('#graph-btn');
+    await expect(page.locator('#graph-overlay')).toHaveClass(/visible/);
+    await page.waitForSelector('#graph-container canvas, #graph-container svg', { timeout: 5000 });
+
+    await page.locator('#graph-container').evaluate((container) => {
+      function dispatchGesture(type: string, scale: number) {
+        const event = new Event(type, { bubbles: true, cancelable: true });
+        Object.defineProperty(event, 'scale', { value: scale });
+        Object.defineProperty(event, 'rotation', { value: 0 });
+        container.dispatchEvent(event);
+      }
+
+      dispatchGesture('gesturestart', 1);
+      dispatchGesture('gesturechange', 1.8);
+      dispatchGesture('gestureend', 1.8);
+    });
+
+    await page.click('#graph-close');
+
+    const zoomed = await page.evaluate(() => {
+      const cache = JSON.parse(localStorage.getItem('obails-graph-cache') || '{}');
+      return cache.data?.viewState?.zoom ?? 0;
+    });
+    expect(zoomed).toBeGreaterThan(1.5);
+  });
+
   test('should re-layout graph from the graph header', async ({ page }) => {
     await setupMockBindings(page);
     await page.goto('/');

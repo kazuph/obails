@@ -118,6 +118,8 @@ let suppressFileTreeClickPath = "";
 let suppressContextMenuDismissUntil = 0;
 let lastContextMenuX = 0;
 let lastContextMenuY = 0;
+let graphInteractionAbortController: AbortController | null = null;
+let graphInitialPinchZoom = 1;
 let pendingDeleteTargetPath = "";
 let pendingDeleteIsDir = false;
 let itemFormMode: "create" | "rename" = "create";
@@ -4214,6 +4216,8 @@ interface GraphNodeData {
     y?: number;
     fx?: number;
     fy?: number;
+    vx?: number;
+    vy?: number;
 }
 
 function getNodeRadius(node: GraphNodeData): number {
@@ -4227,6 +4231,20 @@ function getLargestHub(nodes: GraphNodeData[]): GraphNodeData | undefined {
         }
         return largest;
     }, undefined);
+}
+
+function createCenterGravityForce(strength: number) {
+    let nodes: GraphNodeData[] = [];
+    const force = (alpha: number) => {
+        for (const node of nodes) {
+            node.vx = (node.vx ?? 0) - (node.x ?? 0) * strength * alpha;
+            node.vy = (node.vy ?? 0) - (node.y ?? 0) * strength * alpha;
+        }
+    };
+    force.initialize = (nextNodes: GraphNodeData[]) => {
+        nodes = nextNodes;
+    };
+    return force;
 }
 
 interface GraphEdgeData {
@@ -4274,6 +4292,61 @@ function graphZoomAt(clientX: number, clientY: number, zoomFactor: number) {
     );
 }
 
+function isGraphGestureTarget(target: EventTarget | null): boolean {
+    const overlay = document.getElementById("graph-overlay");
+    const container = document.getElementById("graph-container");
+    return Boolean(
+        showGraph &&
+        overlay?.classList.contains("visible") &&
+        target instanceof Node &&
+        (container?.contains(target) || overlay?.contains(target))
+    );
+}
+
+function graphGesturePoint(event: Event): { x: number; y: number } {
+    if (event instanceof MouseEvent) {
+        return { x: event.clientX, y: event.clientY };
+    }
+    const container = document.getElementById("graph-container");
+    const rect = container?.getBoundingClientRect();
+    return {
+        x: rect ? rect.left + rect.width / 2 : window.innerWidth / 2,
+        y: rect ? rect.top + rect.height / 2 : window.innerHeight / 2,
+    };
+}
+
+function handleGraphWheel(e: WheelEvent) {
+    if (!graphInstance || !isGraphGestureTarget(e.target)) return;
+    e.preventDefault();
+
+    if (e.ctrlKey || e.metaKey || e.shiftKey) {
+        const zoomFactor = Math.exp(-e.deltaY * 0.01);
+        graphZoomAt(e.clientX, e.clientY, zoomFactor);
+    } else {
+        const { x, y } = graphInstance.centerAt() as { x: number; y: number };
+        const panSpeed = 1 / graphInstance.zoom();
+        graphInstance.centerAt(x + e.deltaX * panSpeed, y + e.deltaY * panSpeed);
+    }
+}
+
+function handleGraphGestureStart(e: GestureEvent) {
+    if (!graphInstance || !isGraphGestureTarget(e.target)) return;
+    e.preventDefault();
+    graphInitialPinchZoom = graphInstance.zoom();
+}
+
+function handleGraphGestureChange(e: GestureEvent) {
+    if (!graphInstance || !isGraphGestureTarget(e.target)) return;
+    e.preventDefault();
+    const point = graphGesturePoint(e);
+    graphZoomAt(point.x, point.y, (graphInitialPinchZoom * e.scale) / graphInstance.zoom());
+}
+
+function handleGraphGestureEnd(e: GestureEvent) {
+    if (!isGraphGestureTarget(e.target)) return;
+    e.preventDefault();
+}
+
 function renderGraph(
     graph: Graph,
     container: HTMLElement,
@@ -4281,6 +4354,8 @@ function renderGraph(
     savedViewState?: { zoom: number; centerX: number; centerY: number }
 ) {
     // Clean up existing instance
+    graphInteractionAbortController?.abort();
+    graphInteractionAbortController = null;
     if (graphInstance) {
         graphInstance._destructor();
     }
@@ -4368,11 +4443,17 @@ function renderGraph(
         .d3VelocityDecay(isLargeGraph ? 0.36 : 0.3)
         .warmupTicks(hasSavedLayout ? 0 : (isLargeGraph ? 120 : 60));
 
-    const chargeForce = graphInstance.d3Force("charge") as { strength: (value: number) => unknown } | undefined;
-    chargeForce?.strength(isLargeGraph ? -120 : -55);
+    const chargeForce = graphInstance.d3Force("charge") as {
+        strength: (value: number) => unknown;
+        distanceMax?: (value: number) => unknown;
+    } | undefined;
+    chargeForce?.strength(isLargeGraph ? -28 : -55);
+    chargeForce?.distanceMax?.(isLargeGraph ? 260 : 500);
 
     const linkForce = graphInstance.d3Force("link") as { distance: (value: number) => unknown } | undefined;
-    linkForce?.distance(isLargeGraph ? 72 : 42);
+    linkForce?.distance(isLargeGraph ? 34 : 42);
+
+    graphInstance.d3Force("graph-gravity", createCenterGravityForce(isLargeGraph ? 0.12 : 0.03));
 
     // Restore view state or zoom to fit
     setTimeout(() => {
@@ -4395,7 +4476,7 @@ function renderGraph(
                 const hub = getLargestHub(nodes);
                 if (hub && Number.isFinite(hub.x) && Number.isFinite(hub.y)) {
                     graphInstance?.centerAt(hub.x ?? 0, hub.y ?? 0, 600);
-                    graphInstance?.zoom(1.2, 600);
+                    graphInstance?.zoom(1.35, 600);
                 } else {
                     graphInstance?.zoomToFit(400, 50);
                 }
@@ -4406,48 +4487,15 @@ function renderGraph(
         }
     }, 100);
 
-    // Custom wheel handler:
-    // - Normal 2-finger scroll = pan (move around)
-    // - Trackpad pinch on Chromium arrives as ctrlKey + wheel.
-    // - Ctrl/Cmd/Shift + 2-finger scroll = zoom (standard for design tools)
-    container.addEventListener("wheel", (e: WheelEvent) => {
-        if (!graphInstance) return;
-        e.preventDefault();
+    graphInteractionAbortController = new AbortController();
+    const graphInteractionSignal = graphInteractionAbortController.signal;
 
-        if (e.ctrlKey || e.metaKey || e.shiftKey) {
-            const zoomFactor = Math.exp(-e.deltaY * 0.01);
-            graphZoomAt(e.clientX, e.clientY, zoomFactor);
-        } else {
-            // Normal scroll = pan
-            const { x, y } = graphInstance.centerAt() as { x: number; y: number };
-            const zoomLevel = graphInstance.zoom();
-            // Adjust pan speed based on zoom level
-            const panSpeed = 1 / zoomLevel;
-            graphInstance.centerAt(x + e.deltaX * panSpeed, y + e.deltaY * panSpeed);
-        }
-    }, { passive: false, capture: true });
-
-    // Pinch zoom handler (macOS/Safari gesture events)
-    let initialPinchZoom = 1;
-    container.addEventListener("gesturestart", ((e: GestureEvent) => {
-        if (!graphInstance) return;
-        e.preventDefault();
-        initialPinchZoom = graphInstance.zoom();
-    }) as EventListener, { passive: false });
-
-    container.addEventListener("gesturechange", ((e: GestureEvent) => {
-        if (!graphInstance) return;
-        e.preventDefault();
-        graphZoomAt(
-            e instanceof MouseEvent ? e.clientX : container.getBoundingClientRect().left + container.clientWidth / 2,
-            e instanceof MouseEvent ? e.clientY : container.getBoundingClientRect().top + container.clientHeight / 2,
-            (initialPinchZoom * e.scale) / graphInstance.zoom()
-        );
-    }) as EventListener, { passive: false });
-
-    container.addEventListener("gestureend", ((e: GestureEvent) => {
-        e.preventDefault();
-    }) as EventListener, { passive: false });
+    // Capture on document because Wails/WebKit can dispatch macOS pinch gestures
+    // above the canvas container instead of directly on it.
+    document.addEventListener("wheel", handleGraphWheel, { passive: false, capture: true, signal: graphInteractionSignal });
+    document.addEventListener("gesturestart", handleGraphGestureStart as EventListener, { passive: false, capture: true, signal: graphInteractionSignal });
+    document.addEventListener("gesturechange", handleGraphGestureChange as EventListener, { passive: false, capture: true, signal: graphInteractionSignal });
+    document.addEventListener("gestureend", handleGraphGestureEnd as EventListener, { passive: false, capture: true, signal: graphInteractionSignal });
 }
 
 // GestureEvent type for macOS Safari
@@ -4467,7 +4515,10 @@ function initializeMermaid(theme: string) {
         startOnLoad: false,
         theme: isDark ? "dark" : "default",
         securityLevel: "loose",
-        logLevel: "error"
+        logLevel: "error",
+        flowchart: {
+            htmlLabels: false,
+        },
     });
 }
 
@@ -4479,12 +4530,15 @@ let isMermaidPanning = false;
 let mermaidStartX = 0, mermaidStartY = 0;
 let mermaidSvgWidth = 0, mermaidSvgHeight = 0;
 let mermaidMinimapScale = 1;
+let mermaidRenderVersion = 0;
 
 async function initMermaidDiagrams() {
     const previewEl = document.getElementById("preview");
     if (!previewEl) return;
+    const renderVersion = ++mermaidRenderVersion;
 
     await document.fonts.ready;
+    if (renderVersion !== mermaidRenderVersion) return;
 
     const codeBlocks = previewEl.querySelectorAll("pre code");
 
@@ -4500,6 +4554,7 @@ async function initMermaidDiagrams() {
             text.match(/^(graph|flowchart|sequenceDiagram|classDiagram|stateDiagram|erDiagram|journey|gantt|pie|gitGraph|mindmap|timeline)/);
 
         if (!isMermaid) continue;
+        if (!pre.isConnected || code.textContent?.trim() !== text) continue;
 
         // Create container
         const container = document.createElement("div");
@@ -4507,7 +4562,10 @@ async function initMermaidDiagrams() {
 
         try {
             // Render mermaid diagram individually to catch errors per diagram
-            const { svg } = await mermaid.render(`mermaid-${idx}`, text);
+            const { svg } = await mermaid.render(`mermaid-${renderVersion}-${idx}`, text);
+            if (renderVersion !== mermaidRenderVersion || !pre.isConnected || code.textContent?.trim() !== text) {
+                continue;
+            }
 
             const mermaidDiv = document.createElement("div");
             mermaidDiv.className = "mermaid";
@@ -4528,7 +4586,9 @@ async function initMermaidDiagrams() {
             container.appendChild(errorDiv);
         }
 
-        pre.replaceWith(container);
+        if (renderVersion === mermaidRenderVersion && pre.isConnected) {
+            pre.replaceWith(container);
+        }
     }
 }
 

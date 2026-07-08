@@ -170,7 +170,7 @@ test.describe('Visual Regression - README Screenshots', () => {
     await page.waitForSelector('.preview-pane .mermaid svg', { timeout: 10000 });
     await page.waitForFunction(() => {
       const svg = document.querySelector('.preview-pane .mermaid svg');
-      return Boolean(svg?.querySelector('g.node') && svg?.querySelector('g.cluster'));
+      return Boolean(svg?.querySelector('g.node'));
     });
 
     const layout = await page.evaluate(() => {
@@ -181,6 +181,8 @@ test.describe('Visual Regression - README Screenshots', () => {
 
       const mermaid = document.querySelector('.preview-pane .mermaid') as HTMLElement | null;
       const text = mermaid?.textContent || '';
+      const svgCount = document.querySelectorAll('.preview-pane .mermaid svg').length;
+      const sourceBlockCount = document.querySelectorAll('.preview-pane pre code.language-mermaid').length;
 
       function boxes(selector: string) {
         return Array.from(svg.querySelectorAll(selector)).map((element, index) => {
@@ -217,11 +219,15 @@ test.describe('Visual Regression - README Screenshots', () => {
 
       return {
         text,
+        svgCount,
+        sourceBlockCount,
         nodeOverlapPairs: overlapPairs(boxes('g.node')),
         clusterOverlapPairs: overlapPairs(boxes('g.cluster')),
       };
     });
 
+    expect(layout.svgCount).toBe(1);
+    expect(layout.sourceBlockCount).toBe(0);
     expect(layout.text).toContain('dotfiles/claude/skills');
     expect(layout.text).toContain('yunomi-plugin 2.0.0');
     expect(layout.text).toContain('唯一の正');
