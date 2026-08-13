@@ -1,7 +1,7 @@
 {
   "name": "obails-frontend",
   "private": true,
-  "version": "0.0.1",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -14,7 +14,8 @@
   },
   "dependencies": {
     "@mizchi/markdown": "^0.4.1",
-    "@wailsio/runtime": "latest",
+    "@wailsio/runtime": "3.0.0-alpha.78",
+    "dompurify": "3.3.1",
     "force-graph": "^1.51.0",
     "katex": "^0.17.0",
     "mermaid": "^11.12.2",

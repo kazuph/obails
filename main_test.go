@@ -1,10 +1,22 @@
 package main
 
 import (
+	"bytes"
+	"image/png"
 	"testing"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
+
+func TestApplicationIconIsA1024PixelPNG(t *testing.T) {
+	image, err := png.Decode(bytes.NewReader(appIcon))
+	if err != nil {
+		t.Fatalf("decode app icon: %v", err)
+	}
+	if bounds := image.Bounds(); bounds.Dx() != 1024 || bounds.Dy() != 1024 {
+		t.Fatalf("app icon bounds = %v, want 1024x1024", bounds)
+	}
+}
 
 func TestNormalizeThemeValue(t *testing.T) {
 	cases := []struct {
@@ -79,4 +91,71 @@ func TestMacBackdropForTheme(t *testing.T) {
 			t.Errorf("themeMenuOptions Glass group = %v, want liquid-glass-light and liquid-glass-dark", found)
 		}
 	})
+}
+
+func TestWorkspaceApplicationMenuExposesNamedWorkspaceActions(t *testing.T) {
+	menu := application.NewMenu()
+	appendWorkspaceMenu(menu, nil, []string{"Writing", "Research"}, "Writing")
+	workspace := menu.FindByLabel("Workspace")
+	if workspace == nil || workspace.GetSubmenu() == nil {
+		t.Fatal("expected a Workspace submenu")
+	}
+	items := workspace.GetSubmenu()
+	saveAs := items.FindByLabel("Save Current Workspace As…")
+	saveCurrent := items.FindByLabel("Save Current Workspace")
+	open := items.FindByLabel("Open Workspace")
+	manage := items.FindByLabel("Manage Workspaces…")
+	if saveAs == nil || saveCurrent == nil || open == nil || manage == nil {
+		t.Fatalf("workspace menu items missing: saveAs=%v saveCurrent=%v open=%v manage=%v", saveAs, saveCurrent, open, manage)
+	}
+	if !saveCurrent.Enabled() {
+		t.Fatal("Save Current Workspace should be enabled when a named workspace is selected")
+	}
+	openItems := open.GetSubmenu()
+	if openItems == nil || openItems.FindByLabel("Writing") == nil || openItems.FindByLabel("Research") == nil {
+		t.Fatal("Open Workspace submenu should list saved names")
+	}
+	if item := openItems.FindByLabel("Writing"); item == nil || !item.Checked() {
+		t.Fatal("selected named workspace should be marked in Open Workspace")
+	}
+
+	empty := application.NewMenu()
+	appendWorkspaceMenu(empty, nil, nil, "")
+	emptyWorkspace := empty.FindByLabel("Workspace")
+	if emptyWorkspace == nil || emptyWorkspace.GetSubmenu() == nil {
+		t.Fatal("expected an empty Workspace submenu")
+	}
+	emptyItems := emptyWorkspace.GetSubmenu()
+	if emptyItems.FindByLabel("Save Current Workspace").Enabled() {
+		t.Fatal("Save Current Workspace should be disabled without a selected named workspace")
+	}
+	placeholder := emptyItems.FindByLabel("Open Workspace").GetSubmenu().FindByLabel("No saved workspaces")
+	if placeholder == nil || placeholder.Enabled() {
+		t.Fatal("empty Open Workspace submenu should show a disabled placeholder")
+	}
+}
+
+func TestWindowVisualsFollowTheSelectedTheme(t *testing.T) {
+	for _, theme := range []string{"github-light", "solarized-light", "one-light", "catppuccin-latte", "rosepine-dawn", "liquid-glass-light"} {
+		visuals := windowVisualsForTheme(theme)
+		if visuals.Title != applicationName {
+			t.Errorf("windowVisualsForTheme(%q) title = %q, want %q", theme, visuals.Title, applicationName)
+		}
+		if visuals.Mac.Appearance != application.NSAppearanceNameAqua {
+			t.Errorf("windowVisualsForTheme(%q) appearance = %q, want Aqua", theme, visuals.Mac.Appearance)
+		}
+		if visuals.BackgroundColour != application.NewRGB(255, 255, 255) {
+			t.Errorf("windowVisualsForTheme(%q) background = %#v, want white", theme, visuals.BackgroundColour)
+		}
+	}
+
+	for _, theme := range []string{"catppuccin", "dracula", "nord", "solarized", "onedark", "gruvbox", "tokyonight", "liquid-glass-dark"} {
+		visuals := windowVisualsForTheme(theme)
+		if visuals.Mac.Appearance != application.NSAppearanceNameDarkAqua {
+			t.Errorf("windowVisualsForTheme(%q) appearance = %q, want DarkAqua", theme, visuals.Mac.Appearance)
+		}
+		if visuals.BackgroundColour != application.NewRGB(27, 38, 54) {
+			t.Errorf("windowVisualsForTheme(%q) background = %#v, want dark chrome", theme, visuals.BackgroundColour)
+		}
+	}
 }

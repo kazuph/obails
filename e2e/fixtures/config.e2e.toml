@@ -1,5 +1,6 @@
 [vault]
   path = "e2e/fixtures/test-vault"
+  delete_mode = "vault_trash"
 
 [daily_notes]
   folder = "dailynotes"

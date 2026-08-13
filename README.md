@@ -10,6 +10,7 @@
 </p>
 
 <p align="center">
+  <img src="https://img.shields.io/badge/version-1.0.0-blue" alt="Version">
   <img src="https://img.shields.io/badge/platform-macOS-blue" alt="Platform">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
   <img src="https://img.shields.io/badge/wails-v3.0.0--alpha.60-orange" alt="Wails">
@@ -25,6 +26,7 @@
 - **File Tree Sidebar** - Navigate your vault with ease
 - **Outline Panel** - Jump to any heading instantly
 - **Backlinks** - See which notes link to the current note
+- **Vault Search** - Full-text search with Obsidian-compatible operators
 - **Daily Notes** - Quick access to today's note
 - **Timeline** - Quick memos with timestamp (`HH:mm content`)
 - **Code Highlighting** - Syntax highlighting for code blocks
@@ -179,9 +181,13 @@ wails3 task darwin:package
 - **Diagrams**: [Mermaid.js](https://mermaid.js.org/)
 - **Syntax Highlighting**: [highlight.js](https://highlightjs.org/)
 
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for the `v1.0.0` release notes, verification boundary, and known unverified items.
+
 ## Roadmap
 
-- [ ] Full-text search
+- [x] Full-text search
 - [x] Graph view
 - [x] Timeline view (Twitter-like memo stream)
 - [x] Image display (PNG, JPG, GIF, WebP, SVG, BMP, ICO)

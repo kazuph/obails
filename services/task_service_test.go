@@ -1,7 +1,11 @@
 package services
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -129,6 +133,27 @@ func TestTaskService_ParseAllTasks(t *testing.T) {
 		}
 		if len(files) != 3 {
 			t.Errorf("Expected tasks from 3 files, got %d", len(files))
+		}
+	})
+
+	t.Run("does not issue tasks or references for a symlink outside the vault", func(t *testing.T) {
+		externalDir := t.TempDir()
+		externalTask := filepath.Join(externalDir, "outside.md")
+		if err := os.WriteFile(externalTask, []byte("- [ ] Outside task\n"), 0644); err != nil {
+			t.Fatalf("write external task: %v", err)
+		}
+		if err := os.Symlink(externalTask, filepath.Join(tmpDir, "outside-link.md")); err != nil {
+			t.Fatalf("create external symlink: %v", err)
+		}
+
+		tasks, err := ts.ParseAllTasks()
+		if err != nil {
+			t.Fatalf("ParseAllTasks failed: %v", err)
+		}
+		for _, task := range tasks {
+			if task.File == "outside-link.md" || task.Content == "Outside task" {
+				t.Fatalf("outside symlink task must not be issued: %#v", task)
+			}
 		}
 	})
 }
@@ -267,6 +292,183 @@ func TestTaskService_SetTaskStatus(t *testing.T) {
 		err := ts.SetTaskStatus("status5.md", 2, "x")
 		if err == nil {
 			t.Error("Should return error for non-task line")
+		}
+	})
+}
+
+func TestTaskService_TaskReference(t *testing.T) {
+	cs, tmpDir := newTestConfigService(t)
+	defer os.RemoveAll(tmpDir)
+
+	fs := NewFileService(cs)
+	ns := NewNoteService(fs, cs)
+	ts := NewTaskService(fs, ns, cs)
+
+	issueTargetRef := func(t *testing.T) string {
+		t.Helper()
+		tasks, err := ts.ParseTasksInFile("tasks.md")
+		if err != nil {
+			t.Fatalf("ParseTasksInFile failed: %v", err)
+		}
+		if len(tasks) != 2 {
+			t.Fatalf("expected two tasks, got %d", len(tasks))
+		}
+		if tasks[1].Ref == "" {
+			t.Fatal("expected task reference")
+		}
+		return tasks[1].Ref
+	}
+
+	t.Run("emits an opaque reference in JSON task output", func(t *testing.T) {
+		if err := fs.WriteFile("tasks.md", "- [ ] First task\n- [ ] Target task\n"); err != nil {
+			t.Fatalf("WriteFile failed: %v", err)
+		}
+
+		tasks, err := ts.ParseTasksInFile("tasks.md")
+		if err != nil {
+			t.Fatalf("ParseTasksInFile failed: %v", err)
+		}
+		encoded, err := json.Marshal(tasks)
+		if err != nil {
+			t.Fatalf("Marshal failed: %v", err)
+		}
+		if !strings.Contains(string(encoded), `"ref"`) {
+			t.Fatalf("task JSON must include a reference, got %s", encoded)
+		}
+	})
+
+	t.Run("rejects a reference after a line is inserted", func(t *testing.T) {
+		if err := fs.WriteFile("tasks.md", "- [ ] First task\n- [ ] Target task\n"); err != nil {
+			t.Fatalf("WriteFile failed: %v", err)
+		}
+		ref := issueTargetRef(t)
+
+		before := "- [ ] Inserted task\n- [ ] First task\n- [ ] Target task\n"
+		if err := fs.WriteFile("tasks.md", before); err != nil {
+			t.Fatalf("WriteFile failed: %v", err)
+		}
+		_, err := ts.SetTaskStatusRef(ref, "x")
+		if err == nil || !strings.Contains(err.Error(), "stale task reference") {
+			t.Fatalf("expected stale task reference error, got %v", err)
+		}
+
+		content, err := fs.ReadFile("tasks.md")
+		if err != nil {
+			t.Fatalf("ReadFile failed: %v", err)
+		}
+		if content != before {
+			t.Fatalf("stale reference changed file:\nwant: %q\n got: %q", before, content)
+		}
+	})
+
+	t.Run("rejects a reference after tasks are reordered", func(t *testing.T) {
+		if err := fs.WriteFile("tasks.md", "- [ ] First task\n- [ ] Target task\n"); err != nil {
+			t.Fatalf("WriteFile failed: %v", err)
+		}
+		ref := issueTargetRef(t)
+
+		before := "- [ ] Target task\n- [ ] First task\n"
+		if err := fs.WriteFile("tasks.md", before); err != nil {
+			t.Fatalf("WriteFile failed: %v", err)
+		}
+		_, err := ts.ToggleTaskRef(ref)
+		if err == nil || !strings.Contains(err.Error(), "stale task reference") {
+			t.Fatalf("expected stale task reference error, got %v", err)
+		}
+
+		content, err := fs.ReadFile("tasks.md")
+		if err != nil {
+			t.Fatalf("ReadFile failed: %v", err)
+		}
+		if content != before {
+			t.Fatalf("stale reference changed file:\nwant: %q\n got: %q", before, content)
+		}
+	})
+
+	t.Run("rejects a reference whose task identity no longer matches", func(t *testing.T) {
+		if err := fs.WriteFile("tasks.md", "- [ ] First task\n- [ ] Target task\n"); err != nil {
+			t.Fatalf("WriteFile failed: %v", err)
+		}
+		ref := issueTargetRef(t)
+		reference, err := decodeTaskReference(ref)
+		if err != nil {
+			t.Fatalf("decodeTaskReference failed: %v", err)
+		}
+
+		if err := fs.WriteFile("tasks.md", "- [ ] Target task\n- [ ] First task\n"); err != nil {
+			t.Fatalf("WriteFile failed: %v", err)
+		}
+		content, err := fs.ReadFile("tasks.md")
+		if err != nil {
+			t.Fatalf("ReadFile failed: %v", err)
+		}
+		reference.Generation = taskContentGeneration(content)
+		before := content
+		_, err = ts.ToggleTaskRef(encodeTaskReference(reference))
+		if err == nil || !strings.Contains(err.Error(), "task identity changed") {
+			t.Fatalf("expected task identity error, got %v", err)
+		}
+		after, err := fs.ReadFile("tasks.md")
+		if err != nil {
+			t.Fatalf("ReadFile after stale update failed: %v", err)
+		}
+		if after != before {
+			t.Fatalf("identity mismatch changed file:\nwant: %q\n got: %q", before, after)
+		}
+	})
+
+	t.Run("rejects a reference after its file is removed", func(t *testing.T) {
+		if err := fs.WriteFile("tasks.md", "- [ ] First task\n- [ ] Target task\n"); err != nil {
+			t.Fatalf("WriteFile failed: %v", err)
+		}
+		ref := issueTargetRef(t)
+		if err := os.Remove(filepath.Join(tmpDir, "tasks.md")); err != nil {
+			t.Fatalf("Remove failed: %v", err)
+		}
+
+		_, err := ts.ToggleTaskRef(ref)
+		if err == nil || !strings.Contains(err.Error(), "stale task reference") {
+			t.Fatalf("expected stale task reference error, got %v", err)
+		}
+		if _, err := os.Stat(filepath.Join(tmpDir, "tasks.md")); !os.IsNotExist(err) {
+			t.Fatalf("stale reference must not recreate removed file, stat error: %v", err)
+		}
+	})
+
+	t.Run("updates the referenced task when the file generation and identity match", func(t *testing.T) {
+		if err := fs.WriteFile("tasks.md", "- [ ] First task\n- [ ] Target task\n"); err != nil {
+			t.Fatalf("WriteFile failed: %v", err)
+		}
+		ref := issueTargetRef(t)
+
+		nextRef, err := ts.SetTaskStatusRef(ref, "x")
+		if err != nil {
+			t.Fatalf("SetTaskStatusRef failed: %v", err)
+		}
+		if nextRef == "" || nextRef == ref {
+			t.Fatalf("expected a fresh next reference, got %q", nextRef)
+		}
+		content, err := fs.ReadFile("tasks.md")
+		if err != nil {
+			t.Fatalf("ReadFile failed: %v", err)
+		}
+		if content != "- [ ] First task\n- [x] Target task\n" {
+			t.Fatalf("fresh reference updated the wrong content:\n%s", content)
+		}
+		if _, err := ts.SetTaskStatusRef(nextRef, " "); err != nil {
+			t.Fatalf("fresh next reference must be reusable: %v", err)
+		}
+	})
+
+	t.Run("rejects unknown JSON fields and non-SHA256 digests", func(t *testing.T) {
+		payload := base64.RawURLEncoding.EncodeToString([]byte(`{"file":"tasks.md","line":1,"generation":"bad","identity":"bad","extra":true}`))
+		if _, err := decodeTaskReference(payload); err == nil {
+			t.Fatal("expected unknown field to be rejected")
+		}
+
+		payload = base64.RawURLEncoding.EncodeToString([]byte(`{"file":"tasks.md","line":1,"generation":"YQ","identity":"YQ"}`))
+		if _, err := decodeTaskReference(payload); err == nil {
+			t.Fatal("expected non-SHA256 digests to be rejected")
 		}
 	})
 }

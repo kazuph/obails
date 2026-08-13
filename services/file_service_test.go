@@ -1,12 +1,14 @@
 package services
 
 import (
+	"bytes"
 	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -16,13 +18,20 @@ import (
 // mockConfigService creates a ConfigService with a temporary vault path for testing
 func newTestConfigService(t *testing.T) (*ConfigService, string) {
 	t.Helper()
-	tmpDir, err := os.MkdirTemp("", "obails-test-*")
+	rootDir, err := os.MkdirTemp("", "obails-test-*")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
+	tmpDir := filepath.Join(rootDir, "vault")
+	if err := os.MkdirAll(tmpDir, 0755); err != nil {
+		os.RemoveAll(rootDir)
+		t.Fatalf("Failed to create temp vault: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(rootDir) })
 
 	cs := &ConfigService{
-		configPath: filepath.Join(tmpDir, "config.toml"),
+		configPath: filepath.Join(rootDir, "config", "config.toml"),
+		configDir:  filepath.Join(rootDir, "config"),
 		config: &models.Config{
 			Vault: models.VaultConfig{
 				Path: tmpDir,
@@ -161,6 +170,28 @@ func TestFileService_CreateFile(t *testing.T) {
 		}
 		if content != "# Test\n\nContent" {
 			t.Errorf("Content mismatch: got %q", content)
+		}
+	})
+
+	t.Run("create empty note as zero-byte file", func(t *testing.T) {
+		if err := fs.CreateFile("Empty Note.md", ""); err != nil {
+			t.Fatalf("CreateFile failed: %v", err)
+		}
+
+		info, err := os.Stat(filepath.Join(tmpDir, "Empty Note.md"))
+		if err != nil {
+			t.Fatalf("Stat failed: %v", err)
+		}
+		if info.Size() != 0 {
+			t.Fatalf("Expected zero-byte note, got %d bytes", info.Size())
+		}
+
+		content, err := fs.ReadFile("Empty Note.md")
+		if err != nil {
+			t.Fatalf("ReadFile failed: %v", err)
+		}
+		if content != "" {
+			t.Errorf("Expected empty content, got %q", content)
 		}
 	})
 
@@ -383,6 +414,132 @@ func TestFileService_MoveFile(t *testing.T) {
 			t.Error("Destination directory should exist")
 		}
 	})
+
+	t.Run("fail to move directory into itself or descendant", func(t *testing.T) {
+		if err := fs.CreateDirectory("parent"); err != nil {
+			t.Fatalf("setup parent: %v", err)
+		}
+		if err := fs.CreateDirectory("parent/child"); err != nil {
+			t.Fatalf("setup child: %v", err)
+		}
+
+		if err := fs.MoveFile("parent", "parent"); err == nil {
+			t.Fatal("MoveFile into self should fail")
+		}
+		if err := fs.MoveFile("parent", "parent/child/parent"); err == nil {
+			t.Fatal("MoveFile into descendant should fail")
+		}
+		if fs.FileExists("parent/child/parent") {
+			t.Fatal("descendant move should not create nested folder")
+		}
+	})
+
+	t.Run("updates renderable vault links when moving a folder", func(t *testing.T) {
+		if err := fs.CreateFile("old/Target Note.md", "# Target"); err != nil {
+			t.Fatalf("target setup failed: %v", err)
+		}
+		if err := fs.CreateFile("old/image one.png", "image"); err != nil {
+			t.Fatalf("attachment setup failed: %v", err)
+		}
+		if err := fs.CreateFile("old/relative.markdown", "[Target](Target%20Note.md#Heading%20one)\n![Image](image%20one.png)"); err != nil {
+			t.Fatalf("relative source setup failed: %v", err)
+		}
+		content := "[[old/Target Note#Heading|Keep alias]]\n[[Target Note#^block-1|Keep block alias]]\n[Markdown label](old/Target%20Note.md#Heading%20one)\n![Attachment label](old/image%20one.png#preview)\n`[[old/Target Note]] [code](old/Target%20Note.md)`\n```md\n[[old/Target Note]]\n[code](old/Target%20Note.md)\n```"
+		if err := fs.CreateFile("source.md", content); err != nil {
+			t.Fatalf("source setup failed: %v", err)
+		}
+
+		if err := fs.MoveFile("old", "archive"); err != nil {
+			t.Fatalf("MoveFile folder failed: %v", err)
+		}
+
+		got, err := fs.ReadFile("source.md")
+		if err != nil {
+			t.Fatalf("read rewritten source failed: %v", err)
+		}
+		want := "[[archive/Target Note#Heading|Keep alias]]\n[[Target Note#^block-1|Keep block alias]]\n[Markdown label](archive/Target%20Note.md#Heading%20one)\n![Attachment label](archive/image%20one.png#preview)\n`[[old/Target Note]] [code](old/Target%20Note.md)`\n```md\n[[old/Target Note]]\n[code](old/Target%20Note.md)\n```"
+		if got != want {
+			t.Errorf("source links after folder move = %q, want %q", got, want)
+		}
+
+		relative, err := fs.ReadFile("archive/relative.markdown")
+		if err != nil {
+			t.Fatalf("read moved markdown source failed: %v", err)
+		}
+		if relative != "[Target](Target%20Note.md#Heading%20one)\n![Image](image%20one.png)" {
+			t.Errorf("relative links in moved Markdown must remain relative and encoded, got %q", relative)
+		}
+	})
+
+	t.Run("updates basename and path links when renaming a file", func(t *testing.T) {
+		if err := fs.CreateFile("notes/Old Name.md", "# Target"); err != nil {
+			t.Fatalf("target setup failed: %v", err)
+		}
+		content := "[[Old Name#Heading|Alias]]\n[[notes/Old Name#^block-id]]\n[Label](notes/Old%20Name.md#Heading%20one)"
+		if err := fs.CreateFile("links.md", content); err != nil {
+			t.Fatalf("source setup failed: %v", err)
+		}
+
+		if err := fs.MoveFile("notes/Old Name.md", "archive/New Name.md"); err != nil {
+			t.Fatalf("MoveFile rename failed: %v", err)
+		}
+
+		got, err := fs.ReadFile("links.md")
+		if err != nil {
+			t.Fatalf("read rewritten source failed: %v", err)
+		}
+		want := "[[New Name#Heading|Alias]]\n[[archive/New Name#^block-id]]\n[Label](archive/New%20Name.md#Heading%20one)"
+		if got != want {
+			t.Errorf("source links after file rename = %q, want %q", got, want)
+		}
+
+		linkService := NewLinkService(fs, cs)
+		if err := linkService.RebuildIndex(); err != nil {
+			t.Fatalf("rebuild after rename failed: %v", err)
+		}
+		links, err := linkService.GetLinkInfo("links.md")
+		if err != nil {
+			t.Fatalf("read links after rename failed: %v", err)
+		}
+		for _, link := range links {
+			if !link.Exists || link.TargetPath != "archive/New Name.md" {
+				t.Errorf("rewritten link must resolve after rebuild, got %#v", link)
+			}
+		}
+	})
+
+	t.Run("qualifies a bare wiki link when moving changes its basename winner", func(t *testing.T) {
+		if err := fs.CreateFile("a/Identity Note.md", "# First winner"); err != nil {
+			t.Fatalf("first target setup failed: %v", err)
+		}
+		if err := fs.CreateFile("z/Identity Note.md", "# Later winner"); err != nil {
+			t.Fatalf("second target setup failed: %v", err)
+		}
+		if err := fs.CreateFile("identity-source.md", "[[Identity Note]]"); err != nil {
+			t.Fatalf("source setup failed: %v", err)
+		}
+
+		if err := fs.MoveFile("a/Identity Note.md", "zz/Identity Note.md"); err != nil {
+			t.Fatalf("MoveFile basename-winner change failed: %v", err)
+		}
+
+		content, err := fs.ReadFile("identity-source.md")
+		if err != nil {
+			t.Fatalf("read rewritten bare wiki link failed: %v", err)
+		}
+		if content != "[[zz/Identity Note]]" {
+			t.Errorf("bare wiki link must become path-qualified when its winner changes, got %q", content)
+		}
+
+		linkService := NewLinkService(fs, cs)
+		if err := linkService.RebuildIndex(); err != nil {
+			t.Fatalf("rebuild after basename-winner change failed: %v", err)
+		}
+		links, err := linkService.GetLinkInfo("identity-source.md")
+		if err != nil || len(links) != 1 || !links[0].Exists || links[0].TargetPath != "zz/Identity Note.md" {
+			t.Fatalf("rewritten bare link must retain target identity: links=%#v err=%v", links, err)
+		}
+	})
 }
 
 func TestFileService_CreateDirectory(t *testing.T) {
@@ -477,13 +634,13 @@ func TestFileService_ListDirectory(t *testing.T) {
 		}
 	})
 
-	t.Run("files are sorted in descending name order", func(t *testing.T) {
+	t.Run("directory listing keeps the filesystem's stable ascending name order", func(t *testing.T) {
 		files, err := fs.ListDirectory("")
 		if err != nil {
 			t.Fatalf("ListDirectory failed: %v", err)
 		}
 
-		expectedFiles := []string{"note-b.md", "note-a.md"}
+		expectedFiles := []string{"note-a.md", "note-b.md"}
 		fileIndex := 0
 		for _, f := range files {
 			if f.IsDir {
@@ -713,6 +870,256 @@ func TestFileService_WriteFile(t *testing.T) {
 	})
 }
 
+func TestFileService_SaveIfUnchanged(t *testing.T) {
+	cs, tmpDir := newTestConfigService(t)
+	defer os.RemoveAll(tmpDir)
+
+	fs := NewFileService(cs)
+
+	t.Run("saves a fresh editable file", func(t *testing.T) {
+		if err := fs.CreateFile("editable.txt", "original"); err != nil {
+			t.Fatalf("CreateFile failed: %v", err)
+		}
+		originalInfo, err := os.Stat(filepath.Join(tmpDir, "editable.txt"))
+		if err != nil {
+			t.Fatalf("Stat failed: %v", err)
+		}
+		snapshot, err := fs.ReadSnapshot("editable.txt")
+		if err != nil {
+			t.Fatalf("ReadSnapshot failed: %v", err)
+		}
+
+		result, err := fs.SaveIfUnchanged(snapshot, "updated")
+		if err != nil {
+			t.Fatalf("SaveIfUnchanged failed: %v", err)
+		}
+		if result.Status != models.FileSaveStatusSaved || result.Snapshot == nil {
+			t.Fatalf("Expected saved result with snapshot, got %+v", result)
+		}
+		if result.Snapshot.Path != "editable.txt" || result.Snapshot.Content != "updated" || result.Snapshot.Revision == snapshot.Revision {
+			t.Errorf("Unexpected updated snapshot: %+v", result.Snapshot)
+		}
+		updatedInfo, err := os.Stat(filepath.Join(tmpDir, "editable.txt"))
+		if err != nil {
+			t.Fatalf("Stat after save failed: %v", err)
+		}
+		if os.SameFile(originalInfo, updatedInfo) {
+			t.Error("CAS save must atomically replace the original file")
+		}
+	})
+
+	t.Run("rejects an externally changed file", func(t *testing.T) {
+		if err := fs.CreateFile("changed.html", "original"); err != nil {
+			t.Fatalf("CreateFile failed: %v", err)
+		}
+		snapshot, err := fs.ReadSnapshot("changed.html")
+		if err != nil {
+			t.Fatalf("ReadSnapshot failed: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(tmpDir, "changed.html"), []byte("external"), 0644); err != nil {
+			t.Fatalf("External write failed: %v", err)
+		}
+
+		result, err := fs.SaveIfUnchanged(snapshot, "local edit")
+		if err != nil {
+			t.Fatalf("SaveIfUnchanged failed: %v", err)
+		}
+		if result.Status != models.FileSaveStatusConflict || result.Snapshot == nil || result.Snapshot.Content != "external" {
+			t.Fatalf("Expected external content conflict, got %+v", result)
+		}
+		content, err := fs.ReadFile("changed.html")
+		if err != nil || content != "external" {
+			t.Errorf("External content was overwritten: content=%q err=%v", content, err)
+		}
+	})
+
+	t.Run("does not recreate an externally deleted path or parent directory", func(t *testing.T) {
+		if err := fs.CreateFile("deleted/note.md", "original"); err != nil {
+			t.Fatalf("CreateFile failed: %v", err)
+		}
+		snapshot, err := fs.ReadSnapshot("deleted/note.md")
+		if err != nil {
+			t.Fatalf("ReadSnapshot failed: %v", err)
+		}
+		if err := os.Remove(filepath.Join(tmpDir, "deleted", "note.md")); err != nil {
+			t.Fatalf("External deletion failed: %v", err)
+		}
+		if err := os.Remove(filepath.Join(tmpDir, "deleted")); err != nil {
+			t.Fatalf("External directory deletion failed: %v", err)
+		}
+
+		result, err := fs.SaveIfUnchanged(snapshot, "local edit")
+		if err != nil {
+			t.Fatalf("SaveIfUnchanged failed: %v", err)
+		}
+		if result.Status != models.FileSaveStatusMissing {
+			t.Fatalf("Expected missing result, got %+v", result)
+		}
+		if _, err := os.Stat(filepath.Join(tmpDir, "deleted")); !os.IsNotExist(err) {
+			t.Errorf("CAS recreated deleted directory: %v", err)
+		}
+	})
+
+	t.Run("does not revive the old path after an external rename", func(t *testing.T) {
+		if err := fs.CreateFile("old-name.md", "original"); err != nil {
+			t.Fatalf("CreateFile failed: %v", err)
+		}
+		snapshot, err := fs.ReadSnapshot("old-name.md")
+		if err != nil {
+			t.Fatalf("ReadSnapshot failed: %v", err)
+		}
+		if err := os.Rename(filepath.Join(tmpDir, "old-name.md"), filepath.Join(tmpDir, "renamed.md")); err != nil {
+			t.Fatalf("External rename failed: %v", err)
+		}
+
+		result, err := fs.SaveIfUnchanged(snapshot, "local edit")
+		if err != nil {
+			t.Fatalf("SaveIfUnchanged failed: %v", err)
+		}
+		if result.Status != models.FileSaveStatusMissing {
+			t.Fatalf("Expected missing result, got %+v", result)
+		}
+		if _, err := os.Stat(filepath.Join(tmpDir, "old-name.md")); !os.IsNotExist(err) {
+			t.Errorf("CAS revived old path: %v", err)
+		}
+		content, err := fs.ReadFile("renamed.md")
+		if err != nil || content != "original" {
+			t.Errorf("Renamed file changed: content=%q err=%v", content, err)
+		}
+	})
+}
+
+func TestFileService_SaveIfUnchangedSerializesWithWriteFile(t *testing.T) {
+	cs, tmpDir := newTestConfigService(t)
+	defer os.RemoveAll(tmpDir)
+
+	fs := NewFileService(cs)
+	if err := fs.CreateFile("concurrent.txt", "original"); err != nil {
+		t.Fatalf("CreateFile failed: %v", err)
+	}
+	snapshot, err := fs.ReadSnapshot("concurrent.txt")
+	if err != nil {
+		t.Fatalf("ReadSnapshot failed: %v", err)
+	}
+
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(2)
+	type casOutcome struct {
+		result models.FileSaveResult
+		err    error
+	}
+	casOutcomes := make(chan casOutcome, 1)
+	writeErrors := make(chan error, 1)
+	go func() {
+		defer wg.Done()
+		<-start
+		result, err := fs.SaveIfUnchanged(snapshot, "cas edit")
+		casOutcomes <- casOutcome{result: result, err: err}
+	}()
+	go func() {
+		defer wg.Done()
+		<-start
+		writeErrors <- fs.WriteFile("concurrent.txt", "direct edit")
+	}()
+	close(start)
+	wg.Wait()
+
+	if err := <-writeErrors; err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+	outcome := <-casOutcomes
+	if outcome.err != nil {
+		t.Fatalf("SaveIfUnchanged failed: %v", outcome.err)
+	}
+	result := outcome.result
+	content, err := fs.ReadFile("concurrent.txt")
+	if err != nil {
+		t.Fatalf("ReadFile failed: %v", err)
+	}
+	if result.Status == models.FileSaveStatusConflict && content != "direct edit" {
+		t.Fatalf("Conflict must preserve direct write, got %q", content)
+	}
+	if result.Status == models.FileSaveStatusSaved && content != "cas edit" && content != "direct edit" {
+		t.Fatalf("Serialized writes produced unexpected content %q", content)
+	}
+	if result.Status != models.FileSaveStatusSaved && result.Status != models.FileSaveStatusConflict {
+		t.Fatalf("Unexpected CAS result: %+v", result)
+	}
+}
+
+func TestFileService_EditableFileIdentityAndSymlinkBoundary(t *testing.T) {
+	cs, tmpDir := newTestConfigService(t)
+	defer os.RemoveAll(tmpDir)
+
+	fs := NewFileService(cs)
+
+	t.Run("preserves leading and trailing whitespace in a filename", func(t *testing.T) {
+		const filename = " note .txt "
+		if err := fs.WriteFile(filename, "original"); err != nil {
+			t.Fatalf("WriteFile failed: %v", err)
+		}
+		snapshot, err := fs.ReadSnapshot(filename)
+		if err != nil {
+			t.Fatalf("ReadSnapshot failed: %v", err)
+		}
+		if snapshot.Path != filename {
+			t.Fatalf("Snapshot changed file identity from %q to %q", filename, snapshot.Path)
+		}
+		result, err := fs.SaveIfUnchanged(snapshot, "updated")
+		if err != nil || result.Status != models.FileSaveStatusSaved {
+			t.Fatalf("SaveIfUnchanged result=%+v err=%v", result, err)
+		}
+		if _, err := fs.ReadSnapshot("./" + filename); !errors.Is(err, ErrInvalidPath) {
+			t.Errorf("Expected non-canonical path rejection, got %v", err)
+		}
+	})
+
+	t.Run("rejects vault-external symlink targets", func(t *testing.T) {
+		outsideDir, err := os.MkdirTemp("", "obails-outside-vault-*")
+		if err != nil {
+			t.Fatalf("MkdirTemp failed: %v", err)
+		}
+		defer os.RemoveAll(outsideDir)
+		if err := os.WriteFile(filepath.Join(outsideDir, "escape.txt"), []byte("outside"), 0644); err != nil {
+			t.Fatalf("Outside file setup failed: %v", err)
+		}
+		if err := os.Symlink(outsideDir, filepath.Join(tmpDir, "outside-link")); err != nil {
+			t.Fatalf("Symlink setup failed: %v", err)
+		}
+
+		if _, err := fs.ReadSnapshot("outside-link/escape.txt"); !errors.Is(err, ErrInvalidPath) {
+			t.Errorf("ReadSnapshot accepted outside symlink: %v", err)
+		}
+		if err := fs.WriteFile("outside-link/new.txt", "must not escape"); !errors.Is(err, ErrInvalidPath) {
+			t.Errorf("WriteFile accepted outside symlink: %v", err)
+		}
+		if _, err := os.Stat(filepath.Join(outsideDir, "new.txt")); !os.IsNotExist(err) {
+			t.Errorf("WriteFile created an outside file: %v", err)
+		}
+
+		if err := fs.CreateFile("replaceable/note.txt", "original"); err != nil {
+			t.Fatalf("CreateFile failed: %v", err)
+		}
+		snapshot, err := fs.ReadSnapshot("replaceable/note.txt")
+		if err != nil {
+			t.Fatalf("ReadSnapshot failed: %v", err)
+		}
+		if err := os.Remove(filepath.Join(tmpDir, "replaceable", "note.txt")); err != nil {
+			t.Fatalf("Remove file failed: %v", err)
+		}
+		if err := os.Remove(filepath.Join(tmpDir, "replaceable")); err != nil {
+			t.Fatalf("Remove directory failed: %v", err)
+		}
+		if err := os.Symlink(outsideDir, filepath.Join(tmpDir, "replaceable")); err != nil {
+			t.Fatalf("Replacement symlink setup failed: %v", err)
+		}
+		if _, err := fs.SaveIfUnchanged(snapshot, "must not escape"); !errors.Is(err, ErrInvalidPath) {
+			t.Errorf("SaveIfUnchanged accepted replacement symlink: %v", err)
+		}
+	})
+}
+
 func TestFileService_ResolveImagePath(t *testing.T) {
 	cs, tmpDir := newTestConfigService(t)
 	defer os.RemoveAll(tmpDir)
@@ -926,7 +1333,7 @@ func TestFileService_ImportExternalFile(t *testing.T) {
 		}
 	})
 
-	t.Run("imports file into target folder with unique name", func(t *testing.T) {
+	t.Run("reports a file collision without overwriting", func(t *testing.T) {
 		if err := fs.CreateDirectory("docs"); err != nil {
 			t.Fatalf("CreateDirectory() error = %v", err)
 		}
@@ -942,12 +1349,12 @@ func TestFileService_ImportExternalFile(t *testing.T) {
 			t.Fatalf("firstPath = %q, want docs/import-me.md", firstPath)
 		}
 
-		secondPath, err := fs.ImportExternalFile(sourcePath, "docs")
-		if err != nil {
-			t.Fatalf("second import error = %v", err)
+		if _, err := fs.ImportExternalFile(sourcePath, "docs"); !errors.Is(err, os.ErrExist) {
+			t.Fatalf("second import error = %v, want os.ErrExist", err)
 		}
-		if secondPath != "docs/import-me (1).md" {
-			t.Fatalf("secondPath = %q, want docs/import-me (1).md", secondPath)
+		content, err := fs.ReadFile(firstPath)
+		if err != nil || content != "# Imported again" {
+			t.Fatalf("existing vault file changed after collision: content=%q err=%v", content, err)
 		}
 	})
 
@@ -956,6 +1363,239 @@ func TestFileService_ImportExternalFile(t *testing.T) {
 			t.Fatal("expected error importing directory")
 		}
 	})
+}
+
+func TestFileService_ImportAttachment(t *testing.T) {
+	cs, vaultPath := newTestConfigService(t)
+	fs := NewFileService(cs)
+	sourceDir := t.TempDir()
+
+	writeSource := func(t *testing.T, name string, content []byte) string {
+		t.Helper()
+		path := filepath.Join(sourceDir, name)
+		if err := os.WriteFile(path, content, 0644); err != nil {
+			t.Fatalf("write source %q: %v", name, err)
+		}
+		return path
+	}
+	assertImport := func(t *testing.T, config models.AttachmentConfig, notePath, sourcePath, wantPath string, wantBytes []byte) models.AttachmentImportResult {
+		t.Helper()
+		if err := cs.SetAttachmentConfig(config); err != nil {
+			t.Fatalf("SetAttachmentConfig(%#v): %v", config, err)
+		}
+		result, err := fs.ImportAttachment(sourcePath, notePath)
+		if err != nil {
+			t.Fatalf("ImportAttachment(%q, %q): %v", sourcePath, notePath, err)
+		}
+		if result.DestinationPath != wantPath {
+			t.Fatalf("destination = %q, want %q", result.DestinationPath, wantPath)
+		}
+		if result.Embed != "![["+encodeLinkPath(wantPath)+"]]" {
+			t.Fatalf("embed = %q", result.Embed)
+		}
+		gotBytes, err := os.ReadFile(filepath.Join(vaultPath, filepath.FromSlash(wantPath)))
+		if err != nil {
+			t.Fatalf("read imported attachment: %v", err)
+		}
+		if string(gotBytes) != string(wantBytes) {
+			t.Fatalf("imported bytes = %v, want %v", gotBytes, wantBytes)
+		}
+		return result
+	}
+
+	if err := fs.CreateFile("root.md", "# Root"); err != nil {
+		t.Fatalf("create root note: %v", err)
+	}
+	if err := fs.CreateFile("notes/project/current.md", "# Current"); err != nil {
+		t.Fatalf("create current note: %v", err)
+	}
+	if err := fs.CreateFile("notes/project/alternate.markdown", "# Alternate"); err != nil {
+		t.Fatalf("create markdown note: %v", err)
+	}
+
+	rootBytes := []byte{0, 1, 2, 255}
+	_ = assertImport(t, models.AttachmentConfig{Location: models.AttachmentLocationVaultRoot}, "root.md", writeSource(t, "root.bin", rootBytes), "root.bin", rootBytes)
+
+	vaultFolderBytes := []byte{3, 4, 5, 254}
+	_ = assertImport(t, models.AttachmentConfig{Location: models.AttachmentLocationVaultFolder, Folder: "attachments/shared"}, "root.md", writeSource(t, "vault-folder.bin", vaultFolderBytes), "attachments/shared/vault-folder.bin", vaultFolderBytes)
+
+	currentBytes := []byte{6, 7, 8, 253}
+	_ = assertImport(t, models.AttachmentConfig{Location: models.AttachmentLocationCurrentFolder}, "notes/project/current.md", writeSource(t, "current-folder.bin", currentBytes), "notes/project/current-folder.bin", currentBytes)
+
+	subfolderBytes := []byte{9, 10, 11, 252}
+	subfolderPath := "notes/project/media/subfolder.bin"
+	_ = assertImport(t, models.AttachmentConfig{Location: models.AttachmentLocationCurrentSubfolder, Folder: "media"}, "notes/project/alternate.markdown", writeSource(t, "subfolder.bin", subfolderBytes), subfolderPath, subfolderBytes)
+	if info, err := os.Stat(filepath.Join(vaultPath, "notes", "project", "media")); err != nil || !info.IsDir() {
+		t.Fatalf("current-note subfolder was not created: info=%v err=%v", info, err)
+	}
+
+	specialBytes := []byte{12, 13, 14, 251}
+	specialName := "photo #1 |[draft].png"
+	specialPath := "attachments/日本語 folder/" + specialName
+	specialResult := assertImport(t, models.AttachmentConfig{Location: models.AttachmentLocationVaultFolder, Folder: "attachments/日本語 folder"}, "root.md", writeSource(t, specialName, specialBytes), specialPath, specialBytes)
+	if wantEmbed := "![[attachments/%E6%97%A5%E6%9C%AC%E8%AA%9E%20folder/photo%20%231%20%7C%5Bdraft%5D.png]]"; specialResult.Embed != wantEmbed {
+		t.Fatalf("encoded special embed = %q, want %q", specialResult.Embed, wantEmbed)
+	}
+	if err := fs.WriteFile("root.md", specialResult.Embed); err != nil {
+		t.Fatalf("write special embed: %v", err)
+	}
+	linkService := NewLinkService(fs, cs)
+	if err := linkService.RebuildIndex(); err != nil {
+		t.Fatalf("rebuild special embed index: %v", err)
+	}
+	links, err := linkService.GetLinkInfo("root.md")
+	if err != nil {
+		t.Fatalf("read special embed link info: %v", err)
+	}
+	if len(links) != 1 || !links[0].Exists || links[0].TargetPath != specialResult.DestinationPath {
+		t.Fatalf("special embed link = %#v, want resolved %q", links, specialResult.DestinationPath)
+	}
+	if folder, err := fs.attachmentDestinationFolder(models.AttachmentConfig{Location: models.AttachmentLocationVaultFolder, Folder: "attachments/日本語 folder"}, "root.md"); err != nil || folder != "attachments/日本語 folder" {
+		t.Fatalf("attachment destination resolver = %q, %v", folder, err)
+	}
+
+	collisionSource := writeSource(t, "collision.bin", []byte("source"))
+	if err := os.WriteFile(filepath.Join(vaultPath, "collision.bin"), []byte("existing"), 0644); err != nil {
+		t.Fatalf("write collision target: %v", err)
+	}
+	if err := cs.SetAttachmentConfig(models.AttachmentConfig{Location: models.AttachmentLocationVaultRoot}); err != nil {
+		t.Fatalf("set root attachment config: %v", err)
+	}
+	if _, err := fs.ImportAttachment(collisionSource, "root.md"); !errors.Is(err, os.ErrExist) {
+		t.Fatalf("collision import error = %v, want os.ErrExist", err)
+	}
+	if bytes, err := os.ReadFile(filepath.Join(vaultPath, "collision.bin")); err != nil || string(bytes) != "existing" {
+		t.Fatalf("collision changed destination: bytes=%q err=%v", bytes, err)
+	}
+
+	if _, err := fs.ImportAttachment(sourceDir, "root.md"); err == nil {
+		t.Fatal("ImportAttachment accepted a source directory")
+	}
+	if _, err := fs.ImportAttachment(filepath.Join(sourceDir, "missing.bin"), "root.md"); err == nil {
+		t.Fatal("ImportAttachment accepted a missing source")
+	}
+	if _, err := fs.ImportAttachment(rootBytesPath(t, writeSource, "not-a-note.bin"), "missing.md"); err == nil {
+		t.Fatal("ImportAttachment accepted a missing note")
+	}
+	if err := fs.CreateFile("not-a-note.txt", "plain text"); err != nil {
+		t.Fatalf("create text file: %v", err)
+	}
+	if _, err := fs.ImportAttachment(rootBytesPath(t, writeSource, "not-a-note-target.bin"), "not-a-note.txt"); err == nil {
+		t.Fatal("ImportAttachment accepted a non-Markdown note")
+	}
+	if err := fs.CreateDirectory("directory.md"); err != nil {
+		t.Fatalf("create Markdown-named directory: %v", err)
+	}
+	if _, err := fs.ImportAttachment(rootBytesPath(t, writeSource, "directory-target.bin"), "directory.md"); err == nil {
+		t.Fatal("ImportAttachment accepted a directory note")
+	}
+
+	outsidePath := t.TempDir()
+	if err := os.Symlink(outsidePath, filepath.Join(vaultPath, "escape")); err != nil {
+		t.Fatalf("create outside symlink: %v", err)
+	}
+	cs.config.Attachment = models.AttachmentConfig{Location: models.AttachmentLocationVaultFolder, Folder: "escape"}
+	if _, err := fs.ImportAttachment(rootBytesPath(t, writeSource, "outside.bin"), "root.md"); !errors.Is(err, ErrInvalidPath) {
+		t.Fatalf("outside symlink import error = %v, want ErrInvalidPath", err)
+	}
+	if _, err := os.Stat(filepath.Join(outsidePath, "outside.bin")); !os.IsNotExist(err) {
+		t.Fatalf("outside symlink import created a file: %v", err)
+	}
+}
+
+func TestCopyExternalFileRemovesAnIncompleteDestination(t *testing.T) {
+	tempDir := t.TempDir()
+	destination := filepath.Join(tempDir, "incomplete.bin")
+
+	if err := copyExternalFile(tempDir, destination); err == nil {
+		t.Fatal("copyExternalFile accepted a directory as file content")
+	}
+	if _, err := os.Lstat(destination); !os.IsNotExist(err) {
+		t.Fatalf("failed copy left a destination behind: %v", err)
+	}
+}
+
+func rootBytesPath(t *testing.T, writeSource func(*testing.T, string, []byte) string, name string) string {
+	t.Helper()
+	return writeSource(t, name, []byte("source"))
+}
+
+func TestFileService_ImportExternalFolder(t *testing.T) {
+	cs, tmpDir := newTestConfigService(t)
+	defer os.RemoveAll(tmpDir)
+	fs := NewFileService(cs)
+
+	source := filepath.Join(tmpDir, "external-folder")
+	if err := os.MkdirAll(filepath.Join(source, "nested"), 0755); err != nil {
+		t.Fatalf("source setup: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "nested", "new.md"), []byte("new"), 0644); err != nil {
+		t.Fatalf("source file setup: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "keep.md"), []byte("source"), 0644); err != nil {
+		t.Fatalf("source collision setup: %v", err)
+	}
+	if err := fs.CreateFile("imports/external-folder/keep.md", "vault"); err != nil {
+		t.Fatalf("vault collision setup: %v", err)
+	}
+
+	outcomes, err := fs.ImportExternalFolder(source, "imports")
+	if err != nil {
+		t.Fatalf("ImportExternalFolder() error = %v", err)
+	}
+	statuses := map[string]string{}
+	for _, outcome := range outcomes {
+		statuses[outcome.DestinationPath] = string(outcome.Status)
+	}
+	if statuses["imports/external-folder/keep.md"] != "collision" {
+		t.Fatalf("collision outcome = %q", statuses["imports/external-folder/keep.md"])
+	}
+	if statuses["imports/external-folder/nested/new.md"] != "imported" {
+		t.Fatalf("nested import outcome = %q", statuses["imports/external-folder/nested/new.md"])
+	}
+	content, err := fs.ReadFile("imports/external-folder/keep.md")
+	if err != nil || content != "vault" {
+		t.Fatalf("collision overwrote vault file: content=%q err=%v", content, err)
+	}
+}
+
+func TestFileService_ImportExternalFolder_BinarySafeRecursive(t *testing.T) {
+	cs, tmpDir := newTestConfigService(t)
+	defer os.RemoveAll(tmpDir)
+	fs := NewFileService(cs)
+
+	source := filepath.Join(tmpDir, "binary-import")
+	nested := filepath.Join(source, "nested")
+	if err := os.MkdirAll(nested, 0755); err != nil {
+		t.Fatalf("source setup: %v", err)
+	}
+	binaryPayload := []byte{0x00, 0x01, 0xFF, 0xFE, 0x7F, 0x80, 0x00}
+	if err := os.WriteFile(filepath.Join(nested, "clip.bin"), binaryPayload, 0644); err != nil {
+		t.Fatalf("binary source setup: %v", err)
+	}
+
+	outcomes, err := fs.ImportExternalFolder(source, "imports")
+	if err != nil {
+		t.Fatalf("ImportExternalFolder() error = %v", err)
+	}
+	imported := false
+	for _, outcome := range outcomes {
+		if outcome.DestinationPath == "imports/binary-import/nested/clip.bin" && outcome.Status == models.ImportStatusImported {
+			imported = true
+		}
+	}
+	if !imported {
+		t.Fatalf("binary file was not imported: %#v", outcomes)
+	}
+
+	destination := filepath.Join(cs.GetVaultPath(), "imports", "binary-import", "nested", "clip.bin")
+	got, err := os.ReadFile(destination)
+	if err != nil {
+		t.Fatalf("ReadFile imported binary: %v", err)
+	}
+	if !bytes.Equal(got, binaryPayload) {
+		t.Fatalf("imported bytes = %v, want %v", got, binaryPayload)
+	}
 }
 
 func TestFileService_RevealInFinder(t *testing.T) {
@@ -1009,6 +1649,10 @@ func TestFileService_OpenWithDefaultApp(t *testing.T) {
 func TestFileService_GetAbsolutePath(t *testing.T) {
 	cs, tmpDir := newTestConfigService(t)
 	defer os.RemoveAll(tmpDir)
+	resolvedVault, err := filepath.EvalSymlinks(tmpDir)
+	if err != nil {
+		t.Fatalf("EvalSymlinks() error = %v", err)
+	}
 
 	fs := NewFileService(cs)
 	if err := fs.CreateFile("notes/abs-me.md", "# abs"); err != nil {
@@ -1020,7 +1664,7 @@ func TestFileService_GetAbsolutePath(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GetAbsolutePath() error = %v", err)
 		}
-		want := filepath.Join(tmpDir, "notes", "abs-me.md")
+		want := filepath.Join(resolvedVault, "notes", "abs-me.md")
 		if got != want {
 			t.Fatalf("GetAbsolutePath() = %q, want %q", got, want)
 		}
@@ -1034,7 +1678,7 @@ func TestFileService_GetAbsolutePath(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GetAbsolutePath() error = %v", err)
 		}
-		want := filepath.Join(tmpDir, "notes")
+		want := filepath.Join(resolvedVault, "notes")
 		if got != want {
 			t.Fatalf("GetAbsolutePath() = %q, want %q", got, want)
 		}

@@ -1,12 +1,33 @@
 package services
 
 import (
+	"math"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/kazuph/obails/models"
 )
+
+func TestLocalGraphNodesStopsAfterExhaustingACycle(t *testing.T) {
+	done := make(chan map[string]bool, 1)
+	go func() {
+		done <- localGraphNodes("a", math.MaxInt, map[string]bool{"a": true, "b": true}, []models.GraphEdge{
+			{Source: "a", Target: "b"},
+			{Source: "b", Target: "a"},
+		})
+	}()
+
+	select {
+	case nodes := <-done:
+		if len(nodes) != 2 || !nodes["a"] || !nodes["b"] {
+			t.Fatalf("cycle traversal returned the wrong nodes: %#v", nodes)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("cycle traversal kept revisiting nodes after the frontier was exhausted")
+	}
+}
 
 func newTestGraphService(t *testing.T) (*GraphService, *LinkService, *FileService, string) {
 	t.Helper()
@@ -295,4 +316,168 @@ func TestGraphService_GetFullGraph_NestedDirectories(t *testing.T) {
 	if len(graph.Edges) != 1 {
 		t.Errorf("Expected 1 edge, got %d", len(graph.Edges))
 	}
+}
+
+func TestGraphService_GetFullGraph_DeduplicatesEdgesAndDisambiguatesDuplicateLabels(t *testing.T) {
+	gs, ls, fs, tmpDir := newTestGraphService(t)
+	defer os.RemoveAll(tmpDir)
+
+	fs.CreateFile("folder-a/shared.md", "# A")
+	fs.CreateFile("folder-b/shared.md", "# B")
+	fs.CreateFile("source.md", "[[shared]]\n[Shared again](folder-a/shared.md)")
+
+	if err := ls.RebuildIndex(); err != nil {
+		t.Fatalf("RebuildIndex failed: %v", err)
+	}
+
+	graph := gs.GetFullGraph()
+	labels := make(map[string]string, len(graph.Nodes))
+	for _, node := range graph.Nodes {
+		labels[node.ID] = node.Label
+	}
+	if labels["folder-a/shared.md"] == labels["folder-b/shared.md"] {
+		t.Errorf("duplicate basenames need path-distinguishable graph labels: %#v", labels)
+	}
+
+	edges := make(map[string]bool)
+	for _, edge := range graph.Edges {
+		key := edge.Source + "->" + edge.Target
+		if edges[key] {
+			t.Errorf("duplicate graph edge %q", key)
+		}
+		edges[key] = true
+	}
+}
+
+func TestGraphService_GetGraphFromLinkSnapshot_UsesOneGenerationAndMarkdownExtension(t *testing.T) {
+	gs, ls, fs, tmpDir := newTestGraphService(t)
+	defer os.RemoveAll(tmpDir)
+
+	if snapshot := gs.GetFullGraphSnapshot(); snapshot.Ready || snapshot.Generation != 0 {
+		t.Fatalf("graph must report an unready index instead of treating it as an empty vault: %#v", snapshot)
+	}
+	fs.CreateFile("source.markdown", "[[target]]")
+	fs.CreateFile("target.markdown", "# Target")
+	if err := ls.RebuildIndex(); err != nil {
+		t.Fatalf("RebuildIndex failed: %v", err)
+	}
+
+	indexSnapshot := ls.GetLinkIndexSnapshot()
+	graphSnapshot := gs.GetGraphFromLinkSnapshot(indexSnapshot)
+	if !graphSnapshot.Ready || graphSnapshot.Generation != indexSnapshot.Generation {
+		t.Fatalf("graph must identify the source index generation: graph=%#v index=%#v", graphSnapshot.LinkIndexState, indexSnapshot.LinkIndexState)
+	}
+	if len(graphSnapshot.Graph.Nodes) != 2 || len(graphSnapshot.Graph.Edges) != 1 {
+		t.Fatalf(".markdown files must participate as graph nodes and edges: %#v", graphSnapshot.Graph)
+	}
+	backlinks := ls.GetBacklinksFromSnapshot(indexSnapshot, "target.markdown")
+	if backlinks.Generation != graphSnapshot.Generation || len(backlinks.Backlinks) != 1 {
+		t.Fatalf("graph and backlinks must be readable from the same supplied generation: graph=%d backlinks=%#v", graphSnapshot.Generation, backlinks)
+	}
+}
+
+func TestGraphService_GetGraph_OptionsUseOneGeneration(t *testing.T) {
+	gs, ls, fs, tmpDir := newTestGraphService(t)
+	defer os.RemoveAll(tmpDir)
+
+	fs.CreateFile("root.md", "---\ntags: [alpha]\n---\n# Root\nInline #inline and `#code`\n```md\n#fenced\n```\n[[one]] [[missing target]] [[missing target]] ![Photo](assets/photo.png)")
+	fs.CreateFile("one.md", "---\ntags: [beta]\n---\n[[folder/two]]")
+	fs.CreateFile("folder/two.md", "---\ntags: [alpha]\n---\n# Needle")
+	fs.CreateFile("orphan.md", "---\ntags: [alpha]\n---\n# Orphan")
+	fs.CreateFile("assets/photo.png", "image bytes")
+	if err := ls.RebuildIndex(); err != nil {
+		t.Fatalf("RebuildIndex failed: %v", err)
+	}
+	first := ls.GetLinkIndexSnapshot()
+	if got := first.Metadata["root.md"].Tags; len(got) != 2 || got[0] != "alpha" || got[1] != "inline" {
+		t.Fatalf("frontmatter and renderable inline tags must be captured once: %#v", got)
+	}
+	if got := first.Metadata["folder/two.md"].Tags; len(got) != 1 || got[0] != "alpha" {
+		t.Fatalf("heading marker must not become a tag: %#v", got)
+	}
+	if got := renderableInlineTags("Unmatched ` is literal #after"); len(got) != 1 || got[0] != "after" {
+		t.Fatalf("an unmatched backtick must not hide later renderable tags: %#v", got)
+	}
+
+	full, err := gs.GetGraph(models.GraphOptions{})
+	if err != nil || len(full.Nodes) != 4 || len(full.Edges) != 2 {
+		t.Fatalf("zero options must preserve full-note graph: graph=%#v err=%v", full, err)
+	}
+	withTargets, err := gs.GetGraph(models.GraphOptions{IncludeUnresolved: true, IncludeAttachments: true})
+	if err != nil {
+		t.Fatalf("GetGraph with target types failed: %v", err)
+	}
+	if len(withTargets.Nodes) != 6 || len(withTargets.Edges) != 4 {
+		t.Fatalf("expected note, unresolved, and attachment nodes with deduplicated edges: %#v", withTargets)
+	}
+	for _, node := range withTargets.Nodes {
+		if node.Type == "unresolved" && (node.ID == "missing target" || node.Label != "missing target") {
+			t.Errorf("unresolved node needs a structured ID and readable label: %#v", node)
+		}
+		if node.Type == "attachment" && (node.ID == "assets/photo.png" || node.Path != "assets/photo.png" || node.Label != "photo") {
+			t.Errorf("attachment node needs a structured ID, path, and readable label: %#v", node)
+		}
+	}
+
+	for depth, wantNodes := range map[int]int{0: 1, 1: 2, 2: 3} {
+		local, err := gs.GetGraph(models.GraphOptions{RootPath: "root.md", Depth: depth})
+		if err != nil || len(local.Nodes) != wantNodes {
+			t.Errorf("local depth %d = %#v, %v; want %d nodes", depth, local, err, wantNodes)
+		}
+	}
+	if _, err := gs.GetGraph(models.GraphOptions{RootPath: "root.md", Depth: -1}); err == nil {
+		t.Error("negative local graph depth must be rejected")
+	}
+
+	assertGraphNodeIDs(t, gs, models.GraphOptions{Tags: []string{"alpha"}}, "folder/two.md", "orphan.md", "root.md")
+	assertGraphNodeIDs(t, gs, models.GraphOptions{ExcludeTags: []string{"alpha"}}, "one.md")
+	assertGraphNodeIDs(t, gs, models.GraphOptions{Search: "two"}, "folder/two.md")
+	assertGraphNodeIDs(t, gs, models.GraphOptions{Search: "folder/two"}, "folder/two.md")
+	assertGraphNodeIDs(t, gs, models.GraphOptions{Search: "beta"}, "one.md")
+	assertGraphNodeIDs(t, gs, models.GraphOptions{Search: "orphan.md"}, "orphan.md")
+	assertGraphNodeIDs(t, gs, models.GraphOptions{Tags: []string{"inline"}}, "root.md")
+	assertGraphNodeIDs(t, gs, models.GraphOptions{Tags: []string{"code"}})
+	assertGraphNodeIDs(t, gs, models.GraphOptions{Tags: []string{"fenced"}})
+	assertGraphNodeIDs(t, gs, models.GraphOptions{ExcludeOrphans: true}, "folder/two.md", "one.md", "root.md")
+
+	fs.CreateFile("root.md", "---\ntags: [changed]\n---\n[[one]]")
+	if err := ls.RebuildIndex(); err != nil {
+		t.Fatalf("second RebuildIndex failed: %v", err)
+	}
+	oldGeneration, err := gs.GetGraphFromLinkSnapshotWithOptions(first, models.GraphOptions{Tags: []string{"alpha"}})
+	if err != nil || oldGeneration.Generation != first.Generation {
+		t.Fatalf("old graph snapshot lost its generation: %#v, %v", oldGeneration, err)
+	}
+	if !hasGraphNode(oldGeneration.Graph, "root.md") {
+		t.Fatalf("old generation must retain its copied tags: %#v", oldGeneration.Graph.Nodes)
+	}
+}
+
+func assertGraphNodeIDs(t *testing.T, gs *GraphService, options models.GraphOptions, want ...string) {
+	t.Helper()
+	graph, err := gs.GetGraph(options)
+	if err != nil {
+		t.Fatalf("GetGraph(%#v) failed: %v", options, err)
+	}
+	got := make([]string, 0, len(graph.Nodes))
+	for _, node := range graph.Nodes {
+		got = append(got, node.ID)
+	}
+	if len(got) != len(want) {
+		t.Fatalf("GetGraph(%#v) nodes = %#v, want %#v", options, got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("GetGraph(%#v) nodes = %#v, want %#v", options, got, want)
+		}
+	}
+}
+
+func hasGraphNode(graph models.Graph, id string) bool {
+	for _, node := range graph.Nodes {
+		if node.ID == id {
+			return true
+		}
+	}
+	return false
 }

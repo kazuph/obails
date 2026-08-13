@@ -54,6 +54,7 @@ describe("convertWikiLinks - image embeds", () => {
     const input = "Here is ![[photo.png]] inline";
     const result = convertWikiLinks(input);
     expect(result).toContain('<img class="vault-image"');
+    expect(result).toContain('data-embed-link="wikilink"');
     expect(result).toContain('data-vault-path="photo.png"');
     expect(result).toContain('alt="photo.png"');
   });
@@ -91,6 +92,7 @@ describe("convertWikiLinks - image embeds", () => {
     const input = "![[some-note]]";
     const result = convertWikiLinks(input);
     expect(result).toContain('class="wiki-link"');
+    expect(result).toContain('data-embed-link="wikilink"');
     expect(result).toContain('data-link="some-note"');
     expect(result).not.toContain("vault-image");
   });

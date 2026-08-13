@@ -4,17 +4,19 @@
         <key>CFBundlePackageType</key>
             <string>APPL</string>
         <key>CFBundleName</key>
-            <string>Obails</string>
+            <string>Obails Dev</string>
+        <key>CFBundleDisplayName</key>
+            <string>Obails Dev</string>
         <key>CFBundleExecutable</key>
             <string>obails</string>
         <key>CFBundleIdentifier</key>
-            <string>com.kazuph.obails</string>
+            <string>com.kazuph.obails.dev</string>
         <key>CFBundleVersion</key>
-            <string>0.1.0</string>
+            <string>1.0.0</string>
         <key>CFBundleGetInfoString</key>
             <string>This is a comment</string>
         <key>CFBundleShortVersionString</key>
-            <string>0.1.0</string>
+            <string>1.0.0</string>
         <key>CFBundleIconFile</key>
             <string>icons</string>
         <key>CFBundleIcons</key>

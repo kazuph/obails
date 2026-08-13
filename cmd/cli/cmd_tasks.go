@@ -33,10 +33,10 @@ var taskCmd = &cobra.Command{
 	Long: `Toggle or set the status of a specific task by file and line number.
 
 Examples:
-  ob task ref=Todo.md:5 toggle
-  ob task ref=Todo.md:5 done
-  ob task ref=Todo.md:5 todo
-  ob task ref=Todo.md:5 status=/
+  ob task ref=<opaque-reference-from-tasks-output> toggle
+  ob task ref=<opaque-reference-from-tasks-output> done
+  ob task file=Todo.md line=5 todo
+  ob task file=Todo.md line=5 status=/
   ob task file=Todo.md line=5 toggle`,
 	RunE: runTask,
 }
@@ -53,7 +53,7 @@ func init() {
 	tasksCmd.Flags().Bool("verbose", false, "Include file path and line number")
 
 	// task command flags
-	taskCmd.Flags().String("ref", "", "Task reference as path:line (e.g., Todo.md:5)")
+	taskCmd.Flags().String("ref", "", "Opaque task reference emitted by tasks JSON or verbose output")
 	taskCmd.Flags().String("file", "", "File name (wiki-link resolved)")
 	taskCmd.Flags().String("path", "", "File path (relative to vault root)")
 	taskCmd.Flags().Int("line", 0, "Line number of the task")
@@ -140,7 +140,7 @@ func runTasks(cmd *cobra.Command, args []string) error {
 		var sb strings.Builder
 		for _, t := range tasks {
 			if verbose {
-				sb.WriteString(fmt.Sprintf("%s:%d\t- [%s] %s\n", t.File, t.Line, t.Status, t.Content))
+				sb.WriteString(fmt.Sprintf("ref=%s\t%s:%d\t- [%s] %s\n", t.Ref, t.File, t.Line, t.Status, t.Content))
 			} else {
 				sb.WriteString(fmt.Sprintf("- [%s] %s\n", t.Status, t.Content))
 			}
@@ -172,33 +172,38 @@ func runTask(cmd *cobra.Command, args []string) error {
 	todo, _ := cmd.Flags().GetBool("todo")
 	status, _ := cmd.Flags().GetString("status")
 
-	var filePath string
-	var lineNum int
-
 	if ref != "" {
-		// Parse ref=path:line format
-		parts := strings.SplitN(ref, ":", 2)
-		if len(parts) != 2 {
-			return fmt.Errorf("invalid ref format, expected path:line (e.g., Todo.md:5)")
-		}
-		filePath = parts[0]
-		if _, err := fmt.Sscanf(parts[1], "%d", &lineNum); err != nil {
-			return fmt.Errorf("invalid line number in ref: %s", parts[1])
-		}
-	} else {
+		var nextRef string
 		var err error
-		filePath, err = resolveTaskFilePath(cmd)
-		if err != nil {
-			return err
+		switch {
+		case toggle:
+			nextRef, err = taskService.ToggleTaskRef(ref)
+		case done:
+			nextRef, err = taskService.SetTaskStatusRef(ref, "x")
+		case todo:
+			nextRef, err = taskService.SetTaskStatusRef(ref, " ")
+		case status != "":
+			nextRef, err = taskService.SetTaskStatusRef(ref, status)
+		default:
+			return fmt.Errorf("action required: toggle, done, todo, or status=<char>")
 		}
-		lineNum, _ = cmd.Flags().GetInt("line")
+		if err != nil {
+			return fmt.Errorf("task update failed: %w", err)
+		}
+
+		outputResult(map[string]any{"success": true, "nextRef": nextRef}, "Task updated")
+		return nil
 	}
 
+	filePath, err := resolveTaskFilePath(cmd)
+	if err != nil {
+		return err
+	}
+	lineNum, _ := cmd.Flags().GetInt("line")
 	if lineNum <= 0 {
 		return fmt.Errorf("line number is required and must be positive")
 	}
 
-	// Determine action
 	switch {
 	case toggle:
 		if err := taskService.ToggleTask(filePath, lineNum); err != nil {

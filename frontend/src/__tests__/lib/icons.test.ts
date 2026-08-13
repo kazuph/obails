@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { renderIcon, setButtonIcon, type IconName } from "../../lib/icons";
+import { renderIcon, setButtonIcon, setButtonIconWithLabel, type IconName } from "../../lib/icons";
 
 const FILE_TYPE_ICONS: IconName[] = [
   "file",
@@ -30,6 +30,15 @@ describe("icons", () => {
     const button = document.createElement("button");
     setButtonIcon(button, "refresh");
     expect(button.innerHTML).toContain("<svg");
+  });
+
+  it("keeps a visible text label beside an action icon", () => {
+    const button = document.createElement("button");
+    setButtonIconWithLabel(button, "external-link", "Rejoin");
+
+    expect(button.querySelector("svg")).not.toBeNull();
+    expect(button.querySelector(".toolbar-button-label")?.textContent).toBe("Rejoin");
+    expect(button.textContent).toBe("Rejoin");
   });
 
   it("renders every file-type icon as inline SVG (no emoji)", () => {

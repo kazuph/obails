@@ -24,3 +24,18 @@ test-results/
 # Local test data (Obsidian vault folders)
 02_dailynotes/frontend/coverage/
 frontend/coverage/
+
+# Local review artifacts and solver output (never release)
+/REPORT.md
+/REPORT-obails-major-features.md
+/_apalache-out/
+formal/_apalache-out/
+formal/apalache-out/
+
+# Local UI polish evidence (not product screenshots)
+docs/screenshots/obails-ui-polish-*
+
+# Local Codex orchestration state (not product documentation)
+/.codex/TODO.md
+/.codex/ui-polish-and-feature-guide-rules.md
+/.codex/v1-release-rules.md

@@ -147,11 +147,11 @@ export function convertWikiLinks(html: string): string {
   html = html.replace(/!\[\[([^\]|]+?)(?:\|([^\]]*))?\]\]/g, (_, path, altOrSize) => {
     if (IMAGE_EXTENSIONS.test(path)) {
       const alt = altOrSize || path;
-      return `<img class="vault-image" data-vault-path="${path}" alt="${alt}" />`;
+      return `<img class="vault-image" data-embed-link="wikilink" data-vault-path="${path}" alt="${alt}" />`;
     }
     // Non-image embed (transclusion) — leave as wiki-link for now
     const displayText = altOrSize || path;
-    return `<span class="wiki-link" data-link="${path}">${displayText}</span>`;
+    return `<span class="wiki-link" data-embed-link="wikilink" data-link="${path}">${displayText}</span>`;
   });
 
   // Second pass: convert [[link]] and [[link|alias]] to wiki-link spans
@@ -296,14 +296,14 @@ function protectWikiLinks(src: string, store: TokenStore): string {
       return makeToken(
         store,
         "W",
-        `<img class="vault-image" data-vault-path="${escapeHtml(path)}" alt="${escapeHtml(alt)}" />`,
+        `<img class="vault-image" data-embed-link="wikilink" data-vault-path="${escapeHtml(path)}" alt="${escapeHtml(alt)}" />`,
       );
     }
     const displayText = altOrSize || path;
     return makeToken(
       store,
       "W",
-      `<span class="wiki-link" data-link="${escapeHtml(path)}">${escapeHtml(displayText)}</span>`,
+      `<span class="wiki-link" data-embed-link="wikilink" data-link="${escapeHtml(path)}">${escapeHtml(displayText)}</span>`,
     );
   });
 

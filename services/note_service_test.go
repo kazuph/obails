@@ -44,7 +44,7 @@ func TestNoteService_GetNote(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	t.Run("get existing note", func(t *testing.T) {
-		content := "# My Note\n\nSome content here"
+		content := "---\naliases:\n  - Standup\nalias: Meeting\n---\n# Heading that is not the filename\n\nSome content here"
 		err := fs.CreateFile("test-note.md", content)
 		if err != nil {
 			t.Fatalf("Setup failed: %v", err)
@@ -55,14 +55,21 @@ func TestNoteService_GetNote(t *testing.T) {
 			t.Fatalf("GetNote failed: %v", err)
 		}
 
-		if note.Title != "My Note" {
-			t.Errorf("Expected title 'My Note', got '%s'", note.Title)
+		if note.Title != "test-note" {
+			t.Errorf("Expected filename title 'test-note', got '%s'", note.Title)
 		}
 		if note.Content != content {
 			t.Errorf("Content mismatch")
 		}
 		if note.Path != "test-note.md" {
 			t.Errorf("Path mismatch: got '%s'", note.Path)
+		}
+		aliases, ok := note.Frontmatter["aliases"].([]interface{})
+		if !ok || len(aliases) != 1 || aliases[0] != "Standup" {
+			t.Errorf("Expected aliases frontmatter, got %#v", note.Frontmatter["aliases"])
+		}
+		if note.Frontmatter["alias"] != "Meeting" {
+			t.Errorf("Expected scalar alias frontmatter, got %#v", note.Frontmatter["alias"])
 		}
 	})
 
@@ -101,6 +108,31 @@ func TestNoteService_SaveNote(t *testing.T) {
 			t.Errorf("Content not saved: got '%s'", content)
 		}
 	})
+}
+
+func TestNoteService_SaveNoteCAS(t *testing.T) {
+	ns, fs, tmpDir := newTestNoteService(t)
+	defer os.RemoveAll(tmpDir)
+
+	if err := fs.CreateFile("cas-note.md", "# Different heading\n\noriginal"); err != nil {
+		t.Fatalf("CreateFile failed: %v", err)
+	}
+	note, err := ns.GetNote("cas-note.md")
+	if err != nil {
+		t.Fatalf("GetNote failed: %v", err)
+	}
+
+	result, err := ns.SaveNoteCAS(models.FileSnapshot{
+		Path:     note.Path,
+		Content:  note.Content,
+		Revision: note.Revision,
+	}, "updated")
+	if err != nil {
+		t.Fatalf("SaveNoteCAS failed: %v", err)
+	}
+	if result.Status != models.FileSaveStatusSaved {
+		t.Fatalf("Expected saved result, got %+v", result)
+	}
 }
 
 func TestNoteService_DailyNote(t *testing.T) {
@@ -144,7 +176,7 @@ func TestNoteService_DailyNote(t *testing.T) {
 			t.Fatalf("GetDailyNote failed: %v", err)
 		}
 
-		if note.Title != "Existing daily note" {
+		if note.Title != "2025-01-20" {
 			t.Errorf("Unexpected title: %s", note.Title)
 		}
 	})
@@ -355,10 +387,10 @@ func TestNoteService_ExtractTitle(t *testing.T) {
 		path     string
 		expected string
 	}{
-		{"# My Title\n\nContent", "file.md", "My Title"},
-		{"# Title with spaces   \n", "file.md", "Title with spaces"},
+		{"# My Title\n\nContent", "file.md", "file"},
+		{"# Title with spaces   \n", "folder/file.md", "file"},
 		{"No heading here", "fallback-name.md", "fallback-name"},
-		{"## H2 heading\n# Real Title", "file.md", "Real Title"},
+		{"## H2 heading\n# Real Title", "file.md", "file"},
 		{"", "empty.md", "empty"},
 	}
 

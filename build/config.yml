@@ -11,7 +11,7 @@ info:
   description: "Obsidian-like note-taking app built with Wails" # The application description
   copyright: "(c) 2026, kazuph" # Copyright text
   comments: "Obails - Obsidian Alternative in Wails" # Comments
-  version: "0.1.0" # The application version
+  version: "1.0.0" # The application version
 
 # iOS build configuration (uncomment to customise iOS project generation)
 # Note: Keys under `ios` OVERRIDE values under `info` when set.

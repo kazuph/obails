@@ -1,11 +1,12 @@
 {
   "name": "obails",
   "private": true,
-  "version": "0.0.1",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "build:frontend": "pnpm --dir frontend run build",
     "test": "playwright test",
+    "test:native": "playwright test --config playwright.native.config.ts",
     "test:ui": "playwright test --ui",
     "test:headed": "playwright test --headed",
     "test:report": "playwright show-report",

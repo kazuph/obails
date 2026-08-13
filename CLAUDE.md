@@ -259,8 +259,8 @@ wails3 task darwin:package
 ### Create GitHub Release
 ```bash
 # 1. Tag the release
-git tag v0.1.0
-git push origin v0.1.0
+git tag v1.0.0
+git push origin v1.0.0
 
 # 2. Build production app
 wails3 task darwin:package
@@ -269,8 +269,8 @@ wails3 task darwin:package
 cd bin && zip -r obails-macos.zip obails.app && cd ..
 
 # 4. Create GitHub Release with asset
-gh release create v0.1.0 bin/obails-macos.zip \
-  --title "v0.1.0" \
+gh release create v1.0.0 bin/obails-macos.zip \
+  --title "v1.0.0" \
   --notes "Release notes here"
 ```
 

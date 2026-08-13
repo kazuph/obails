@@ -7,10 +7,12 @@ const e2eConfigPath = path.resolve(__dirname, 'e2e/fixtures/config.e2e.toml');
 
 export default defineConfig({
   testDir: './e2e',
-  fullyParallel: true,
+  testIgnore: ['**/native-wails.spec.ts'],
+  // The Wails dev process and fixture vault are shared by the suite, so mutations must be serialized.
+  fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  workers: 1,
   reporter: 'html',
   // globalSetup/Teardown disabled - run setup manually before tests
   // globalSetup: './e2e/global-setup.ts',

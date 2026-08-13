@@ -1,15 +1,21 @@
 export type ItemKind = "file" | "folder";
 
 const INVALID_NAME_CHARS = /[<>:"/\\|?*]/;
-const AUDIO_EXTENSIONS = new Set(["mp3", "m4a", "wav", "ogg", "flac", "aac", "opus"]);
-
 export type SortableFileInfo = {
   name: string;
   path: string;
   isDir: boolean;
   fileType?: string;
+  modifiedAt?: string | Date;
+  createdAt?: string | Date;
   children?: SortableFileInfo[] | null;
 };
+
+export type FileTreeSortField = "name" | "modified" | "created";
+export type FileTreeSortDirection = "ascending" | "descending";
+export type FileTreeSort = { field: FileTreeSortField; direction: FileTreeSortDirection };
+
+export const DEFAULT_FILE_TREE_SORT: FileTreeSort = { field: "name", direction: "ascending" };
 
 export function validateItemName(name: string): string {
   const trimmed = name.trim();
@@ -35,8 +41,7 @@ export function getDisplayName(path: string, kind: ItemKind): string {
   if (kind === "folder") {
     return basename;
   }
-  const ext = getFileExtension(path);
-  return ext ? basename.slice(0, -ext.length) : basename;
+  return basename.replace(/\.(?:md|markdown)$/i, "");
 }
 
 export function getFileExtension(path: string): string {
@@ -60,6 +65,28 @@ export function buildRenamePath(currentPath: string, nextName: string, kind: Ite
   const ext = getFileExtension(currentPath);
   const nextFilename = ext ? `${validated}${ext}` : validated;
   return parentPath ? `${parentPath}/${nextFilename}` : nextFilename;
+}
+
+export function rewritePathAfterMove(
+  path: string | null,
+  previousPath: string,
+  nextPath: string,
+  isDir: boolean,
+): string | null {
+  if (!path) {
+    return path;
+  }
+  if (path === previousPath) {
+    return nextPath;
+  }
+  if (isDir && path.startsWith(`${previousPath}/`)) {
+    return `${nextPath}${path.slice(previousPath.length)}`;
+  }
+  return path;
+}
+
+export function isBrowserFileDropWithoutPaths(dataTransfer: DataTransfer | null): boolean {
+  return Boolean(dataTransfer?.files.length) && extractExternalDropPaths(dataTransfer).length === 0;
 }
 
 export function shouldIgnoreTreeClick(
@@ -137,50 +164,123 @@ export function hasExternalFileDrop(dataTransfer: DataTransfer | null): boolean 
 export function compareFileInfoForSort(
   a: SortableFileInfo,
   b: SortableFileInfo,
-  filesAscending: boolean
+  sort: FileTreeSort = DEFAULT_FILE_TREE_SORT,
 ): number {
   if (a.isDir !== b.isDir) {
     return a.isDir ? -1 : 1;
   }
-  if (a.isDir) {
-    return a.name.localeCompare(b.name);
-  }
-  return filesAscending ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name);
+  const compare = sort.field === "name"
+    ? a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" })
+    : compareDates(
+      sort.field === "modified" ? a.modifiedAt : a.createdAt,
+      sort.field === "modified" ? b.modifiedAt : b.createdAt,
+    );
+  const result = compare || a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
+  return sort.direction === "descending" ? -result : result;
 }
 
-export function hasAudioMajority(files: SortableFileInfo[]): boolean {
-  let audioCount = 0;
-  let otherFileCount = 0;
-
-  for (const file of files) {
-    if (file.isDir) {
-      continue;
-    }
-    if (isAudioFile(file)) {
-      audioCount += 1;
-    } else {
-      otherFileCount += 1;
-    }
-  }
-
-  return audioCount > otherFileCount;
-}
-
-export function normalizeAndSortFileTree<T extends SortableFileInfo>(files: T[]): T[] {
-  const filesAscending = hasAudioMajority(files);
+export function normalizeAndSortFileTree<T extends SortableFileInfo>(files: T[], sort: FileTreeSort = DEFAULT_FILE_TREE_SORT): T[] {
 
   return files
     .map((file) => ({
       ...file,
-      children: file.children?.length ? normalizeAndSortFileTree(file.children) : [],
+      children: file.children?.length ? normalizeAndSortFileTree(file.children, sort) : [],
     }) as T)
-    .sort((a, b) => compareFileInfoForSort(a, b, filesAscending));
+    .sort((a, b) => compareFileInfoForSort(a, b, sort));
 }
 
-function isAudioFile(file: SortableFileInfo): boolean {
-  if ((file.fileType || "").toLowerCase() === "audio") {
+function compareDates(a: string | Date | undefined, b: string | Date | undefined): number {
+  return (a ? new Date(a).getTime() : 0) - (b ? new Date(b).getTime() : 0);
+}
+
+export function matchesVaultRelativePath(path: string, query: string): boolean {
+  return path.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase());
+}
+
+export interface SearchExpansionState {
+  snapshot: Set<string> | null;
+}
+
+export function nextSearchExpansionState(
+  query: string,
+  state: SearchExpansionState,
+  expandedPaths: Set<string>,
+): { state: SearchExpansionState; restoreSnapshot: Set<string> | null } {
+  if (!query.trim()) {
+    return {
+      state: { snapshot: null },
+      restoreSnapshot: state.snapshot,
+    };
+  }
+  if (state.snapshot === null) {
+    return {
+      state: { snapshot: new Set(expandedPaths) },
+      restoreSnapshot: null,
+    };
+  }
+  return { state, restoreSnapshot: null };
+}
+
+export function isPathUnderAncestor(path: string, ancestorPath: string): boolean {
+  if (!ancestorPath) {
+    return false;
+  }
+  return path === ancestorPath || path.startsWith(`${ancestorPath}/`);
+}
+
+export function filterTopLevelMoveSources(sourcePaths: string[]): string[] {
+  return sourcePaths.filter((sourcePath) =>
+    !sourcePaths.some((other) => other !== sourcePath && isPathUnderAncestor(sourcePath, other)),
+  );
+}
+
+export function isInvalidMoveDestination(targetFolder: string, sourcePath: string): boolean {
+  if (!sourcePath) {
+    return false;
+  }
+  if (targetFolder === sourcePath) {
     return true;
   }
-  const ext = file.path.split(".").pop()?.toLowerCase() || "";
-  return AUDIO_EXTENSIONS.has(ext);
+  return isPathUnderAncestor(targetFolder, sourcePath);
+}
+
+export function planMovesToFolder(
+  sourcePaths: string[],
+  targetFolder: string,
+): Array<{ sourcePath: string; nextPath: string }> {
+  return filterTopLevelMoveSources(sourcePaths)
+    .map((sourcePath) => ({
+      sourcePath,
+      nextPath: targetFolder
+        ? `${targetFolder}/${sourcePath.split("/").pop()!}`
+        : sourcePath.split("/").pop()!,
+    }))
+    .filter(({ sourcePath, nextPath }) => sourcePath !== nextPath && !isInvalidMoveDestination(targetFolder, sourcePath));
+}
+
+export function filterMoveDestinationFolders(folderPaths: string[], sourcePaths: string[]): string[] {
+  return folderPaths.filter((folderPath) =>
+    !sourcePaths.some((sourcePath) => isInvalidMoveDestination(folderPath, sourcePath)),
+  );
+}
+
+export function nextFileTreeSelection(
+  current: ReadonlySet<string>, anchorPath: string | null, clickedPath: string,
+  visiblePaths: string[], individual: boolean, range: boolean,
+): { selected: Set<string>; anchorPath: string } {
+  if (range && anchorPath) {
+    const start = visiblePaths.indexOf(anchorPath);
+    const end = visiblePaths.indexOf(clickedPath);
+    if (start >= 0 && end >= 0) {
+      const selected = new Set(current);
+      for (const path of visiblePaths.slice(Math.min(start, end), Math.max(start, end) + 1)) selected.add(path);
+      return { selected, anchorPath };
+    }
+  }
+  if (individual) {
+    const selected = new Set(current);
+    selected.has(clickedPath) ? selected.delete(clickedPath) : selected.add(clickedPath);
+    return { selected, anchorPath: clickedPath };
+  }
+  return { selected: new Set([clickedPath]), anchorPath: clickedPath };
 }

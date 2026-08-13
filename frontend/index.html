@@ -10,18 +10,36 @@
     <div id="app">
         <div class="sidebar" id="sidebar">
             <div class="sidebar-header">
-                <button id="settings-btn" class="icon-btn" title="Settings (⌘,)" aria-label="Settings"></button>
+                <button id="settings-btn" class="icon-btn" title="Settings" aria-label="Settings"></button>
             </div>
             <div class="file-search">
-                <input type="text" id="file-search-input" placeholder="Search files..." autocomplete="off">
+                <input type="text" id="file-search-input" placeholder="Search files..." autocomplete="off" aria-label="Search files">
                 <button id="file-search-clear" class="search-clear-btn" style="display: none;" aria-label="Clear search"></button>
             </div>
             <div class="file-tree-controls">
+                <label class="sr-only" for="file-tree-sort-field">Sort files</label>
+                <select id="file-tree-sort-field" aria-label="Sort files by">
+                    <option value="name">Name</option>
+                    <option value="modified">Modified</option>
+                    <option value="created">Created</option>
+                </select>
+                <select id="file-tree-sort-direction" aria-label="Sort direction">
+                    <option value="ascending">Ascending</option>
+                    <option value="descending">Descending</option>
+                </select>
                 <button id="collapse-all-folders-btn" class="icon-btn" title="Collapse all folders" aria-label="Collapse all folders"></button>
                 <button id="expand-all-folders-btn" class="icon-btn" title="Expand all folders" aria-label="Expand all folders"></button>
             </div>
-            <div class="file-tree" id="file-tree" data-file-drop-target data-path="">
+            <div class="file-tree" id="file-tree" data-file-drop-target data-path="" role="tree" aria-label="File tree">
                 <!-- File tree will be rendered here -->
+            </div>
+            <div id="empty-vault-actions" class="empty-vault-actions" hidden>
+                <p>This vault is empty.</p>
+                <button id="empty-vault-create" type="button" class="primary-btn" aria-label="Create a note in this empty vault">Create note</button>
+            </div>
+            <div class="file-tree-status-row">
+                <p id="file-tree-status" role="status" aria-live="polite"></p>
+                <button id="file-tree-retry" type="button" class="secondary-btn" hidden>Retry loading files</button>
             </div>
         </div>
         <div class="resize-handle" id="sidebar-resize"></div>
@@ -29,12 +47,16 @@
         <div class="main-content">
             <div class="toolbar">
                 <div class="toolbar-left">
-                    <button id="new-note-btn" class="toolbar-icon-btn" title="New Note (⌘N)" aria-label="New Note"></button>
+                    <button id="new-note-btn" class="toolbar-icon-btn" title="New Note" aria-label="New Note"></button>
                     <button id="daily-note-btn" class="toolbar-icon-btn" title="Today's Daily Note" aria-label="Today's Daily Note"></button>
                     <button id="timeline-btn" class="toolbar-icon-btn" title="Timeline" aria-label="Timeline"></button>
-                    <button id="graph-btn" class="toolbar-icon-btn" title="Graph View (⌘G)" aria-label="Graph View"></button>
+                    <button id="graph-btn" class="toolbar-icon-btn" title="Graph View" aria-label="Graph View"></button>
+                    <button id="vault-search-btn" class="toolbar-icon-btn" type="button" title="Search vault (⌘F outside note; Find in Note while editing)" aria-label="Search vault" aria-haspopup="dialog" aria-expanded="false"></button>
                     <button id="refresh-btn" class="toolbar-icon-btn" title="Refresh" aria-label="Refresh"></button>
-                    <button id="source-toggle-btn" class="toolbar-icon-btn" title="Toggle Source (⌘E)" aria-label="Toggle Source" aria-pressed="false"></button>
+                    <button id="source-toggle-btn" class="toolbar-icon-btn" title="Toggle Source" aria-label="Toggle Source" aria-pressed="false"></button>
+                    <button id="split-pane-right-btn" class="toolbar-icon-btn" type="button" title="Split right" aria-label="Split right"></button>
+                    <button id="split-pane-down-btn" class="toolbar-icon-btn" type="button" title="Split down" aria-label="Split down"></button>
+                    <button id="close-pane-btn" class="toolbar-icon-btn" type="button" title="Close pane" aria-label="Close pane"></button>
                 </div>
                 <div class="toolbar-center">
                     <div class="mini-player" id="mini-player" style="display: none;">
@@ -54,47 +76,64 @@
                         <button id="mini-player-close" class="icon-btn" title="Stop audio" aria-label="Stop audio"></button>
                     </div>
                 </div>
-                <div class="toolbar-right"></div>
+                <div class="toolbar-right">
+                    <button id="popout-pane-btn" class="toolbar-icon-btn" type="button" title="Pop out active pane into a new window" aria-label="Pop out pane"></button>
+                    <button id="rejoin-popout-btn" class="toolbar-icon-btn toolbar-labeled-btn" type="button" title="Rejoin this popout pane into the main window" aria-label="Rejoin pane" hidden></button>
+                </div>
             </div>
 
             <!-- Item Input Form -->
             <div class="new-note-form" id="new-note-form" style="display: none;">
                 <div class="new-note-input-container">
                     <span class="new-note-icon" id="new-note-icon"></span>
-                    <input type="text" id="new-note-input" placeholder="Enter filename (without .md)" autocomplete="off">
+                    <input type="text" id="new-note-input" placeholder="Enter filename (without .md)" autocomplete="off" aria-label="New note filename">
                     <span class="new-note-extension" id="new-note-extension">.md</span>
                     <button id="new-note-create" class="new-note-btn create">Create</button>
                     <button id="new-note-cancel" class="new-note-btn cancel">Cancel</button>
                 </div>
             </div>
 
+            <main id="workspace-host" class="workspace-host" hidden aria-label="Workspace"></main>
+
+            <div id="workspace-pane-tabs" class="workspace-pane-tabs" role="tablist" aria-label="Workspace panes"></div>
+
             <div class="editor-container source-hidden">
                 <div class="editor-pane" id="editor-pane">
                     <div class="pane-header" id="editor-header">
-                        <span class="pane-title" id="editor-title">Select a note...</span>
+                        <span class="pane-title standalone-note-title" id="editor-title" role="button" tabindex="-1" hidden aria-label="Rename current note">Select a note...</span>
                         <span class="save-pulse" id="save-pulse" aria-hidden="true"></span>
+                        <span id="save-status" role="status" hidden>
+                            <span id="save-status-message"></span>
+                            <button id="save-status-retry" type="button" hidden>Retry save</button>
+                            <button id="save-status-reload" type="button" hidden>Reload disk version</button>
+                            <button id="save-status-close" type="button" hidden>Close document</button>
+                        </span>
                     </div>
-                    <textarea id="editor" placeholder="Select a note..."></textarea>
+                    <div class="editor-input-shell">
+                        <textarea id="editor" placeholder="Select a note..." data-file-drop-target data-drop-kind="markdown-editor"></textarea>
+                        <div id="editor-line-numbers" class="editor-line-numbers" aria-hidden="true"></div>
+                    </div>
+                    <div id="link-suggestions" class="link-suggestions" role="listbox" aria-label="Wiki link suggestions" hidden></div>
                 </div>
                 <div class="resize-handle vertical" id="editor-resize"></div>
                 <div class="preview-pane" id="preview-pane">
                     <div class="pane-header" id="preview-header">
-                        <span class="pane-title" id="preview-title">Preview</span>
+                        <span class="pane-title standalone-note-title" id="preview-title" hidden>Preview</span>
                         <div id="note-search" class="note-search" hidden>
-                            <input id="note-search-input" type="search" placeholder="Find in note" aria-label="Find in note" />
+                            <input id="note-search-input" class="note-search-input" type="search" placeholder="Find in note" aria-label="Find in note" />
                             <span id="note-search-count" class="note-search-count">0/0</span>
                             <button id="note-search-prev" type="button" title="Previous match" aria-label="Previous match">↑</button>
                             <button id="note-search-next" type="button" title="Next match" aria-label="Next match">↓</button>
                             <button id="note-search-close" type="button" title="Close find" aria-label="Close find">×</button>
                         </div>
                     </div>
-                    <div id="preview"></div>
+                    <div id="preview" class="preview-content"></div>
                 </div>
             </div>
 
             <div class="timeline-panel" id="timeline-panel" style="display: none;">
                 <div class="timeline-input">
-                    <textarea id="timeline-input" placeholder="What's on your mind?"></textarea>
+                    <textarea id="timeline-input" placeholder="What's on your mind?" aria-label="New timeline entry"></textarea>
                     <button id="timeline-submit">Post</button>
                 </div>
                 <div class="timeline-list" id="timeline-list">
@@ -107,7 +146,7 @@
                 <div class="pane-header">
                     <span class="pane-title" id="image-title">Image</span>
                     <div class="image-controls">
-                        <button id="image-fullscreen" title="Fullscreen">⤢</button>
+                        <button id="image-fullscreen" title="Fullscreen" aria-label="View image fullscreen">⤢</button>
                     </div>
                 </div>
                 <div class="image-container" id="image-container">
@@ -120,14 +159,14 @@
                 <div class="pane-header">
                     <span class="pane-title" id="pdf-title">PDF</span>
                     <div class="pdf-controls">
-                        <button id="pdf-view-mode" title="Toggle View Mode (Single/Continuous)"></button>
-                        <button id="pdf-prev" title="Previous Page">◀</button>
-                        <span id="pdf-page-info">1 / 1</span>
-                        <button id="pdf-next" title="Next Page">▶</button>
-                        <button id="pdf-zoom-out" title="Zoom Out">−</button>
-                        <span id="pdf-zoom-info">100%</span>
-                        <button id="pdf-zoom-in" title="Zoom In">+</button>
-                        <button id="pdf-fullscreen" title="Fullscreen">⬜</button>
+                        <button id="pdf-view-mode" title="Toggle View Mode (Single/Continuous)" aria-label="Toggle PDF view mode"></button>
+                        <button id="pdf-prev" title="Previous Page" aria-label="Previous PDF page">◀</button>
+                        <span id="pdf-page-info" class="pdf-page-info">1 / 1</span>
+                        <button id="pdf-next" title="Next Page" aria-label="Next PDF page">▶</button>
+                        <button id="pdf-zoom-out" title="Zoom Out" aria-label="Zoom out PDF">−</button>
+                        <span id="pdf-zoom-info" class="pdf-zoom-info">100%</span>
+                        <button id="pdf-zoom-in" title="Zoom In" aria-label="Zoom in PDF">+</button>
+                        <button id="pdf-fullscreen" title="Fullscreen" aria-label="View PDF fullscreen">⬜</button>
                     </div>
                 </div>
                 <div class="pdf-container-wrapper" id="pdf-container-wrapper">
@@ -141,8 +180,17 @@
                 <div class="editor-pane" id="html-editor-pane">
                     <div class="pane-header">
                         <span class="pane-title" id="html-editor-title">HTML</span>
+                        <span id="html-save-status" role="status" hidden>
+                            <span id="html-save-status-message"></span>
+                            <button id="html-save-status-retry" type="button" hidden>Retry save</button>
+                            <button id="html-save-status-reload" type="button" hidden>Reload disk version</button>
+                            <button id="html-save-status-close" type="button" hidden>Close document</button>
+                        </span>
                     </div>
-                    <textarea id="html-editor" placeholder="HTML content..."></textarea>
+                    <div class="editor-input-shell">
+                        <textarea id="html-editor" placeholder="HTML content..."></textarea>
+                        <div id="html-editor-line-numbers" class="editor-line-numbers" aria-hidden="true"></div>
+                    </div>
                 </div>
                 <div class="resize-handle vertical" id="html-editor-resize"></div>
                 <div class="preview-pane" id="html-preview-pane">
@@ -154,13 +202,14 @@
             </div>
         </div>
 
-        <div class="right-sidebar" id="right-sidebar">
+        <div class="resize-handle" id="right-sidebar-resize"></div>
+        <div class="right-sidebar" id="right-sidebar" aria-label="Right sidebar">
             <div class="outline-panel sidebar-section" id="outline-panel" data-sidebar-section="outline">
                 <button class="sidebar-section-header" type="button" data-sidebar-section-toggle="outline" aria-expanded="true" aria-controls="outline-list">
                     <span>Outline</span>
                     <span class="sidebar-section-chevron" aria-hidden="true">▾</span>
                 </button>
-                <div id="outline-list" class="sidebar-section-body">
+                <div id="outline-list" class="sidebar-section-body" role="list" aria-label="Outline headings">
                     <!-- Outline will be rendered here -->
                 </div>
             </div>
@@ -186,12 +235,17 @@
             </div>
         </div>
     </div>
+    <div class="operation-status-row" id="operation-status-row" hidden>
+        <p id="operation-status" class="operation-status" role="status" aria-live="polite"></p>
+        <button id="operation-retry" type="button" class="secondary-btn" hidden>Retry last operation</button>
+        <button id="operation-dismiss" type="button" class="secondary-btn" hidden>Dismiss</button>
+    </div>
 
     <!-- Image Fullscreen Overlay -->
-    <div class="image-fullscreen" id="image-fullscreen-overlay" style="display: none;">
+    <div class="image-fullscreen" id="image-fullscreen-overlay" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="image-fs-title">
         <div class="image-fs-header">
             <span class="image-fs-title" id="image-fs-title">Image</span>
-            <button id="image-fs-close" title="Close (ESC)">✕</button>
+            <button id="image-fs-close" title="Close (ESC)" aria-label="Close fullscreen image">✕</button>
         </div>
         <div class="image-fs-content">
             <img id="image-fs-preview" alt="Fullscreen Preview" />
@@ -199,18 +253,18 @@
     </div>
 
     <!-- PDF Fullscreen Overlay -->
-    <div class="pdf-fullscreen" id="pdf-fullscreen-overlay" style="display: none;">
+    <div class="pdf-fullscreen" id="pdf-fullscreen-overlay" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="pdf-fs-title">
         <div class="pdf-fs-header">
             <span class="pdf-fs-title" id="pdf-fs-title">PDF</span>
             <div class="pdf-fs-controls">
-                <button id="pdf-fs-view-mode" title="Toggle View Mode"></button>
-                <button id="pdf-fs-prev" title="Previous Page">◀</button>
+                <button id="pdf-fs-view-mode" title="Toggle View Mode" aria-label="Toggle fullscreen PDF view mode"></button>
+                <button id="pdf-fs-prev" title="Previous Page" aria-label="Previous fullscreen PDF page">◀</button>
                 <span id="pdf-fs-page-info">1 / 1</span>
-                <button id="pdf-fs-next" title="Next Page">▶</button>
-                <button id="pdf-fs-zoom-out" title="Zoom Out">−</button>
+                <button id="pdf-fs-next" title="Next Page" aria-label="Next fullscreen PDF page">▶</button>
+                <button id="pdf-fs-zoom-out" title="Zoom Out" aria-label="Zoom out fullscreen PDF">−</button>
                 <span id="pdf-fs-zoom-info">100%</span>
-                <button id="pdf-fs-zoom-in" title="Zoom In">+</button>
-                <button id="pdf-fs-close" title="Close (ESC)">✕</button>
+                <button id="pdf-fs-zoom-in" title="Zoom In" aria-label="Zoom in fullscreen PDF">+</button>
+                <button id="pdf-fs-close" title="Close (ESC)" aria-label="Close fullscreen PDF">✕</button>
             </div>
         </div>
         <div class="pdf-fs-container" id="pdf-fs-container">
@@ -219,16 +273,16 @@
     </div>
 
     <!-- Mermaid Fullscreen Overlay -->
-    <div class="mermaid-fullscreen" id="mermaid-fullscreen">
+    <div class="mermaid-fullscreen" id="mermaid-fullscreen" role="dialog" aria-modal="true" aria-labelledby="mermaid-fullscreen-title">
         <div class="mermaid-fs-header">
-            <h3>Mermaid Diagram</h3>
+            <h3 id="mermaid-fullscreen-title">Mermaid Diagram</h3>
             <div class="mermaid-fs-controls">
-                <button id="mermaid-zoom-out" title="Zoom Out">−</button>
+                <button id="mermaid-zoom-out" title="Zoom Out" aria-label="Zoom out Mermaid diagram">−</button>
                 <span class="mermaid-zoom-info" id="mermaid-zoom-info">100%</span>
-                <button id="mermaid-zoom-in" title="Zoom In">+</button>
-                <button id="mermaid-reset" title="Reset View">Reset</button>
-                <button id="mermaid-maximize-window" title="Maximize Window">⬜ Window</button>
-                <button id="mermaid-close" title="Close (ESC)">✕ Close</button>
+                <button id="mermaid-zoom-in" title="Zoom In" aria-label="Zoom in Mermaid diagram">+</button>
+                <button id="mermaid-reset" title="Reset View" aria-label="Reset Mermaid diagram view">Reset</button>
+                <button id="mermaid-maximize-window" title="Maximize Window" aria-label="Maximize Mermaid diagram window">⬜ Window</button>
+                <button id="mermaid-close" title="Close (ESC)" aria-label="Close Mermaid diagram">✕ Close</button>
             </div>
         </div>
         <div class="mermaid-fs-content" id="mermaid-fs-content">
@@ -242,34 +296,185 @@
     <div class="mermaid-error-toast" id="mermaid-error-toast"></div>
 
     <!-- Graph View Overlay -->
-    <div class="graph-overlay" id="graph-overlay">
+    <div class="graph-overlay" id="graph-overlay" role="dialog" aria-modal="true" aria-labelledby="graph-title">
         <div class="graph-header">
-            <h3>Knowledge Graph</h3>
+            <h3 id="graph-title">Knowledge Graph</h3>
             <div class="graph-stats" id="graph-stats"></div>
             <div class="graph-actions">
-                <button id="graph-relayout" title="Clear saved graph positions and run layout again">Re-layout</button>
-                <button id="graph-close" class="danger" title="Close (ESC)">✕ Close</button>
+                <button id="graph-relayout" title="Clear saved graph positions and run layout again" aria-label="Re-layout graph">Re-layout</button>
+                <button id="graph-close" class="danger" title="Close (ESC)" aria-label="Close graph">✕ Close</button>
             </div>
         </div>
-        <div class="graph-container" id="graph-container"></div>
+        <form class="graph-filters" id="graph-filters" aria-label="Graph filters">
+            <fieldset>
+                <legend>Nodes</legend>
+                <label><input id="graph-include-unresolved" type="checkbox"> Unresolved links</label>
+                <label><input id="graph-include-attachments" type="checkbox"> Attachments</label>
+                <label><input id="graph-exclude-orphans" type="checkbox"> Hide orphans</label>
+            </fieldset>
+            <fieldset>
+                <legend>Tags and search</legend>
+                <label>Include tags <input id="graph-include-tags" type="text" autocomplete="off" placeholder="project, work"></label>
+                <label>Exclude tags <input id="graph-exclude-tags" type="text" autocomplete="off" placeholder="archive"></label>
+                <label>Search label, path, or tag <input id="graph-search" type="search" autocomplete="off"></label>
+            </fieldset>
+            <fieldset>
+                <legend>Local graph</legend>
+                <label>Root path <input id="graph-root-path" type="text" autocomplete="off" placeholder="note.md"></label>
+                <label>Depth
+                    <select id="graph-depth" aria-label="Local graph depth">
+                        <option value="0">0</option>
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                    </select>
+                </label>
+            </fieldset>
+            <div class="graph-filter-actions">
+                <button id="graph-apply-filters" type="submit">Apply filters</button>
+                <button id="graph-clear-filters" type="button">Clear filters</button>
+            </div>
+        </form>
+        <div class="graph-body">
+            <div class="graph-container" id="graph-container"></div>
+            <aside class="graph-node-panel" aria-label="Graph node details">
+                <p id="graph-selection-status" class="graph-selection-status" role="status">Select a node to show its links and actions.</p>
+                <section aria-labelledby="graph-directions-title">
+                    <h4 id="graph-directions-title">Selected node links</h4>
+                    <p id="graph-incoming" class="graph-direction">Incoming: none</p>
+                    <p id="graph-outgoing" class="graph-direction">Outgoing: none</p>
+                </section>
+                <div class="graph-node-actions" aria-label="Selected node actions">
+                    <button id="graph-open-note" type="button" disabled>Open note</button>
+                    <button id="graph-local-node" type="button" disabled>Local graph</button>
+                    <button id="graph-copy-path" type="button" disabled>Copy path</button>
+                </div>
+                <section aria-labelledby="graph-node-list-title">
+                    <h4 id="graph-node-list-title">Graph nodes</h4>
+                    <p class="graph-node-help">Use Up/Down to move through nodes, Left/Right to follow incoming/outgoing links, Enter to open a note, and Space to select it.</p>
+                    <div id="graph-node-list" class="graph-node-list" role="listbox" aria-label="Graph nodes"></div>
+                </section>
+            </aside>
+        </div>
     </div>
 
     <!-- Context Menu -->
     <div class="context-menu-backdrop" id="context-menu-backdrop" style="display: none;"></div>
-    <div class="context-menu" id="context-menu" style="display: none;">
-        <div class="context-menu-item" id="ctx-new-file"><span class="ctx-icon" data-icon="file-plus"></span>New File</div>
-        <div class="context-menu-item" id="ctx-new-folder"><span class="ctx-icon" data-icon="folder-plus"></span>New Folder</div>
-        <div class="context-menu-item" id="ctx-open-finder"><span class="ctx-icon" data-icon="folder-open"></span>Open Finder</div>
-        <div class="context-menu-item" id="ctx-open-file"><span class="ctx-icon" data-icon="external-link"></span>Open File</div>
-        <div class="context-menu-item" id="ctx-copy-path"><span class="ctx-icon" data-icon="copy"></span>Copy File Path</div>
-        <div class="context-menu-item" id="ctx-rename"><span class="ctx-icon" data-icon="edit"></span>Rename</div>
-        <div class="context-menu-item danger" id="ctx-delete"><span class="ctx-icon" data-icon="trash"></span>Delete</div>
+    <div class="context-menu" id="context-menu" style="display: none;" role="menu" aria-label="File actions">
+        <div class="context-menu-item" id="ctx-new-file" role="menuitem" tabindex="-1"><span class="ctx-icon" data-icon="file-plus"></span>New File</div>
+        <div class="context-menu-item" id="ctx-new-folder" role="menuitem" tabindex="-1"><span class="ctx-icon" data-icon="folder-plus"></span>New Folder</div>
+        <div class="context-menu-item" id="ctx-open-finder" role="menuitem" tabindex="-1"><span class="ctx-icon" data-icon="folder-open"></span>Open Finder</div>
+        <div class="context-menu-item" id="ctx-open-file" role="menuitem" tabindex="-1"><span class="ctx-icon" data-icon="external-link"></span>Open File</div>
+        <div class="context-menu-item" id="ctx-copy-path" role="menuitem" tabindex="-1"><span class="ctx-icon" data-icon="copy"></span>Copy File Path</div>
+        <div class="context-menu-item" id="ctx-move" role="menuitem" tabindex="-1">Move to folder</div>
+        <div class="context-menu-item" id="ctx-rename" role="menuitem" tabindex="-1"><span class="ctx-icon" data-icon="edit"></span>Rename</div>
+        <div class="context-menu-item danger" id="ctx-delete" role="menuitem" tabindex="-1"><span class="ctx-icon" data-icon="trash"></span>Delete</div>
+    </div>
+
+    <div id="move-to-folder-overlay" class="modal-overlay" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="move-to-folder-title">
+        <div class="modal-dialog">
+            <h2 id="move-to-folder-title">Move to folder</h2>
+            <input id="move-to-folder-input" type="search" autocomplete="off" placeholder="Search folders" aria-label="Search destination folders">
+            <div id="move-to-folder-results" class="move-to-folder-results" role="listbox" aria-label="Destination folders"></div>
+            <div class="modal-actions"><button id="move-to-folder-cancel" class="secondary-btn">Cancel</button></div>
+        </div>
+    </div>
+
+    <div id="broken-link-overlay" class="modal-overlay" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="broken-link-title" aria-describedby="broken-link-description">
+        <div class="modal-dialog broken-link-dialog">
+            <h2 id="broken-link-title">Create linked note?</h2>
+            <p id="broken-link-description"></p>
+            <p id="broken-link-status" role="alert" hidden></p>
+            <div class="modal-actions">
+                <button id="broken-link-cancel" type="button">Cancel</button>
+                <button id="broken-link-create" type="button" class="primary-btn">Create note</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Switcher -->
+    <div id="quick-switcher-overlay" class="modal-overlay quick-switcher-overlay" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="quick-switcher-title">
+        <div class="quick-switcher-dialog">
+            <h2 id="quick-switcher-title">Quick Switcher</h2>
+            <input id="quick-switcher-input" type="search" autocomplete="off" placeholder="Search notes by name or alias" aria-label="Search notes by name or alias" aria-controls="quick-switcher-results" aria-autocomplete="list">
+            <ul id="quick-switcher-results" class="quick-switcher-results" role="listbox" aria-label="Quick switcher results"></ul>
+            <p class="quick-switcher-help"><kbd>↑</kbd><kbd>↓</kbd> navigate · <kbd>Enter</kbd> open · <kbd>Shift</kbd> + <kbd>Enter</kbd> create exact name</p>
+        </div>
+    </div>
+
+    <div id="command-palette-overlay" class="modal-overlay quick-switcher-overlay" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="command-palette-title">
+        <div class="quick-switcher-dialog">
+            <h2 id="command-palette-title">Command Palette</h2>
+            <input id="command-palette-input" type="search" autocomplete="off" placeholder="Search commands" aria-label="Search commands" aria-controls="command-palette-results">
+            <div id="command-palette-results" class="quick-switcher-results" role="listbox" aria-label="Available commands"></div>
+        </div>
+    </div>
+
+    <!-- Vault Search is separate from Quick Switcher and the File Explorer filter. -->
+    <div id="vault-search-overlay" class="modal-overlay vault-search-overlay" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="vault-search-title">
+        <div class="vault-search-dialog">
+            <div class="vault-search-header">
+                <div>
+                    <h2 id="vault-search-title">Search vault</h2>
+                    <p>Search Markdown files across the vault. Quick Switcher and the File Explorer filter stay separate.</p>
+                </div>
+                <button id="vault-search-close" type="button" class="icon-btn" aria-label="Close vault search" title="Close vault search"></button>
+            </div>
+            <form id="vault-search-form">
+                <label for="vault-search-input">Search expression</label>
+                <input id="vault-search-input" type="search" autocomplete="off" placeholder="Try: tag:#work -draft" aria-describedby="vault-search-help vault-search-error" aria-controls="vault-search-results" />
+                <div class="vault-search-controls">
+                    <label><input id="vault-search-match-case" type="checkbox" /> Match case</label>
+                    <label for="vault-search-sort">Sort
+                        <select id="vault-search-sort">
+                            <option value="file-name-ascending">File name (A–Z)</option>
+                            <option value="file-name-descending">File name (Z–A)</option>
+                            <option value="modified-newest">Modified (newest first)</option>
+                            <option value="modified-oldest">Modified (oldest first)</option>
+                        </select>
+                    </label>
+                    <label for="vault-search-context">Context characters
+                        <input id="vault-search-context" type="number" inputmode="numeric" min="0" step="1" value="0" aria-describedby="vault-search-context-help" />
+                    </label>
+                    <span id="vault-search-context-help">0 keeps the complete matching line.</span>
+                    <button type="submit" class="primary-btn">Search</button>
+                </div>
+            </form>
+            <p id="vault-search-error" class="vault-search-error" role="alert" hidden></p>
+            <p id="vault-search-status" class="vault-search-status" role="status">Enter an expression, then press Search.</p>
+            <ul id="vault-search-results" class="vault-search-results" role="listbox" aria-label="Vault search results"></ul>
+            <p class="vault-search-keyboard-help"><kbd>↑</kbd><kbd>↓</kbd> select · <kbd>Enter</kbd> open the result at its matching line · <kbd>Esc</kbd> close</p>
+            <details id="vault-search-help" class="vault-search-help" open>
+                <summary>Search operators (20 supported syntax families)</summary>
+                <ol>
+                    <li><code>meeting</code> — Plain term</li>
+                    <li><code>"project plan"</code> — Exact phrase</li>
+                    <li><code>project plan</code> — AND</li>
+                    <li><code>project OR plan</code> — OR</li>
+                    <li><code>-draft</code> — Negation</li>
+                    <li><code>(project OR plan) -draft</code> — Grouping</li>
+                    <li><code>/^# /</code> — Regular expression</li>
+                    <li><code>file:project</code> — File scope</li>
+                    <li><code>path:notes/</code> — Path scope</li>
+                    <li><code>content:meeting</code> — Content scope</li>
+                    <li><code>match-case:MiXeD</code> — Match case</li>
+                    <li><code>ignore-case:mixed</code> — Ignore case</li>
+                    <li><code>tag:#work</code> — Tag</li>
+                    <li><code>line:(alpha beta)</code> — Line</li>
+                    <li><code>block:(alpha beta)</code> — Block</li>
+                    <li><code>section:(alpha beta)</code> — Section</li>
+                    <li><code>task:call</code> — Task</li>
+                    <li><code>task-todo:call</code> — Incomplete task</li>
+                    <li><code>task-done:archive</code> — Completed task</li>
+                    <li><code>[status:Draft]</code>, <code>[aliases]</code>, <code>[empty:null]</code> — Property</li>
+                </ol>
+            </details>
+        </div>
     </div>
 
     <!-- Vault Setup Dialog -->
-    <div id="vault-setup-overlay" class="modal-overlay" style="display: none;">
+    <div id="vault-setup-overlay" class="modal-overlay" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="vault-setup-title">
         <div class="modal-dialog vault-setup-dialog">
-            <h2>Welcome to Obails</h2>
+            <h2 id="vault-setup-title">Welcome to Obails</h2>
             <p>To get started, please select a folder containing your notes (Vault).</p>
             <div class="modal-actions">
                 <button id="vault-setup-btn" class="primary-btn">Select Vault Folder</button>
@@ -278,9 +483,9 @@
     </div>
 
     <!-- Delete Confirmation Dialog -->
-    <div id="delete-confirm-overlay" class="modal-overlay" style="display: none;">
+    <div id="delete-confirm-overlay" class="modal-overlay" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="delete-confirm-title">
         <div class="modal-dialog delete-confirm-dialog">
-            <h2>Delete Item?</h2>
+            <h2 id="delete-confirm-title">Delete Item?</h2>
             <p id="delete-confirm-message">Are you sure you want to delete this item?</p>
             <div class="modal-actions">
                 <button id="delete-confirm-cancel" class="secondary-btn">Cancel</button>
@@ -289,51 +494,154 @@
         </div>
     </div>
 
+    <div id="workspace-save-as-overlay" class="modal-overlay" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="workspace-save-as-title">
+        <div class="modal-dialog">
+            <h2 id="workspace-save-as-title">Save Current Workspace As…</h2>
+            <p id="workspace-save-as-help">Creates a named snapshot of the current tabs, splits, layout, and popouts. This is how you add a new workspace. Ordinary session tabs and splits keep restoring independently.</p>
+            <label for="workspace-save-as-input">Workspace name</label>
+            <input id="workspace-save-as-input" type="text" autocomplete="off" aria-describedby="workspace-save-as-help">
+            <div class="modal-actions">
+                <button id="workspace-save-as-cancel" type="button" class="secondary-btn">Cancel</button>
+                <button id="workspace-save-as-submit" type="button" class="primary-btn">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="workspace-manage-overlay" class="modal-overlay" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="workspace-manage-title">
+        <div class="modal-dialog workspace-manage-dialog">
+            <h2 id="workspace-manage-title">Manage Workspaces</h2>
+            <p id="workspace-manage-help">Named workspaces store tabs, splits, layout, and popouts. Deleting a name does not change the current session tabs, splits, or last layout.</p>
+            <p id="workspace-manage-empty" hidden>No named workspaces yet. Use Save Current Workspace As… to create one from the current tabs, splits, layout, and popouts.</p>
+            <ul id="workspace-manage-list" class="workspace-manage-list" role="list" aria-label="Saved workspaces"></ul>
+            <div id="workspace-rename-row" hidden>
+                <label for="workspace-rename-input">New name for <span id="workspace-rename-target"></span></label>
+                <input id="workspace-rename-input" type="text" autocomplete="off">
+                <div class="modal-actions">
+                    <button id="workspace-rename-cancel" type="button" class="secondary-btn">Cancel</button>
+                    <button id="workspace-rename-submit" type="button" class="primary-btn">Rename</button>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button id="workspace-manage-close" type="button" class="secondary-btn">Done</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Dialog -->
+    <div id="settings-overlay" class="modal-overlay" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+        <div class="modal-dialog settings-dialog">
+            <h2 id="settings-title">Settings</h2>
+            <p>Choose where files and folders go when deleted.</p>
+            <div class="settings-status-row">
+                <p id="settings-status" role="status" aria-live="polite"></p>
+                <button id="settings-retry" type="button" class="secondary-btn" hidden>Retry settings</button>
+            </div>
+            <fieldset id="delete-mode-options">
+                <legend>Delete destination</legend>
+                <div><label><input type="radio" name="delete-mode" value="system_trash"> Move to the system Trash</label></div>
+                <div><label><input type="radio" name="delete-mode" value="vault_trash"> Move to this vault's .trash folder</label></div>
+                <div><label><input type="radio" name="delete-mode" value="permanent"> Permanently delete — this cannot be undone</label></div>
+            </fieldset>
+            <fieldset>
+                <legend>File Explorer</legend>
+                <label><input id="file-tree-auto-reveal" type="checkbox"> Reveal the active file in its folder</label>
+                <label>Default sidebar width <input id="settings-sidebar-width" type="number" inputmode="numeric" min="150" max="500"></label>
+            </fieldset>
+            <fieldset>
+                <legend>Editor</legend>
+                <label>Theme <select id="settings-theme"></select></label>
+                <label>Font family <input id="settings-font-family" type="text"></label>
+                <label>Font size <input id="settings-font-size" type="number" inputmode="numeric"></label>
+                <label><input id="settings-line-numbers" type="checkbox"> Show line numbers</label>
+                <label><input id="settings-word-wrap" type="checkbox"> Wrap lines</label>
+            </fieldset>
+            <fieldset>
+                <legend>Attachment destination</legend>
+                <label>Store new attachments in <select id="settings-attachment-location"></select></label>
+                <label id="settings-attachment-folder-row" hidden>Folder <input id="settings-attachment-folder" type="text" autocomplete="off"></label>
+            </fieldset>
+            <fieldset><legend>Keyboard shortcuts</legend><div id="hotkey-settings-list" role="list"></div></fieldset>
+            <fieldset>
+                <legend>File recovery</legend>
+                <p class="settings-hint">Restores never overwrite a file or folder that already exists in the vault.</p>
+                <div class="recovery-settings-actions">
+                    <button id="recently-deleted-open" type="button" class="secondary-btn">Recently deleted</button>
+                    <button id="recovery-snapshots-open" type="button" class="secondary-btn">Recovery snapshots</button>
+                </div>
+            </fieldset>
+            <div class="modal-actions">
+                <button id="settings-open-config" class="secondary-btn">Open config file</button>
+                <button id="settings-close" class="primary-btn">Done</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="recently-deleted-overlay" class="modal-overlay recovery-overlay" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="recently-deleted-title">
+        <div class="recovery-dialog">
+            <div class="recovery-dialog-header">
+                <div>
+                    <h2 id="recently-deleted-title">Recently deleted</h2>
+                    <p>Restore a deleted file or folder to its original vault path.</p>
+                </div>
+                <button id="recently-deleted-close" type="button" class="icon-btn" aria-label="Close recently deleted" title="Close recently deleted"></button>
+            </div>
+            <p id="recently-deleted-status" class="recovery-status" role="status">Loading recently deleted items…</p>
+            <ul id="recently-deleted-list" class="recovery-list" aria-label="Recently deleted items"></ul>
+        </div>
+    </div>
+
+    <div id="recovery-snapshots-overlay" class="modal-overlay recovery-overlay" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="recovery-snapshots-title">
+        <div class="recovery-dialog">
+            <div class="recovery-dialog-header">
+                <div>
+                    <h2 id="recovery-snapshots-title">Recovery snapshots</h2>
+                    <p>Read a stored file version before restoring that one file.</p>
+                </div>
+                <button id="recovery-snapshots-close" type="button" class="icon-btn" aria-label="Close recovery snapshots" title="Close recovery snapshots"></button>
+            </div>
+            <div class="recovery-status-row">
+                <p id="recovery-snapshots-status" class="recovery-status" role="status">Loading recovery snapshots…</p>
+                <button id="recovery-snapshot-retry" type="button" class="secondary-btn" hidden>Retry snapshot</button>
+            </div>
+            <ul id="recovery-snapshots-list" class="recovery-list" aria-label="Recovery snapshots"></ul>
+            <div class="recovery-file-controls">
+                <label for="recovery-snapshot-path">File path in selected snapshot</label>
+                <input id="recovery-snapshot-path" type="text" autocomplete="off" placeholder="notes/plan.md" aria-describedby="recovery-snapshot-path-help" />
+                <p id="recovery-snapshot-path-help">Use the exact vault-relative path. Read the stored contents before restoring.</p>
+                <div class="recovery-settings-actions">
+                    <button id="recovery-snapshot-read" type="button" class="secondary-btn" disabled>Read file contents</button>
+                    <button id="recovery-snapshot-restore" type="button" class="primary-btn" disabled>Restore this file</button>
+                </div>
+                <label for="recovery-snapshot-content">Stored file contents</label>
+                <textarea id="recovery-snapshot-content" readonly aria-label="Stored file contents" placeholder="Select a snapshot, enter a path, then read its contents."></textarea>
+            </div>
+        </div>
+    </div>
+
     <!-- Shortcuts Help Overlay -->
-    <div id="shortcuts-overlay" class="shortcuts-overlay">
+    <div id="shortcuts-overlay" class="shortcuts-overlay" role="dialog" aria-modal="true" aria-labelledby="shortcuts-title">
         <div class="shortcuts-content">
             <div class="shortcuts-header">
-                <h2>⌨️ Keyboard Shortcuts</h2>
+                <h2 id="shortcuts-title">⌨️ Keyboard Shortcuts</h2>
                 <button id="shortcuts-close" class="shortcuts-close">✕</button>
             </div>
             <div class="shortcuts-body">
+                <div class="shortcuts-section" id="command-shortcuts-help">
+                    <h3>Commands</h3>
+                </div>
                 <div class="shortcuts-section">
-                    <h3>Global</h3>
-                    <div class="shortcut-row">
-                        <span class="shortcut-keys"><kbd class="mod-key">⌘</kbd> + <kbd>N</kbd></span>
-                        <span class="shortcut-desc">New Note</span>
-                    </div>
-                    <div class="shortcut-row">
-                        <span class="shortcut-keys"><kbd class="mod-key">⌘</kbd> + <kbd>P</kbd></span>
-                        <span class="shortcut-desc">Quick Open (Search Files)</span>
-                    </div>
+                    <h3>Search</h3>
                     <div class="shortcut-row">
                         <span class="shortcut-keys"><kbd class="mod-key">⌘</kbd> + <kbd>F</kbd></span>
-                        <span class="shortcut-desc">Find in Note</span>
+                        <span class="shortcut-desc">Search vault (outside a note). Find in Note while the editor or preview is focused.</span>
                     </div>
+                </div>
+                <div class="shortcuts-section">
+                    <h3>Workspace</h3>
+                    <p class="shortcuts-hint">A named workspace stores tabs, splits, layout, and popouts. Save Current Workspace As… creates a new name for the current layout. Ordinary session tabs and splits keep restoring independently. Use the Workspace application menu or Command Palette — not the toolbar.</p>
                     <div class="shortcut-row">
-                        <span class="shortcut-keys"><kbd class="mod-key">⌘</kbd> + <kbd>G</kbd></span>
-                        <span class="shortcut-desc">Toggle Graph View</span>
-                    </div>
-                    <div class="shortcut-row">
-                        <span class="shortcut-keys"><kbd class="mod-key">⌘</kbd> + <kbd>E</kbd></span>
-                        <span class="shortcut-desc">Toggle Source Editor</span>
-                    </div>
-                    <div class="shortcut-row">
-                        <span class="shortcut-keys"><kbd class="mod-key">⌘</kbd> + <kbd>,</kbd></span>
-                        <span class="shortcut-desc">Open Settings</span>
-                    </div>
-                    <div class="shortcut-row">
-                        <span class="shortcut-keys"><kbd>Shift</kbd> + <kbd>Tab</kbd></span>
-                        <span class="shortcut-desc">Toggle File Tree / Editor</span>
-                    </div>
-                    <div class="shortcut-row">
-                        <span class="shortcut-keys"><kbd>Esc</kbd></span>
-                        <span class="shortcut-desc">Close Overlays</span>
-                    </div>
-                    <div class="shortcut-row">
-                        <span class="shortcut-keys"><kbd>?</kbd></span>
-                        <span class="shortcut-desc">Show This Help</span>
+                        <span class="shortcut-keys">Menu / Palette</span>
+                        <span class="shortcut-desc">Save Current Workspace As…, Save Current Workspace, Open Workspace, Manage Workspaces…</span>
                     </div>
                 </div>
                 <div class="shortcuts-section">
@@ -362,14 +670,9 @@
                 </div>
                 <div class="shortcuts-section">
                     <h3>File Search</h3>
-                    <p class="shortcuts-hint">Press <kbd class="mod-key">⌘</kbd> + <kbd>P</kbd> to focus search first</p>
                     <div class="shortcut-row">
-                        <span class="shortcut-keys"><kbd>Ctrl</kbd> + <kbd>N</kbd></span>
-                        <span class="shortcut-desc">Select Next File</span>
-                    </div>
-                    <div class="shortcut-row">
-                        <span class="shortcut-keys"><kbd>Ctrl</kbd> + <kbd>P</kbd></span>
-                        <span class="shortcut-desc">Select Previous File</span>
+                        <span class="shortcut-keys"><kbd>↑</kbd> / <kbd>↓</kbd></span>
+                        <span class="shortcut-desc">Select Previous / Next File</span>
                     </div>
                     <div class="shortcut-row">
                         <span class="shortcut-keys"><kbd>Enter</kbd></span>

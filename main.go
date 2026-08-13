@@ -2,7 +2,6 @@ package main
 
 import (
 	"embed"
-	_ "embed"
 	"log"
 	"net/http"
 	"strings"
@@ -14,9 +13,6 @@ import (
 
 //go:embed all:frontend/dist
 var assets embed.FS
-
-//go:embed build/appicon.png
-var appIcon []byte
 
 type themeMenuOption struct {
 	Group string
@@ -84,12 +80,43 @@ func macBackdropForTheme(theme string) (application.MacBackdrop, application.Mac
 	return application.MacBackdropLiquidGlass, application.MacLiquidGlass{Style: style}
 }
 
-func buildApplicationMenu(app *application.App, selectedTheme string) *application.Menu {
+func windowVisualsForTheme(theme string) services.WindowVisuals {
+	normalized := normalizeThemeValue(theme)
+	backdrop, liquidGlass := macBackdropForTheme(normalized)
+	appearance := application.NSAppearanceNameDarkAqua
+	background := application.NewRGB(27, 38, 54)
+	for _, option := range themeMenuOptions {
+		if option.Value == normalized && (option.Group == "Light" || normalized == "liquid-glass-light") {
+			appearance = application.NSAppearanceNameAqua
+			background = application.NewRGB(255, 255, 255)
+			break
+		}
+	}
+	return services.WindowVisuals{
+		Title: applicationName,
+		Mac: application.MacWindow{
+			Appearance:  appearance,
+			Backdrop:    backdrop,
+			LiquidGlass: liquidGlass,
+		},
+		BackgroundColour: background,
+	}
+}
+
+func buildApplicationMenu(app *application.App, selectedTheme string, savedWorkspaceNames []string, activeNamedWorkspace string, onThemeSelected func(string)) *application.Menu {
 	menu := application.NewMenu()
 	menu.AddRole(application.AppMenu)
-	menu.AddRole(application.FileMenu)
+	// Custom File menu: stock FileMenu binds Cmd+O to native Open and steals Quick Switcher.
+	fileMenu := menu.AddSubmenu("File")
+	fileMenu.Add("Quick Switcher").SetAccelerator("CmdOrCtrl+O").OnClick(func(*application.Context) {
+		emitApplicationEvent(app, "obails:quick-switcher", true)
+	})
+	fileMenu.Add("New Note").SetAccelerator("CmdOrCtrl+N").OnClick(func(*application.Context) {
+		emitApplicationEvent(app, "obails:new-note", true)
+	})
 	menu.AddRole(application.EditMenu)
 	menu.AddRole(application.ViewMenu)
+	appendWorkspaceMenu(menu, app, savedWorkspaceNames, activeNamedWorkspace)
 	menu.AddRole(application.WindowMenu)
 	themeMenu := menu.AddSubmenu("Theme")
 	menu.AddRole(application.HelpMenu)
@@ -98,11 +125,61 @@ func buildApplicationMenu(app *application.App, selectedTheme string) *applicati
 	for _, option := range themeMenuOptions {
 		theme := option.Value
 		themeMenu.AddRadio(option.Label, theme == selectedTheme).OnClick(func(ctx *application.Context) {
-			app.Event.Emit("obails:theme-selected", theme)
+			if onThemeSelected != nil {
+				onThemeSelected(theme)
+			}
+			emitApplicationEvent(app, "obails:theme-selected", theme)
 		})
 	}
 
 	return menu
+}
+
+func appendWorkspaceMenu(menu *application.Menu, app *application.App, savedWorkspaceNames []string, activeNamedWorkspace string) {
+	workspaceMenu := menu.AddSubmenu("Workspace")
+	workspaceMenu.Add("Save Current Workspace As…").OnClick(func(*application.Context) {
+		emitApplicationEvent(app, "obails:workspace-save-as", true)
+	})
+	saveCurrent := workspaceMenu.Add("Save Current Workspace")
+	saveCurrent.SetEnabled(namedWorkspaceSelected(savedWorkspaceNames, activeNamedWorkspace))
+	saveCurrent.OnClick(func(*application.Context) {
+		emitApplicationEvent(app, "obails:workspace-save-current", true)
+	})
+	workspaceMenu.AddSeparator()
+	openMenu := workspaceMenu.AddSubmenu("Open Workspace")
+	if len(savedWorkspaceNames) == 0 {
+		openMenu.Add("No saved workspaces").SetEnabled(false)
+	} else {
+		for _, savedName := range savedWorkspaceNames {
+			name := savedName
+			openMenu.AddRadio(name, name == activeNamedWorkspace).OnClick(func(*application.Context) {
+				emitApplicationEvent(app, "obails:workspace-open", name)
+			})
+		}
+	}
+	workspaceMenu.AddSeparator()
+	workspaceMenu.Add("Manage Workspaces…").OnClick(func(*application.Context) {
+		emitApplicationEvent(app, "obails:workspace-manage", true)
+	})
+}
+
+func namedWorkspaceSelected(savedNames []string, activeName string) bool {
+	if activeName == "" {
+		return false
+	}
+	for _, name := range savedNames {
+		if name == activeName {
+			return true
+		}
+	}
+	return false
+}
+
+func emitApplicationEvent(app *application.App, name string, data any) {
+	if app == nil {
+		return
+	}
+	app.Event.Emit(name, data)
 }
 
 func main() {
@@ -118,10 +195,11 @@ func main() {
 	}
 
 	fileService := services.NewFileService(configService)
+	searchService := services.NewSearchService(configService)
 	noteService := services.NewNoteService(fileService, configService)
 	linkService := services.NewLinkService(fileService, configService)
+	transclusionService := services.NewTransclusionService(linkService)
 	graphService := services.NewGraphService(linkService, fileService, configService)
-	windowService := services.NewWindowService()
 	vaultWatchService := services.NewVaultWatchService(configService)
 	transcribeService := services.NewTranscribeService(configService, fileService)
 
@@ -138,18 +216,19 @@ func main() {
 
 	// Create the application
 	app := application.New(application.Options{
-		Name:        "Obails",
+		Name:        applicationName,
 		Description: "A lightweight Obsidian alternative",
 		Icon:        appIcon,
 		Services: []application.Service{
 			application.NewService(configService),
 			application.NewService(stateService),
 			application.NewService(fileService),
+			application.NewService(searchService),
 			application.NewService(noteService),
 			application.NewService(linkService),
+			application.NewService(transclusionService),
 			application.NewService(graphService),
 			application.NewService(vaultWatchService),
-			application.NewService(windowService),
 			application.NewService(transcribeService),
 		},
 		Assets: application.AssetOptions{
@@ -167,40 +246,58 @@ func main() {
 			ApplicationShouldTerminateAfterLastWindowClosed: true,
 		},
 	})
-	app.Menu.SetApplicationMenu(buildApplicationMenu(app, configService.GetConfig().UI.Theme))
+	selectedTheme := configService.GetConfig().UI.Theme
+	windowVisuals := windowVisualsForTheme(selectedTheme)
+	windowService := services.NewWindowService(app, stateService, windowVisuals)
+	app.RegisterService(application.NewService(windowService))
+	app.OnShutdown(windowService.BeginShutdown)
+	services.SetApplicationMenuApplier(selectedTheme, func(theme string, names []string, active string) {
+		app.Menu.SetApplicationMenu(buildApplicationMenu(app, theme, names, active, windowService.SetMenuTheme))
+	})
+	windowService.RefreshWorkspaceMenu()
 
 	// Create the main window
-	backdrop, liquidGlass := macBackdropForTheme(configService.GetConfig().UI.Theme)
+	mainMacWindow := windowVisuals.Mac
+	mainMacWindow.InvisibleTitleBarHeight = 50
+	mainMacWindow.TitleBar = application.MacTitleBarHiddenInset
 	mainWindow := app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Title:          "Obails",
-		Width:          1200,
-		Height:         800,
-		EnableFileDrop: true,
-		Mac: application.MacWindow{
-			InvisibleTitleBarHeight: 50,
-			Backdrop:                backdrop,
-			LiquidGlass:             liquidGlass,
-			TitleBar:                application.MacTitleBarHiddenInset,
-		},
-		BackgroundColour: application.NewRGB(27, 38, 54),
+		Title:            applicationName,
+		Width:            1200,
+		Height:           800,
+		EnableFileDrop:   true,
+		Mac:              mainMacWindow,
+		BackgroundColour: windowVisuals.BackgroundColour,
 		URL:              "/",
 	})
 
 	// Set window reference for window service
 	windowService.SetWindow(mainWindow)
 	setupGraphMagnifyMonitor(mainWindow)
+	app.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(*application.ApplicationEvent) {
+		// Wails otherwise waits for WebViewDidFinishNavigation before showing the
+		// first window; a failed navigation must not leave a windowless app process.
+		mainWindow.Show().Focus()
+	})
 
 	mainWindow.OnWindowEvent(events.Common.WindowFilesDropped, func(event *application.WindowEvent) {
 		details := event.Context().DropTargetDetails()
 		targetFolder := ""
+		targetKind := ""
+		notePath := ""
 		if details != nil {
-			if path, ok := details.Attributes["data-path"]; ok {
-				targetFolder = path
+			switch details.Attributes["data-drop-kind"] {
+			case "markdown-editor":
+				targetKind = "markdown-editor"
+				notePath = details.Attributes["data-note-path"]
+			default:
+				targetFolder = details.Attributes["data-path"]
 			}
 		}
 		app.Event.Emit("obails:files-dropped", map[string]any{
 			"files":        event.Context().DroppedFiles(),
 			"targetFolder": targetFolder,
+			"targetKind":   targetKind,
+			"notePath":     notePath,
 		})
 	})
 

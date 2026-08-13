@@ -171,16 +171,32 @@ tasks:
     cmds:
       - 'echo "Skipping codesign (not available on {{OS}}). Sign the .app on macOS before distribution."'
 
-  run:
+  package:dev:
+    summary: Packages the development `.dev.app` bundle without launching it
+    deps:
+      - task: build
+        vars:
+          DEV: "true"
+    cmds:
+      - task: create:dev:app:bundle
+
+  create:dev:app:bundle:
+    summary: Creates a development `.dev.app` bundle
+    internal: true
     cmds:
       - mkdir -p "{{.BIN_DIR}}/{{.APP_NAME}}.dev.app/Contents/MacOS"
       - mkdir -p "{{.BIN_DIR}}/{{.APP_NAME}}.dev.app/Contents/Resources"
-      - cp build/darwin/icons.icns "{{.BIN_DIR}}/{{.APP_NAME}}.dev.app/Contents/Resources"
-      - cp build/darwin/icons.icns "{{.BIN_DIR}}/{{.APP_NAME}}.dev.app/Contents/Resources/icons"
+      - cp build/darwin/icons.dev.icns "{{.BIN_DIR}}/{{.APP_NAME}}.dev.app/Contents/Resources/icons.icns"
+      - cp build/darwin/icons.dev.icns "{{.BIN_DIR}}/{{.APP_NAME}}.dev.app/Contents/Resources/icons"
       - cp "{{.BIN_DIR}}/{{.APP_NAME}}" "{{.BIN_DIR}}/{{.APP_NAME}}.dev.app/Contents/MacOS"
       - cp "{{.BIN_DIR}}/obails-transcribe" "{{.BIN_DIR}}/{{.APP_NAME}}.dev.app/Contents/MacOS"
       - cp "build/darwin/Info.dev.plist" "{{.BIN_DIR}}/{{.APP_NAME}}.dev.app/Contents/Info.plist"
       - codesign --force --deep --sign - "{{.BIN_DIR}}/{{.APP_NAME}}.dev.app"
+
+  run:
+    deps:
+      - task: create:dev:app:bundle
+    cmds:
       - '{{.BIN_DIR}}/{{.APP_NAME}}.dev.app/Contents/MacOS/{{.APP_NAME}}'
 
   sign:

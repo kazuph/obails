@@ -1,6 +1,7 @@
 package services
 
 import (
+	"crypto/sha256"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -9,8 +10,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sort"
 	"strings"
+	"sync"
 
 	"github.com/kazuph/obails/models"
 )
@@ -51,7 +52,15 @@ func GetFileType(filename string) string {
 
 // FileService handles file system operations
 type FileService struct {
-	configService *ConfigService
+	configService    *ConfigService
+	writeMu          sync.Mutex
+	afterDeleteStage func()
+}
+
+type deleteTargetStage struct {
+	sourcePath string
+	stagedPath string
+	stagingDir string
 }
 
 // NewFileService creates a new FileService
@@ -74,8 +83,37 @@ func (s *FileService) ReadFile(relativePath string) (string, error) {
 	return string(content), nil
 }
 
+// ReadSnapshot returns the path, content, and revision required for a CAS save.
+func (s *FileService) ReadSnapshot(relativePath string) (models.FileSnapshot, error) {
+	cleanPath, err := s.cleanRelativePath(relativePath, false)
+	if err != nil {
+		return models.FileSnapshot{}, err
+	}
+	fullPath, err := s.resolveFullPath(cleanPath, false)
+	if err != nil {
+		return models.FileSnapshot{}, err
+	}
+	content, err := os.ReadFile(fullPath)
+	if err != nil {
+		return models.FileSnapshot{}, err
+	}
+
+	text := string(content)
+	return models.FileSnapshot{
+		Path:     cleanPath,
+		Content:  text,
+		Revision: revisionForContent(text),
+	}, nil
+}
+
 // WriteFile writes content to a file
 func (s *FileService) WriteFile(relativePath string, content string) error {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	return s.writeFile(relativePath, content)
+}
+
+func (s *FileService) writeFile(relativePath string, content string) error {
 	fullPath, err := s.resolveFullPath(relativePath, false)
 	if err != nil {
 		return err
@@ -90,8 +128,144 @@ func (s *FileService) WriteFile(relativePath string, content string) error {
 	return os.WriteFile(fullPath, []byte(content), 0644)
 }
 
+// SaveIfUnchanged saves content only when the existing file still matches
+// snapshot. It intentionally neither creates directories nor recreates a
+// missing path.
+func (s *FileService) SaveIfUnchanged(snapshot models.FileSnapshot, content string) (models.FileSaveResult, error) {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	return s.saveIfUnchanged(snapshot, content)
+}
+
+func (s *FileService) saveIfUnchanged(snapshot models.FileSnapshot, content string) (models.FileSaveResult, error) {
+	cleanPath, err := s.cleanRelativePath(snapshot.Path, false)
+	if err != nil {
+		return models.FileSaveResult{}, err
+	}
+	if cleanPath != snapshot.Path || revisionForContent(snapshot.Content) != snapshot.Revision {
+		return models.FileSaveResult{Status: models.FileSaveStatusConflict}, nil
+	}
+
+	fullPath, err := s.resolveFullPath(cleanPath, false)
+	if err != nil {
+		return models.FileSaveResult{}, err
+	}
+	file, err := os.OpenFile(fullPath, os.O_RDWR, 0)
+	if errors.Is(err, os.ErrNotExist) {
+		return models.FileSaveResult{Status: models.FileSaveStatusMissing}, nil
+	}
+	if err != nil {
+		return models.FileSaveResult{}, err
+	}
+	defer file.Close()
+
+	originalInfo, err := file.Stat()
+	if err != nil {
+		return models.FileSaveResult{}, err
+	}
+	currentBytes, err := io.ReadAll(file)
+	if err != nil {
+		return models.FileSaveResult{}, err
+	}
+	current := string(currentBytes)
+	currentSnapshot := models.FileSnapshot{
+		Path:     cleanPath,
+		Content:  current,
+		Revision: revisionForContent(current),
+	}
+	if current != snapshot.Content || currentSnapshot.Revision != snapshot.Revision {
+		return models.FileSaveResult{
+			Status:   models.FileSaveStatusConflict,
+			Snapshot: &currentSnapshot,
+		}, nil
+	}
+
+	temporaryFile, err := os.CreateTemp(filepath.Dir(fullPath), ".obails-cas-*")
+	if err != nil {
+		return models.FileSaveResult{}, err
+	}
+	temporaryPath := temporaryFile.Name()
+	defer os.Remove(temporaryPath)
+	if err := temporaryFile.Chmod(originalInfo.Mode().Perm()); err != nil {
+		temporaryFile.Close()
+		return models.FileSaveResult{}, err
+	}
+	if written, err := io.WriteString(temporaryFile, content); err != nil {
+		temporaryFile.Close()
+		return models.FileSaveResult{}, err
+	} else if written != len(content) {
+		temporaryFile.Close()
+		return models.FileSaveResult{}, io.ErrShortWrite
+	}
+	if err := temporaryFile.Sync(); err != nil {
+		temporaryFile.Close()
+		return models.FileSaveResult{}, err
+	}
+	if err := temporaryFile.Close(); err != nil {
+		return models.FileSaveResult{}, err
+	}
+
+	finalPath, err := s.resolveFullPath(cleanPath, false)
+	if err != nil {
+		return models.FileSaveResult{}, err
+	}
+	finalInfo, err := os.Stat(finalPath)
+	if errors.Is(err, os.ErrNotExist) {
+		return models.FileSaveResult{Status: models.FileSaveStatusMissing}, nil
+	}
+	if err != nil {
+		return models.FileSaveResult{}, err
+	}
+	finalBytes, err := os.ReadFile(finalPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return models.FileSaveResult{Status: models.FileSaveStatusMissing}, nil
+		}
+		return models.FileSaveResult{}, err
+	}
+	stableInfo, err := os.Stat(finalPath)
+	if errors.Is(err, os.ErrNotExist) {
+		return models.FileSaveResult{Status: models.FileSaveStatusMissing}, nil
+	}
+	if err != nil {
+		return models.FileSaveResult{}, err
+	}
+	finalContent := string(finalBytes)
+	if !os.SameFile(originalInfo, finalInfo) || !os.SameFile(originalInfo, stableInfo) || finalContent != snapshot.Content || revisionForContent(finalContent) != snapshot.Revision {
+		return models.FileSaveResult{
+			Status: models.FileSaveStatusConflict,
+			Snapshot: &models.FileSnapshot{
+				Path:     cleanPath,
+				Content:  finalContent,
+				Revision: revisionForContent(finalContent),
+			},
+		}, nil
+	}
+	if err := os.Rename(temporaryPath, finalPath); err != nil {
+		return models.FileSaveResult{}, err
+	}
+
+	updated := models.FileSnapshot{
+		Path:     cleanPath,
+		Content:  content,
+		Revision: revisionForContent(content),
+	}
+	return models.FileSaveResult{
+		Status:   models.FileSaveStatusSaved,
+		Snapshot: &updated,
+	}, nil
+}
+
+func revisionForContent(content string) string {
+	sum := sha256.Sum256([]byte(content))
+	return fmt.Sprintf("%x", sum)
+}
+
 // CreateFile creates a new file with content (fails if file exists)
 func (s *FileService) CreateFile(relativePath string, content string) error {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+
 	fullPath, err := s.resolveFullPath(relativePath, false)
 	if err != nil {
 		return err
@@ -111,8 +285,17 @@ func (s *FileService) CreateFile(relativePath string, content string) error {
 	return os.WriteFile(fullPath, []byte(content), 0644)
 }
 
-// DeletePath deletes a file or directory (moves to trash on macOS)
+// DeletePath permanently removes a file or directory. User-facing deletion
+// must call Delete so the configured destination is respected.
+//
+//wails:ignore
 func (s *FileService) DeletePath(relativePath string) error {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	return s.deletePath(relativePath)
+}
+
+func (s *FileService) deletePath(relativePath string) error {
 	fullPath, err := s.resolveFullPath(relativePath, false)
 	if err != nil {
 		return err
@@ -124,21 +307,133 @@ func (s *FileService) DeletePath(relativePath string) error {
 		return err
 	}
 
-	// For safety, use trash command on macOS instead of permanent delete
-	// This requires 'trash' command to be installed (brew install trash)
 	if info.IsDir() {
 		return os.RemoveAll(fullPath)
 	}
 	return os.Remove(fullPath)
 }
 
+// Delete sends a path to the configured deletion destination.
+func (s *FileService) Delete(relativePath string) error {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+
+	mode := s.configService.GetDeleteMode()
+	if !mode.IsValid() {
+		return fmt.Errorf("invalid delete mode: %q", mode)
+	}
+	cleanPath, err := s.cleanRelativePath(relativePath, false)
+	if err != nil {
+		return err
+	}
+	sourcePath, err := s.resolveFullPath(cleanPath, false)
+	if err != nil {
+		return err
+	}
+	target, err := stageDeleteTarget(sourcePath)
+	if err != nil {
+		return err
+	}
+	cleanupTarget := false
+	defer func() {
+		if cleanupTarget {
+			_ = os.RemoveAll(target.stagingDir)
+		}
+	}()
+	if s.afterDeleteStage != nil {
+		s.afterDeleteStage()
+	}
+
+	recoveryStage, err := s.stageRecentlyDeleted(cleanPath, target.stagedPath, mode)
+	if err != nil {
+		if rollbackErr := rollbackStagedDelete(target); rollbackErr != nil {
+			return fmt.Errorf("could not stage recovery record: %w; could not restore original inode: %v", err, rollbackErr)
+		}
+		cleanupTarget = true
+		return err
+	}
+	if err := s.finalizeRecentlyDeleted(recoveryStage); err != nil {
+		if rollbackErr := rollbackStagedDelete(target); rollbackErr != nil {
+			return fmt.Errorf("could not publish recovery record: %w; could not restore original inode: %v", err, rollbackErr)
+		}
+		cleanupTarget = true
+		if removeErr := os.RemoveAll(recoveryStage.staging); removeErr != nil {
+			return fmt.Errorf("could not publish recovery record: %w; restored source but could not clear staged record: %v", err, removeErr)
+		}
+		return err
+	}
+
+	switch mode {
+	case models.DeleteModeSystemTrash:
+		err = trashFullPath(target.stagedPath)
+	case models.DeleteModeVaultTrash:
+		err = s.movePathToVaultTrash(target.stagedPath, cleanPath)
+	case models.DeleteModePermanent:
+		err = deleteFullPath(target.stagedPath)
+	}
+	if err != nil {
+		if rollbackErr := rollbackStagedDelete(target); rollbackErr != nil {
+			cleanupTarget = true
+			return fmt.Errorf("delete failed: %w; recovery record remains because the original path was replaced or rollback failed: %v", err, rollbackErr)
+		}
+		cleanupTarget = true
+		if removeErr := os.RemoveAll(recoveryStage.destination); removeErr != nil {
+			return fmt.Errorf("delete failed: %w; restored source but could not clear recovery record: %v", err, removeErr)
+		}
+		return err
+	}
+	cleanupTarget = true
+	return nil
+}
+
+func stageDeleteTarget(sourcePath string) (deleteTargetStage, error) {
+	info, err := os.Lstat(sourcePath)
+	if err != nil {
+		return deleteTargetStage{}, err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return deleteTargetStage{}, ErrInvalidPath
+	}
+	stagingDir, err := os.MkdirTemp(filepath.Dir(sourcePath), ".obails-delete-")
+	if err != nil {
+		return deleteTargetStage{}, err
+	}
+	stagedPath := filepath.Join(stagingDir, filepath.Base(sourcePath))
+	if err := os.Rename(sourcePath, stagedPath); err != nil {
+		_ = os.RemoveAll(stagingDir)
+		return deleteTargetStage{}, err
+	}
+	return deleteTargetStage{sourcePath: sourcePath, stagedPath: stagedPath, stagingDir: stagingDir}, nil
+}
+
+func rollbackStagedDelete(target deleteTargetStage) error {
+	if _, err := os.Lstat(target.sourcePath); err == nil {
+		return os.ErrExist
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return os.Rename(target.stagedPath, target.sourcePath)
+}
+
 // TrashPath moves a file or directory to the macOS Trash using the configured
 // trash command. It never falls back to permanent deletion.
+//
+//wails:ignore
 func (s *FileService) TrashPath(relativePath string) error {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	return s.trashPath(relativePath)
+}
+
+func (s *FileService) trashPath(relativePath string) error {
 	fullPath, err := s.resolveFullPath(relativePath, false)
 	if err != nil {
 		return err
 	}
+	return trashFullPath(fullPath)
+}
+
+func trashFullPath(fullPath string) error {
 	if _, err := os.Stat(fullPath); err != nil {
 		return err
 	}
@@ -157,20 +452,84 @@ func (s *FileService) TrashPath(relativePath string) error {
 	return nil
 }
 
-// MoveFile moves a file from one location to another
-func (s *FileService) MoveFile(sourcePath string, destPath string) error {
-	sourceFullPath, err := s.resolveFullPath(sourcePath, false)
+// MoveToVaultTrash moves a path beneath the vault-local .trash directory.
+//
+//wails:ignore
+func (s *FileService) MoveToVaultTrash(relativePath string) error {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	return s.moveToVaultTrash(relativePath)
+}
+
+func (s *FileService) moveToVaultTrash(relativePath string) error {
+	cleanPath, err := s.cleanRelativePath(relativePath, false)
 	if err != nil {
 		return err
 	}
-	destFullPath, err := s.resolveFullPath(destPath, false)
+	sourcePath, err := s.resolveFullPath(cleanPath, false)
+	if err != nil {
+		return err
+	}
+	return s.movePathToVaultTrash(sourcePath, cleanPath)
+}
+
+func (s *FileService) movePathToVaultTrash(sourcePath string, cleanPath string) error {
+	trashPath := filepath.ToSlash(filepath.Join(".trash", filepath.FromSlash(cleanPath)))
+	destinationPath, err := s.resolveFullPath(trashPath, false)
+	if err != nil {
+		return err
+	}
+	if _, err := os.Lstat(destinationPath); err == nil {
+		return os.ErrExist
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(destinationPath), 0755); err != nil {
+		return err
+	}
+	return os.Rename(sourcePath, destinationPath)
+}
+
+func deleteFullPath(fullPath string) error {
+	info, err := os.Lstat(fullPath)
+	if err != nil {
+		return err
+	}
+	if info.IsDir() {
+		return os.RemoveAll(fullPath)
+	}
+	return os.Remove(fullPath)
+}
+
+// MoveFile moves a file from one location to another
+func (s *FileService) MoveFile(sourcePath string, destPath string) error {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+
+	cleanSourcePath, err := s.cleanRelativePath(sourcePath, false)
+	if err != nil {
+		return err
+	}
+	cleanDestPath, err := s.cleanRelativePath(destPath, false)
+	if err != nil {
+		return err
+	}
+	sourceFullPath, err := s.resolveFullPath(cleanSourcePath, false)
+	if err != nil {
+		return err
+	}
+	destFullPath, err := s.resolveFullPath(cleanDestPath, false)
 	if err != nil {
 		return err
 	}
 
-	// Check if source exists
-	if _, err := os.Stat(sourceFullPath); err != nil {
+	sourceInfo, err := os.Stat(sourceFullPath)
+	if err != nil {
 		return err
+	}
+
+	if sourceInfo.IsDir() && pathIsWithinAncestor(cleanDestPath, cleanSourcePath) {
+		return errors.New("cannot move directory into itself or descendant")
 	}
 
 	// Check if destination already exists
@@ -184,7 +543,20 @@ func (s *FileService) MoveFile(sourcePath string, destPath string) error {
 		return err
 	}
 
-	return os.Rename(sourceFullPath, destFullPath)
+	rewrites, err := prepareLinkRewritesForMove(s.configService.GetVaultPath(), cleanSourcePath, cleanDestPath, sourceInfo.IsDir())
+	if err != nil {
+		return err
+	}
+	if err := os.Rename(sourceFullPath, destFullPath); err != nil {
+		return err
+	}
+	for originalPath, content := range rewrites {
+		movedPath := movedVaultPath(originalPath, cleanSourcePath, cleanDestPath, sourceInfo.IsDir())
+		if err := s.writeFile(movedPath, content); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // ListDirectory lists files and directories
@@ -235,6 +607,7 @@ func (s *FileService) listDirectoryRecursive(fullPath string, relativePath strin
 			IsDir:      entry.IsDir(),
 			FileType:   GetFileType(entry.Name()),
 			ModifiedAt: info.ModTime(),
+			CreatedAt:  creationTime(info),
 		}
 		if entry.IsDir() {
 			fileInfo.FileType = "" // Directories don't have a file type
@@ -258,25 +631,14 @@ func (s *FileService) listDirectoryRecursive(fullPath string, relativePath strin
 		result = append(result, fileInfo)
 	}
 
-	// Sort: folders first (ascending by name), then files (descending by name)
-	sort.Slice(result, func(i, j int) bool {
-		// Folders before files
-		if result[i].IsDir != result[j].IsDir {
-			return result[i].IsDir
-		}
-		// Folders: ascending by name
-		if result[i].IsDir {
-			return result[i].Name < result[j].Name
-		}
-		// Files: descending by name
-		return result[i].Name > result[j].Name
-	})
-
 	return result, nil
 }
 
 // CreateDirectory creates a new directory
 func (s *FileService) CreateDirectory(relativePath string) error {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+
 	fullPath, err := s.resolveFullPath(relativePath, false)
 	if err != nil {
 		return err
@@ -291,7 +653,12 @@ func (s *FileService) CreateDirectory(relativePath string) error {
 }
 
 // DeleteFile deletes a file or empty directory
+//
+//wails:ignore
 func (s *FileService) DeleteFile(relativePath string) error {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+
 	fullPath, err := s.resolveFullPath(relativePath, false)
 	if err != nil {
 		return err
@@ -441,28 +808,41 @@ func (s *FileService) resolveFullPath(relativePath string, allowRoot bool) (stri
 		return "", err
 	}
 
-	vaultPath := s.configService.GetVaultPath()
+	vaultPath, err := filepath.EvalSymlinks(s.configService.GetVaultPath())
+	if err != nil {
+		return "", err
+	}
+	vaultPath, err = filepath.Abs(vaultPath)
+	if err != nil {
+		return "", err
+	}
 	if cleanPath == "" {
 		return vaultPath, nil
 	}
 
-	return filepath.Join(vaultPath, filepath.FromSlash(cleanPath)), nil
+	fullPath := filepath.Join(vaultPath, filepath.FromSlash(cleanPath))
+	if err := ensurePathWithinVault(vaultPath, fullPath); err != nil {
+		return "", err
+	}
+	return fullPath, nil
 }
 
 func (s *FileService) cleanRelativePath(relativePath string, allowRoot bool) (string, error) {
-	trimmed := strings.TrimSpace(relativePath)
-	if trimmed == "" {
+	if relativePath == "" {
 		if allowRoot {
 			return "", nil
 		}
 		return "", ErrInvalidPath
 	}
 
-	if filepath.IsAbs(trimmed) {
+	if filepath.IsAbs(relativePath) {
 		return "", ErrInvalidPath
 	}
 
-	cleaned := filepath.Clean(filepath.FromSlash(trimmed))
+	cleaned := filepath.ToSlash(filepath.Clean(filepath.FromSlash(relativePath)))
+	if cleaned != relativePath {
+		return "", ErrInvalidPath
+	}
 	if cleaned == "." {
 		if allowRoot {
 			return "", nil
@@ -474,7 +854,31 @@ func (s *FileService) cleanRelativePath(relativePath string, allowRoot bool) (st
 		return "", ErrInvalidPath
 	}
 
-	return filepath.ToSlash(cleaned), nil
+	return cleaned, nil
+}
+
+func ensurePathWithinVault(vaultPath string, fullPath string) error {
+	for existingPath := fullPath; ; existingPath = filepath.Dir(existingPath) {
+		_, err := os.Lstat(existingPath)
+		if err == nil {
+			realPath, err := filepath.EvalSymlinks(existingPath)
+			if err != nil || !isWithinVault(vaultPath, realPath) {
+				return ErrInvalidPath
+			}
+			return nil
+		}
+		if !errors.Is(err, os.ErrNotExist) || existingPath == vaultPath {
+			return err
+		}
+	}
+}
+
+func isWithinVault(vaultPath string, path string) bool {
+	relativePath, err := filepath.Rel(vaultPath, path)
+	if err != nil {
+		return false
+	}
+	return relativePath != ".." && !strings.HasPrefix(relativePath, ".."+string(filepath.Separator)) && !filepath.IsAbs(relativePath)
 }
 
 // ReadBinaryFile reads a binary file and returns it as base64 encoded string
@@ -637,7 +1041,12 @@ func (s *FileService) findFileByName(vaultPath, name string) (string, error) {
 }
 
 // ImportExternalFile copies a file from an absolute path on disk into the vault.
+// It refuses name collisions so callers can show a recovery choice; it never
+// rewrites an existing vault file.
 func (s *FileService) ImportExternalFile(sourceAbsolutePath string, targetFolder string) (string, error) {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+
 	sourceAbsolutePath = strings.TrimSpace(sourceAbsolutePath)
 	if sourceAbsolutePath == "" {
 		return "", errors.New("source path is required")
@@ -654,7 +1063,7 @@ func (s *FileService) ImportExternalFile(sourceAbsolutePath string, targetFolder
 		return "", errors.New("directories are not supported")
 	}
 
-	destRelativePath, err := s.uniqueRelativePath(targetFolder, filepath.Base(sourceAbsolutePath))
+	destRelativePath, err := s.importDestinationPath(targetFolder, filepath.Base(sourceAbsolutePath))
 	if err != nil {
 		return "", err
 	}
@@ -664,27 +1073,242 @@ func (s *FileService) ImportExternalFile(sourceAbsolutePath string, targetFolder
 		return "", err
 	}
 
-	if err := os.MkdirAll(filepath.Dir(destFullPath), 0755); err != nil {
-		return "", err
-	}
-
-	sourceFile, err := os.Open(sourceAbsolutePath)
-	if err != nil {
-		return "", err
-	}
-	defer sourceFile.Close()
-
-	destFile, err := os.OpenFile(destFullPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
-	if err != nil {
-		return "", err
-	}
-	defer destFile.Close()
-
-	if _, err := io.Copy(destFile, sourceFile); err != nil {
+	if err := copyExternalFile(sourceAbsolutePath, destFullPath); err != nil {
 		return "", err
 	}
 
 	return destRelativePath, nil
+}
+
+// ImportAttachment copies an external file to the configured destination for
+// notePath and returns the vault-relative destination plus its Wiki embed.
+func (s *FileService) ImportAttachment(sourceAbsolutePath, notePath string) (models.AttachmentImportResult, error) {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	return s.importAttachment(sourceAbsolutePath, notePath)
+}
+
+func (s *FileService) importAttachment(sourceAbsolutePath, notePath string) (models.AttachmentImportResult, error) {
+	sourceAbsolutePath = strings.TrimSpace(sourceAbsolutePath)
+	if sourceAbsolutePath == "" || !filepath.IsAbs(sourceAbsolutePath) {
+		return models.AttachmentImportResult{}, errors.New("source path must be absolute")
+	}
+	sourceInfo, err := os.Stat(sourceAbsolutePath)
+	if err != nil {
+		return models.AttachmentImportResult{}, err
+	}
+	if !sourceInfo.Mode().IsRegular() {
+		return models.AttachmentImportResult{}, errors.New("source path must be a regular file")
+	}
+
+	cleanNotePath, err := s.cleanRelativePath(notePath, false)
+	if err != nil {
+		return models.AttachmentImportResult{}, err
+	}
+	if !isMarkdownNotePath(cleanNotePath) {
+		return models.AttachmentImportResult{}, errors.New("attachment target must be a Markdown note")
+	}
+	noteFullPath, err := s.resolveFullPath(cleanNotePath, false)
+	if err != nil {
+		return models.AttachmentImportResult{}, err
+	}
+	noteInfo, err := os.Lstat(noteFullPath)
+	if err != nil {
+		return models.AttachmentImportResult{}, err
+	}
+	if !noteInfo.Mode().IsRegular() {
+		return models.AttachmentImportResult{}, errors.New("attachment target must be a regular file")
+	}
+
+	attachmentConfig, err := s.configService.GetAttachmentConfig()
+	if err != nil {
+		return models.AttachmentImportResult{}, err
+	}
+	destinationFolder, err := s.attachmentDestinationFolder(attachmentConfig, cleanNotePath)
+	if err != nil {
+		return models.AttachmentImportResult{}, err
+	}
+	destinationPath, err := s.importDestinationPath(destinationFolder, filepath.Base(sourceAbsolutePath))
+	if err != nil {
+		return models.AttachmentImportResult{}, err
+	}
+	destinationFullPath, err := s.resolveFullPath(destinationPath, false)
+	if err != nil {
+		return models.AttachmentImportResult{}, err
+	}
+	if err := copyExternalFile(sourceAbsolutePath, destinationFullPath); err != nil {
+		return models.AttachmentImportResult{}, err
+	}
+	return models.AttachmentImportResult{
+		DestinationPath: destinationPath,
+		Embed:           "![[" + encodeLinkPath(destinationPath) + "]]",
+	}, nil
+}
+
+func isMarkdownNotePath(relativePath string) bool {
+	switch strings.ToLower(filepath.Ext(relativePath)) {
+	case ".md", ".markdown":
+		return true
+	default:
+		return false
+	}
+}
+
+func (s *FileService) attachmentDestinationFolder(config models.AttachmentConfig, notePath string) (string, error) {
+	config, err := models.NormalizeAttachmentConfig(config)
+	if err != nil {
+		return "", err
+	}
+	switch config.Location {
+	case models.AttachmentLocationVaultRoot:
+		return "", nil
+	case models.AttachmentLocationVaultFolder:
+		return config.Folder, nil
+	case models.AttachmentLocationCurrentFolder:
+		return s.cleanRelativePath(filepath.ToSlash(filepath.Dir(filepath.FromSlash(notePath))), true)
+	case models.AttachmentLocationCurrentSubfolder:
+		return s.cleanRelativePath(filepath.ToSlash(filepath.Join(filepath.Dir(filepath.FromSlash(notePath)), filepath.FromSlash(config.Folder))), false)
+	default:
+		return "", errors.New("invalid attachment location")
+	}
+}
+
+// IsExternalDirectory classifies an absolute drag source without granting it
+// any vault-relative path semantics.
+func (s *FileService) IsExternalDirectory(sourceAbsolutePath string) (bool, error) {
+	if !filepath.IsAbs(sourceAbsolutePath) {
+		return false, errors.New("source path must be absolute")
+	}
+	info, err := os.Stat(sourceAbsolutePath)
+	if err != nil {
+		return false, err
+	}
+	return info.IsDir(), nil
+}
+
+// ImportExternalFolder recursively imports a folder and reports every path
+// collision. Non-colliding files are copied; existing vault content is never
+// overwritten.
+func (s *FileService) ImportExternalFolder(sourceAbsolutePath string, targetFolder string) ([]models.ImportOutcome, error) {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+
+	sourceAbsolutePath = strings.TrimSpace(sourceAbsolutePath)
+	if sourceAbsolutePath == "" || !filepath.IsAbs(sourceAbsolutePath) {
+		return nil, errors.New("source folder path must be absolute")
+	}
+	info, err := os.Stat(sourceAbsolutePath)
+	if err != nil {
+		return nil, err
+	}
+	if !info.IsDir() {
+		return nil, errors.New("source path is not a directory")
+	}
+	baseDestination, err := s.importDestinationPath(targetFolder, filepath.Base(sourceAbsolutePath))
+	if err != nil {
+		return nil, err
+	}
+	if _, err := s.resolveFullPath(baseDestination, false); err != nil {
+		return nil, err
+	}
+
+	outcomes := []models.ImportOutcome{}
+	err = filepath.WalkDir(sourceAbsolutePath, func(sourcePath string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if sourcePath == sourceAbsolutePath {
+			return nil
+		}
+		relativeSourcePath, err := filepath.Rel(sourceAbsolutePath, sourcePath)
+		if err != nil {
+			return err
+		}
+		destinationRelativePath := filepath.ToSlash(filepath.Join(baseDestination, relativeSourcePath))
+		destinationFullPath, err := s.resolveFullPath(destinationRelativePath, false)
+		if err != nil {
+			return err
+		}
+		if _, err := os.Lstat(destinationFullPath); err == nil {
+			outcomes = append(outcomes, models.ImportOutcome{SourcePath: sourcePath, DestinationPath: destinationRelativePath, Status: models.ImportStatusCollision, IsDir: entry.IsDir()})
+			if entry.IsDir() {
+				return nil
+			}
+			return nil
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		if entry.IsDir() {
+			if err := os.MkdirAll(destinationFullPath, 0755); err != nil {
+				return err
+			}
+			outcomes = append(outcomes, models.ImportOutcome{SourcePath: sourcePath, DestinationPath: destinationRelativePath, Status: models.ImportStatusImported, IsDir: true})
+			return nil
+		}
+		if err := copyExternalFile(sourcePath, destinationFullPath); err != nil {
+			return err
+		}
+		outcomes = append(outcomes, models.ImportOutcome{SourcePath: sourcePath, DestinationPath: destinationRelativePath, Status: models.ImportStatusImported})
+		return nil
+	})
+	return outcomes, err
+}
+
+func pathIsWithinAncestor(descendantPath, ancestorPath string) bool {
+	if ancestorPath == "" {
+		return false
+	}
+	return descendantPath == ancestorPath || strings.HasPrefix(descendantPath, ancestorPath+"/")
+}
+
+func (s *FileService) importDestinationPath(targetFolder, fileName string) (string, error) {
+	cleanFolder, err := s.cleanRelativePath(targetFolder, true)
+	if err != nil {
+		return "", err
+	}
+	if cleanFolder == "" {
+		return s.cleanRelativePath(fileName, false)
+	}
+	return s.cleanRelativePath(filepath.ToSlash(filepath.Join(cleanFolder, fileName)), false)
+}
+
+func copyExternalFile(sourcePath, destinationPath string) error {
+	if _, err := os.Lstat(destinationPath); err == nil {
+		return os.ErrExist
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(destinationPath), 0755); err != nil {
+		return err
+	}
+	sourceFile, err := os.Open(sourcePath)
+	if err != nil {
+		return err
+	}
+	defer sourceFile.Close()
+	destFile, err := os.OpenFile(destinationPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	completed := false
+	defer func() {
+		if !completed {
+			_ = os.Remove(destinationPath)
+		}
+	}()
+	if _, err = io.Copy(destFile, sourceFile); err != nil {
+		_ = destFile.Close()
+		return err
+	}
+	if err = destFile.Sync(); err != nil {
+		_ = destFile.Close()
+		return err
+	}
+	if err = destFile.Close(); err != nil {
+		return err
+	}
+	completed = true
+	return nil
 }
 
 // RevealInFinder reveals a file or directory in Finder.

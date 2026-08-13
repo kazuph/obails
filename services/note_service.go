@@ -26,21 +26,25 @@ func NewNoteService(fileService *FileService, configService *ConfigService) *Not
 
 // GetNote reads a note from the vault
 func (s *NoteService) GetNote(relativePath string) (*models.Note, error) {
-	content, err := s.fileService.ReadFile(relativePath)
+	snapshot, err := s.fileService.ReadSnapshot(relativePath)
 	if err != nil {
 		return nil, err
 	}
 
-	fileInfo, err := s.fileService.GetFileInfo(relativePath)
+	fileInfo, err := s.fileService.GetFileInfo(snapshot.Path)
 	if err != nil {
 		return nil, err
 	}
 
 	note := &models.Note{
-		Path:       relativePath,
-		Title:      s.extractTitle(content, relativePath),
-		Content:    content,
+		Path:       snapshot.Path,
+		Title:      s.extractTitle(snapshot.Content, snapshot.Path),
+		Content:    snapshot.Content,
+		Revision:   snapshot.Revision,
 		ModifiedAt: fileInfo.ModifiedAt,
+	}
+	if frontmatter, _, parseErr := NewFrontmatterService().ParseFrontmatter(snapshot.Content); parseErr == nil {
+		note.Frontmatter = frontmatter
 	}
 
 	return note, nil
@@ -49,6 +53,12 @@ func (s *NoteService) GetNote(relativePath string) (*models.Note, error) {
 // SaveNote saves a note to the vault
 func (s *NoteService) SaveNote(relativePath string, content string) error {
 	return s.fileService.WriteFile(relativePath, content)
+}
+
+// SaveNoteCAS rejects stale, deleted, and renamed notes without recreating
+// their old paths.
+func (s *NoteService) SaveNoteCAS(snapshot models.FileSnapshot, content string) (models.FileSaveResult, error) {
+	return s.fileService.SaveIfUnchanged(snapshot, content)
 }
 
 // GetDailyNote gets or creates a daily note for a specific date
@@ -187,17 +197,8 @@ func (s *NoteService) GetRecentTimelines(days int) ([]models.Timeline, error) {
 
 // Helper functions
 
-func (s *NoteService) extractTitle(content string, path string) string {
-	// Try to find a # heading
-	lines := strings.Split(content, "\n")
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "# ") {
-			return strings.TrimPrefix(line, "# ")
-		}
-	}
-	// Fall back to filename without extension
-	return strings.TrimSuffix(filepath.Base(path), ".md")
+func (s *NoteService) extractTitle(_ string, path string) string {
+	return strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
 }
 
 func (s *NoteService) generateDailyNoteTemplate(date time.Time) string {

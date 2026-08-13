@@ -84,6 +84,87 @@ Even more text`;
       { level: 1, text: "Third", line: 4 },
     ]);
   });
+
+  it("excludes headings inside fenced and multiline inline code", () => {
+    const content = `# Visible
+\`\`\`markdown
+# Fenced
+\`\`\`
+\`inline code starts
+# Inline
+ends here\`
+# After code`;
+
+    expect(extractHeadings(content)).toEqual([
+      { level: 1, text: "Visible", line: 0 },
+      { level: 1, text: "After code", line: 7 },
+    ]);
+  });
+
+  it("does not suppress headings after an unclosed inline code delimiter", () => {
+    const content = "`unclosed inline code\n# Still a heading";
+
+    expect(extractHeadings(content)).toEqual([
+      { level: 1, text: "Still a heading", line: 1 },
+    ]);
+  });
+
+  it("extracts setext and permitted indented ATX headings", () => {
+    const content = `Setext level one
+===============
+
+  ## Two spaces
+   ### Three spaces
+    #### Indented code
+Setext level two
+----------------
+    Not a setext heading
+    --------------------`;
+
+    expect(extractHeadings(content)).toEqual([
+      { level: 1, text: "Setext level one", line: 0 },
+      { level: 2, text: "Two spaces", line: 3 },
+      { level: 3, text: "Three spaces", line: 4 },
+      { level: 2, text: "Setext level two", line: 6 },
+    ]);
+  });
+
+  it("normalizes optional closing ATX hashes", () => {
+    const content = `# Single closing #
+## Many closings ###
+### Literal hash#`;
+
+    expect(extractHeadings(content)).toEqual([
+      { level: 1, text: "Single closing", line: 0 },
+      { level: 2, text: "Many closings", line: 1 },
+      { level: 3, text: "Literal hash#", line: 2 },
+    ]);
+  });
+
+  it("does not turn a thematic break into a setext heading", () => {
+    expect(extractHeadings("---\n===")).toEqual([]);
+  });
+
+  it("skips YAML frontmatter so metadata lines are not outline headings", () => {
+    const content = `---
+read: false
+important: false
+source: vault-note.md
+---
+
+## 概要
+
+本文です。
+
+### 詳細
+
+- item`;
+
+    expect(extractHeadings(content)).toEqual([
+      { level: 2, text: "概要", line: 6 },
+      { level: 3, text: "詳細", line: 10 },
+    ]);
+  });
 });
 
 describe("renderOutlineHTML", () => {
@@ -95,8 +176,10 @@ describe("renderOutlineHTML", () => {
   it("should render heading with correct class and data-line", () => {
     const headings: Heading[] = [{ level: 2, text: "Test Heading", line: 5 }];
     const result = renderOutlineHTML(headings);
+    expect(result).toContain("<button type=\"button\"");
     expect(result).toContain('class="outline-item h2"');
     expect(result).toContain('data-line="5"');
+    expect(result).toContain('aria-label="Go to heading: Test Heading"');
     expect(result).toContain("Test Heading");
   });
 
@@ -110,5 +193,12 @@ describe("renderOutlineHTML", () => {
     expect(result).toContain('class="outline-item h2"');
     expect(result).toContain("First");
     expect(result).toContain("Second");
+  });
+
+  it("escapes vault-controlled heading text", () => {
+    const result = renderOutlineHTML([{ level: 1, text: '<img src=x onerror="alert(1)"> & note', line: 0 }]);
+
+    expect(result).toContain("&lt;img src=x onerror=&quot;alert(1)&quot;&gt; &amp; note");
+    expect(result).not.toContain("<img");
   });
 });
