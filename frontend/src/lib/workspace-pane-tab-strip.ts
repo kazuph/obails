@@ -1,9 +1,11 @@
 import type { WorkspacePaneTabsSnapshot } from "./workspace-snapshot";
+import { EMPTY_PANE_INSTRUCTION } from "./workspace-pane-identity";
 
 export type WorkspacePaneTabActions = {
   activateTab: (paneId: string, path: string) => void;
   closeTab: (paneId: string, path: string) => void;
   renameTab: (paneId: string, path: string) => void;
+  activatePane?: (paneId: string) => void;
 };
 
 export function createWorkspacePaneTabStrip(
@@ -21,6 +23,9 @@ export function createWorkspacePaneTabStrip(
   // dropped Close * buttons from the macOS accessibility tree and blocked AX close.
   strip.setAttribute("role", "group");
   strip.setAttribute("aria-label", `Tabs in pane ${paneId}`);
+  strip.addEventListener("pointerdown", () => {
+    actions.activatePane?.(paneId);
+  });
   for (const tab of pane?.tabs ?? []) {
     const selected = paneId === activePaneId && pane?.activeTabPath === tab.path;
     const tabChrome = documentRef.createElement("div");
@@ -73,7 +78,17 @@ export function createWorkspacePaneTabStrip(
   if (!pane?.tabs.length) {
     const empty = documentRef.createElement("span");
     empty.className = "workspace-pane-empty";
-    empty.textContent = "Empty pane";
+    empty.textContent = EMPTY_PANE_INSTRUCTION;
+    empty.setAttribute("role", "button");
+    empty.tabIndex = 0;
+    empty.setAttribute("aria-label", `Empty pane. ${EMPTY_PANE_INSTRUCTION}`);
+    empty.title = `Empty pane. ${EMPTY_PANE_INSTRUCTION}`;
+    empty.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        actions.activatePane?.(paneId);
+      }
+    });
     strip.append(empty);
   }
   return strip;

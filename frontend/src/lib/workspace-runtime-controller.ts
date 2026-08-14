@@ -152,10 +152,12 @@ export class WorkspaceRuntimeController {
     });
   }
 
-  async closePane(paneId: string): Promise<WorkspaceStateSnapshot | null> {
+  async closePane(paneId?: string): Promise<WorkspaceStateSnapshot | null> {
     return this.enqueue(async () => {
+      const target = paneId || this.activePane;
+      if (!target) return this.snapshot;
       const snapshot = await this.factory.closePane(
-        paneId,
+        target,
         (id) => this.backend.closeWorkspacePane(id),
       );
       return snapshot ? this.commit(snapshot as WorkspaceStateSnapshot) : null;
@@ -221,7 +223,7 @@ export class WorkspaceRuntimeController {
   }
 }
 
-export { leafPaneIds } from "./workspace-snapshot";
+export { leafPaneIds, visibleLeafPaneIds } from "./workspace-snapshot";
 
 export function paneTabsFor(snapshot: WorkspaceStateSnapshot, paneId: string): WorkspacePaneTabsSnapshot | undefined {
   return snapshot.paneTabs?.find((pane) => pane.paneId === paneId);

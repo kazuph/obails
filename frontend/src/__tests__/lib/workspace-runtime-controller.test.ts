@@ -8,6 +8,8 @@ import {
   type WorkspaceStateSnapshot,
 } from "../../lib/workspace-runtime-controller";
 import { isWorkspaceStateSnapshot } from "../../lib/workspace-snapshot";
+import { workspaceLeafRestoreTargets, workspacePaneActiveTab } from "../../lib/workspace-restore";
+import { capturedClosePaneId, otherPaneTabsUnchanged } from "../../lib/workspace-pane-identity";
 
 function snapshot(paneIds: string[], activePaneId = paneIds[0]): WorkspaceStateSnapshot {
   return {
@@ -70,12 +72,24 @@ function backendFor(initial: WorkspaceStateSnapshot) {
         };
       }),
     }),
-    splitWorkspacePane: async (paneId, _direction, newPaneId) => {
-      current = snapshot([paneId, newPaneId], newPaneId);
+    splitWorkspacePane: async (paneId, direction, newPaneId) => {
+      const existing = current.paneTabs?.find((pane) => pane.paneId === paneId) ?? { paneId, tabs: [] };
+      current = {
+        paneTree: { splitDirection: direction, children: [{ paneId }, { paneId: newPaneId }], weights: [1, 1] },
+        activePaneId: newPaneId,
+        paneTabs: [existing, { paneId: newPaneId, tabs: [] }],
+      };
       return current;
     },
     closeWorkspacePane: async (paneId) => {
-      current = snapshot((current.paneTabs ?? []).map((pane) => pane.paneId).filter((id) => id !== paneId), "left");
+      const remaining = (current.paneTabs ?? []).filter((pane) => pane.paneId !== paneId);
+      current = {
+        paneTree: remaining.length === 1
+          ? { paneId: remaining[0].paneId }
+          : { splitDirection: "horizontal", children: remaining.map((pane) => ({ paneId: pane.paneId })), weights: remaining.map(() => 1) },
+        activePaneId: remaining[0]?.paneId ?? "",
+        paneTabs: remaining,
+      };
       return current;
     },
     updateWorkspaceSplitWeights: async () => current,
@@ -108,6 +122,86 @@ describe("WorkspaceRuntimeController", () => {
     await controller.closePane("right");
     expect(factory.paneIds()).toEqual(["left"]);
     expect(snapshots.at(-1)?.paneTree?.paneId).toBe("left");
+  });
+
+  it("closes the exact new empty pane after split and keeps the original note in snapshot, restore target, runtime, and history", async () => {
+    const factory = new DocumentRuntimeFactory(async () => {});
+    const initial: WorkspaceStateSnapshot = {
+      paneTree: { paneId: "left" },
+      activePaneId: "left",
+      paneTabs: [{ paneId: "left", tabs: [{ path: "notes/one.md", fileType: "markdown" }], activeTabPath: "notes/one.md" }],
+    };
+    const published: WorkspaceStateSnapshot[] = [];
+    const backendState = backendFor(initial);
+    const controller = new WorkspaceRuntimeController(factory, backendState.backend, (next) => published.push(next));
+
+    await controller.ensureWorkspace("left");
+    const left = factory.forPane("left");
+    const leftDocument = createEditableDocument("markdown", { path: "notes/one.md", content: "keep me", revision: "r1" }, left.beginOpen());
+    left.activeEditableDocument = leftDocument;
+    left.currentFilePath = leftDocument.snapshot.path;
+    left.history.rebase({ path: "notes/one.md", kind: "markdown" }, { content: "keep me", selectionStart: 1, selectionEnd: 2, scrollTop: 0 });
+
+    const split = await controller.splitPane("left", "horizontal", "right");
+    expect(split?.activePaneId).toBe("right");
+    expect(paneTabsFor(split!, "left")).toEqual({
+      paneId: "left",
+      tabs: [{ path: "notes/one.md", fileType: "markdown" }],
+      activeTabPath: "notes/one.md",
+    });
+    expect(paneTabsFor(split!, "right")?.tabs).toEqual([]);
+    expect(workspacePaneActiveTab(split!, "left")).toEqual({ path: "notes/one.md", fileType: "markdown" });
+    expect(workspacePaneActiveTab(split!, "right")).toBeUndefined();
+    expect(workspaceLeafRestoreTargets(split!, "right", new Set(["left", "right"]))).toEqual([
+      { paneId: "left", tab: { path: "notes/one.md", fileType: "markdown" } },
+    ]);
+    expect(left.history.current({ path: "notes/one.md", kind: "markdown" })?.content).toBe("keep me");
+    expect(published.at(-1)).toEqual(split);
+
+    await controller.activatePane("right");
+    expect(controller.activePaneId).toBe("right");
+    const visualPaneId = "right";
+    const closeTarget = capturedClosePaneId(visualPaneId, controller.activePaneId);
+    expect(closeTarget).toBe("right");
+    const beforeClose = [...(controller.currentSnapshot?.paneTabs ?? [])];
+    const closed = await controller.closePane(closeTarget);
+    expect(closed?.activePaneId).toBe("left");
+    expect(paneTabsFor(closed!, "left")).toEqual({
+      paneId: "left",
+      tabs: [{ path: "notes/one.md", fileType: "markdown" }],
+      activeTabPath: "notes/one.md",
+    });
+    expect(paneTabsFor(closed!, "right")).toBeUndefined();
+    expect(workspacePaneActiveTab(closed!, "left")).toEqual({ path: "notes/one.md", fileType: "markdown" });
+    expect(workspaceLeafRestoreTargets(closed!, "left", new Set(["left"]))).toEqual([]);
+    expect(otherPaneTabsUnchanged(beforeClose, closed?.paneTabs ?? [], "right")).toBe(true);
+    expect(factory.paneIds()).toEqual(["left"]);
+    expect(factory.forPane("left")).toBe(left);
+    expect(left.activeEditableDocument).toBe(leftDocument);
+    expect(left.currentFilePath).toBe("notes/one.md");
+    expect(left.history.current({ path: "notes/one.md", kind: "markdown" })?.content).toBe("keep me");
+    expect(published.at(-1)).toEqual(closed);
+  });
+
+  it("routes Explorer openTab to the new pane that split made active", async () => {
+    const factory = new DocumentRuntimeFactory(async () => {});
+    const initial: WorkspaceStateSnapshot = {
+      paneTree: { paneId: "left" },
+      activePaneId: "left",
+      paneTabs: [{ paneId: "left", tabs: [{ path: "notes/one.md", fileType: "markdown" }], activeTabPath: "notes/one.md" }],
+    };
+    const controller = new WorkspaceRuntimeController(factory, backendFor(initial).backend, () => {});
+    await controller.ensureWorkspace("left");
+    await controller.splitPane("left", "horizontal", "right");
+    expect(controller.activePaneId).toBe("right");
+    const opened = await controller.openTab("notes/two.md", "markdown");
+    expect(opened?.activePaneId).toBe("right");
+    expect(paneTabsFor(opened!, "right")).toEqual({
+      paneId: "right",
+      tabs: [{ path: "notes/two.md", fileType: "markdown" }],
+      activeTabPath: "notes/two.md",
+    });
+    expect(paneTabsFor(opened!, "left")?.tabs).toEqual([{ path: "notes/one.md", fileType: "markdown" }]);
   });
 
   it("forwards both split directions to the atomic backend mutation", async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isWorkspaceStateSnapshot } from "../../lib/workspace-snapshot";
+import { isWorkspaceStateSnapshot, visibleLeafPaneIds } from "../../lib/workspace-snapshot";
 
 describe("workspace snapshot validation", () => {
   it("accepts an operational current workspace with omitted split weights", () => {
@@ -45,5 +45,17 @@ describe("workspace snapshot validation", () => {
       savedWorkspaces: [{ name: "Writing", layout: { paneTree: { paneId: "saved" }, activePaneId: "saved" } }],
       activeNamedWorkspace: "Missing",
     })).toBe(false);
+  });
+
+  it("counts only main-window panes after native popouts hide their leaves", () => {
+    expect(visibleLeafPaneIds(
+      { splitDirection: "horizontal", children: [{ paneId: "main" }, { paneId: "side" }] },
+      [{ paneId: "main" }],
+    )).toEqual(["side"]);
+    expect(visibleLeafPaneIds(
+      { splitDirection: "horizontal", children: [{ paneId: "main" }, { paneId: "empty" }] },
+      [{ paneId: "main" }],
+    )).toEqual(["empty"]);
+    expect(visibleLeafPaneIds({ paneId: "main" }, [{ paneId: "main" }])).toEqual([]);
   });
 });

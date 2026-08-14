@@ -63,9 +63,9 @@ test.describe("Static accessibility semantics", () => {
     }
 
     const namedButtons = [
-      ["split-pane-right-btn", "Split right"],
-      ["split-pane-down-btn", "Split down"],
-      ["close-pane-btn", "Close pane"],
+      ["split-pane-right-btn", "Split pane right"],
+      ["split-pane-down-btn", "Split pane down"],
+      ["close-pane-btn", "Close active pane"],
       ["popout-pane-btn", "Pop out pane"],
       ["image-fullscreen", "View image fullscreen"],
       ["image-fs-close", "Close fullscreen image"],
@@ -97,9 +97,9 @@ test.describe("Static accessibility semantics", () => {
     }
 
     const workspaceToolbarButtons = [
-      ["split-pane-right-btn", "Split right", "Split right"],
-      ["split-pane-down-btn", "Split down", "Split down"],
-      ["close-pane-btn", "Close pane", "Close pane"],
+      ["split-pane-right-btn", "Split pane right", "Split pane right"],
+      ["split-pane-down-btn", "Split pane down", "Split pane down"],
+      ["close-pane-btn", "Close active pane", "Close active pane"],
       ["popout-pane-btn", "Pop out pane", "Pop out active pane into a new window"],
     ] as const;
 

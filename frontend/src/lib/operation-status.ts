@@ -37,3 +37,23 @@ export function buildOperationStatusView(
     dismissAvailable: Boolean(trimmed),
   };
 }
+
+export function describeHumanOperationError(error: unknown, fallback: string): string {
+  const raw = extractOperationErrorText(error).trim();
+  if (!raw || looksLikeRawErrorPayload(raw)) return fallback;
+  return raw;
+}
+
+function extractOperationErrorText(error: unknown): string {
+  if (typeof error === "string") return error;
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === "object" && "message" in error && typeof (error as { message: unknown }).message === "string") {
+    return (error as { message: string }).message;
+  }
+  return "";
+}
+
+function looksLikeRawErrorPayload(text: string): boolean {
+  const trimmed = text.trim();
+  return (trimmed.startsWith("{") && trimmed.endsWith("}")) || (trimmed.startsWith("[") && trimmed.endsWith("]"));
+}

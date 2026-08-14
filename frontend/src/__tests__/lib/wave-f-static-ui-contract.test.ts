@@ -34,9 +34,12 @@ describe("Wave F static UI contract", () => {
   it("exposes workspace split, save/restore, and popout controls (P-079)", () => {
     const documentRef = parseIndexHtml();
 
-    expect(documentRef.getElementById("split-pane-right-btn")?.getAttribute("aria-label")).toBe("Split right");
-    expect(documentRef.getElementById("split-pane-down-btn")?.getAttribute("aria-label")).toBe("Split down");
-    expect(documentRef.getElementById("close-pane-btn")?.getAttribute("aria-label")).toBe("Close pane");
+    expect(documentRef.getElementById("split-pane-right-btn")?.getAttribute("aria-label")).toBe("Split pane right");
+    expect(documentRef.getElementById("split-pane-right-btn")?.getAttribute("title")).toBe("Split pane right");
+    expect(documentRef.getElementById("split-pane-down-btn")?.getAttribute("aria-label")).toBe("Split pane down");
+    expect(documentRef.getElementById("split-pane-down-btn")?.getAttribute("title")).toBe("Split pane down");
+    expect(documentRef.getElementById("close-pane-btn")?.getAttribute("aria-label")).toBe("Close active pane");
+    expect(documentRef.getElementById("close-pane-btn")?.getAttribute("title")).toBe("Close active pane");
     expect(documentRef.getElementById("workspace-name")).toBeNull();
     expect(documentRef.getElementById("save-workspace-btn")).toBeNull();
     expect(documentRef.getElementById("restore-workspace-btn")).toBeNull();
@@ -205,5 +208,79 @@ describe("Wave F static UI contract", () => {
     expect(documentRef.getElementById("vault-setup-overlay")?.getAttribute("aria-modal")).toBe("true");
     expect(documentRef.querySelector("[data-sidebar-section-toggle='backlinks']")?.getAttribute("aria-controls"))
       .toBe("backlinks-list");
+  });
+
+  it("pops out the active pane through the backend snapshot and never dumps raw JSON errors", () => {
+    const source = readFileSync(resolve(__dirname, "../../main.ts"), "utf8");
+    const start = source.indexOf("async function createActivePanePopout()");
+    const end = source.indexOf("async function rejoinCurrentPopout()");
+    const fn = source.slice(start, end);
+
+    expect(fn).toContain("WindowService.CreatePopout");
+    expect(fn).toContain("adoptBackendSnapshot");
+    expect(fn).toContain("openActiveWorkspaceTab");
+    expect(fn).toContain("describeHumanOperationError");
+    expect(fn).toContain("the new window could not be opened");
+    expect(fn).not.toMatch(/Could not pop out this pane: \$\{describeOperationError/);
+    expect(fn).not.toContain("cannot pop out the final visible workspace pane");
+  });
+
+  it("disables close-pane from the remaining visible main-window panes, not the full tree", () => {
+    const source = readFileSync(resolve(__dirname, "../../main.ts"), "utf8");
+    const start = source.indexOf("function applyWorkspaceSnapshot");
+    const end = source.indexOf("function applyPopoutToolbarMode");
+    const fn = source.slice(start, end);
+
+    expect(fn).toContain("visibleLeafPaneIds(snapshot.paneTree, snapshot.popoutWindows)");
+    expect(fn).toContain("closePaneButton.disabled = Boolean(popoutRoute) || visiblePaneIds.length <= 1");
+    expect(fn).not.toContain("closePaneButton.disabled = Boolean(popoutRoute) || paneIds.length <= 1");
+  });
+
+  it("keeps the legacy surface owner stable and clears only the active pane", () => {
+    const source = readFileSync(resolve(__dirname, "../../main.ts"), "utf8");
+    const assignStart = source.indexOf("function assignInitialLegacySurface");
+    const assignEnd = source.indexOf("function renderWorkspaceLayout");
+    const assignFn = source.slice(assignStart, assignEnd);
+    expect(assignFn).toContain("bindLegacyPaneId");
+    expect(assignFn).not.toContain("paneSurfaces.delete(snapshot.activePaneId)");
+    expect(assignFn).not.toContain("legacySurfacePaneId = snapshot.activePaneId");
+
+    const splitStart = source.indexOf("async function splitActiveWorkspacePane");
+    const splitEnd = source.indexOf("async function closeActiveWorkspacePane");
+    expect(source.slice(splitStart, splitEnd)).toContain("openActiveWorkspaceTab");
+    expect(source.slice(splitStart, splitEnd)).not.toContain("showEmptyMainPane");
+
+    const closeStart = source.indexOf("async function closeActiveWorkspacePane");
+    const closeEnd = source.indexOf("function getPopoutRoute");
+    const closeFn = source.slice(closeStart, closeEnd);
+    expect(closeFn).toContain("capturedClosePaneId");
+    expect(closeFn).toContain("dataset.activePaneId");
+    expect(closeFn).toContain("closePane(paneId)");
+
+    const activateStart = source.indexOf("async function activateWorkspacePaneFromUi");
+    const activateFn = source.slice(activateStart, source.indexOf("async function activateWorkspaceTabFromUi"));
+    expect(activateFn).toContain("document.documentElement.dataset.activePaneId = paneId");
+
+    const renderStart = source.indexOf("function renderWorkspaceLayout");
+    const renderFn = source.slice(renderStart, source.indexOf("function activeRichSurface"));
+    expect(renderFn).toContain("activateWorkspacePaneFromUi(node.paneId)");
+
+    const applyStart = source.indexOf("function applyWorkspaceSnapshot");
+    const applyFn = source.slice(applyStart, source.indexOf("function applyPopoutToolbarMode"));
+    expect(applyFn).toContain("previousActivePaneId");
+    expect(applyFn).toContain("focusWorkspacePane");
+    expect(applyFn).toContain("document.documentElement.dataset.activePaneId");
+
+    const openStart = source.indexOf("async function openActiveWorkspaceTab");
+    const openEnd = source.indexOf("async function restoreWorkspaceLeafTabs");
+    expect(source.slice(openStart, openEnd)).toContain("showEmptyForActivePane");
+    expect(source.slice(openStart, openEnd)).not.toContain("showEmptyMainPane");
+    expect(source.slice(source.indexOf("function showEmptyForActivePane"), source.indexOf("function hideRichSurfaceViewers"))).toContain("EMPTY_PANE_INSTRUCTION");
+
+    const iconsStart = source.indexOf("function setupToolbarIcons");
+    const iconsFn = source.slice(iconsStart, source.indexOf("function toStateKey"));
+    expect(iconsFn).toContain('"split-right"');
+    expect(iconsFn).toContain('"split-down"');
+    expect(iconsFn).not.toMatch(/split-pane-right-btn.*page-single/);
   });
 });

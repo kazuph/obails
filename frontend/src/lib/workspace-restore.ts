@@ -18,3 +18,11 @@ export function workspaceLeafRestoreTargets(
     return tab ? [{ paneId, tab }] : [];
   });
 }
+
+export function workspacePaneActiveTab(
+  snapshot: WorkspaceStateSnapshot,
+  paneId: string,
+): WorkspaceTabSnapshot | undefined {
+  const pane = snapshot.paneTabs?.find((candidate) => candidate.paneId === paneId);
+  return pane?.tabs.find((candidate) => candidate.path === pane.activeTabPath);
+}

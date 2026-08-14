@@ -166,13 +166,19 @@ describe("createWorkspacePaneTabStrip", () => {
   });
 
   it("renders an accessible empty pane without an internal pane id button", () => {
+    const operations: string[] = [];
     const strip = createWorkspacePaneTabStrip(document, "generated-pane", { paneId: "generated-pane", tabs: [] }, "generated-pane", (path) => path, {
       activateTab: () => {},
       closeTab: () => {},
       renameTab: () => {},
+      activatePane: (paneId) => operations.push(`focus:${paneId}`),
     });
-    expect(strip.textContent).toBe("Empty pane");
+    expect(strip.textContent).toBe("Open a note from Explorer");
     expect(strip.querySelector("button")).toBeNull();
+    expect(strip.querySelector(".workspace-pane-empty")?.getAttribute("aria-label")).toBe("Empty pane. Open a note from Explorer");
+    expect(strip.querySelector(".workspace-pane-empty")?.getAttribute("title")).toBe("Empty pane. Open a note from Explorer");
+    strip.querySelector<HTMLElement>(".workspace-pane-empty")!.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
+    expect(operations).toEqual(["focus:generated-pane"]);
   });
 
   it("keeps at least 10ch of the title visible and scrolls the strip instead of crushing tabs", () => {

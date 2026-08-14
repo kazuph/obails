@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.1 - 2026-08-13
+
+起動直後にクラッシュする不具合を直したパッチです。Claude Code plugin `ob` の版は `0.1.2` のままです。
+
+### 修正
+
+- フロントエンドが `WindowService.RefreshWorkspaceMenu` を呼ぶと、Wails binding goroutine（非メインスレッド）から `app.Menu.SetApplicationMenu` → AppKit `setMainMenu` が走り、`NSInternalInconsistencyException`（setting the main menu on a non-main thread）で即終了していた
+- Wails v3 alpha.74 既存の `application.InvokeSync` に、起動後の Workspace / Theme メニュー再構築を限定する。起動直後の初回適用は `App.Run` 前にメニューを格納するだけにし、実行時の再構築だけを AppKit メインスレッドへ hop する
+- 最後の表示ペインでも「別ウィンドウで開く」が成立する。main 側には元ノートと同じ path/fileType の独立ペインを残し、popout 側は元ペインを保持する。runtime/history は共有しない。予期せぬ失敗は JSON を出さず operation-status の人間向け文言にする
+- 分割後の新ペインは Explorer からノートを開ける空 surface。close は visual active と一致する exact pane だけを閉じ、元ノートの snapshot / restore / history は残す。ツールバー 3 アイコンは Split pane right / Split pane down / Close active pane として明示する
+
 ## 1.0.0 - 2026-08-13
 
 Obails の最初のメジャー版です。Obsidian 互換ヴォルトを扱う macOS ネイティブ Markdown エディタとして、編集・リンク・検索・ワークスペース・安全性の契約を固定します。以降の細かな修正は `v1.0.x` として扱えます。

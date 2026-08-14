@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"image/png"
+	"reflect"
 	"testing"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -132,6 +133,49 @@ func TestWorkspaceApplicationMenuExposesNamedWorkspaceActions(t *testing.T) {
 	placeholder := emptyItems.FindByLabel("Open Workspace").GetSubmenu().FindByLabel("No saved workspaces")
 	if placeholder == nil || placeholder.Enabled() {
 		t.Fatal("empty Open Workspace submenu should show a disabled placeholder")
+	}
+}
+
+func TestBuildApplicationMenuIncludesWorkspaceAndSelectedTheme(t *testing.T) {
+	app := application.Get()
+	if app == nil {
+		app = application.New(application.Options{DisableDefaultSignalHandler: true})
+	}
+	menu := buildApplicationMenu(app, "nord", []string{"Writing"}, "Writing", nil)
+	workspace := menu.FindByLabel("Workspace")
+	if workspace == nil || workspace.GetSubmenu() == nil {
+		t.Fatal("expected a Workspace submenu on the application menu")
+	}
+	theme := menu.FindByLabel("Theme")
+	if theme == nil || theme.GetSubmenu() == nil {
+		t.Fatal("expected a Theme submenu on the application menu")
+	}
+	nord := theme.GetSubmenu().FindByLabel("Nord")
+	if nord == nil || !nord.Checked() {
+		t.Fatal("selected theme should be checked")
+	}
+	github := theme.GetSubmenu().FindByLabel("GitHub Light")
+	if github == nil || github.Checked() {
+		t.Fatal("unselected theme should not be checked")
+	}
+	open := workspace.GetSubmenu().FindByLabel("Open Workspace")
+	if open == nil || open.GetSubmenu() == nil || open.GetSubmenu().FindByLabel("Writing") == nil {
+		t.Fatal("Workspace menu should list the saved name used at refresh")
+	}
+}
+
+func TestApplicationVersionIs101(t *testing.T) {
+	if applicationVersion != "1.0.1" {
+		t.Fatalf("applicationVersion = %q, want 1.0.1", applicationVersion)
+	}
+	if applicationMenuMainThreadFixMarker != "obails-v1.0.1-setApplicationMenu-main-thread" {
+		t.Fatalf("crash-fix marker = %q", applicationMenuMainThreadFixMarker)
+	}
+}
+
+func TestApplicationMenuRuntimeDispatcherIsWailsInvokeSync(t *testing.T) {
+	if reflect.ValueOf(applicationMenuRuntimeDispatcher).Pointer() != reflect.ValueOf(application.InvokeSync).Pointer() {
+		t.Fatal("runtime SetApplicationMenu dispatch must use application.InvokeSync")
 	}
 }
 

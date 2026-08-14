@@ -30,4 +30,16 @@ describe("workspaceLayoutTree", () => {
     expect(visible?.children.map((child) => child.paneId)).toEqual(["main", "side"]);
     expect(visible?.children.map((child) => child.weight)).toEqual([3, 1]);
   });
+
+  it("keeps a replacement empty pane when the original leaf is detached", () => {
+    const layout = workspaceLayoutTree({
+      splitDirection: "horizontal",
+      weights: [1, 1],
+      children: [{ paneId: "main" }, { paneId: "empty" }],
+    });
+    const visible = withoutWorkspacePanes(layout, new Set(["main"]));
+
+    expect(visible?.paneId).toBe("empty");
+    expect(visible?.children).toEqual([]);
+  });
 });

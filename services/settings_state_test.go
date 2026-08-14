@@ -371,7 +371,163 @@ func TestStateService_PopoutTransitionsPersistToRealFilesystem(t *testing.T) {
 	}
 }
 
-func TestStateService_PopoutRejectsFinalVisiblePaneWithoutChangingState(t *testing.T) {
+func TestStateService_PopoutFinalVisiblePaneClonesActiveNoteInMainPane(t *testing.T) {
+	vaultPath := t.TempDir()
+	config := models.DefaultConfig()
+	config.Vault.Path = vaultPath
+	service := NewStateService(&ConfigService{config: config})
+	workspace := models.WorkspaceState{
+		PaneTree:     &models.PaneTree{PaneID: "main"},
+		ActivePaneID: "main",
+		PaneTabs: []models.PaneTabs{{
+			PaneID:        "main",
+			Tabs:          []models.WorkspaceTab{{Path: "notes/one.md", FileType: "markdown"}},
+			ActiveTabPath: "notes/one.md",
+		}},
+	}
+	if err := service.SetWorkspaceState(workspace); err != nil {
+		t.Fatalf("SetWorkspaceState: %v", err)
+	}
+	popout := models.PopoutWindow{ID: "only", PaneID: "main", Width: 1, Height: 1}
+	added, err := service.AddPopoutWindow(popout)
+	if err != nil {
+		t.Fatalf("AddPopoutWindow final visible pane: %v", err)
+	}
+	if len(added.PopoutWindows) != 1 || added.PopoutWindows[0] != popout {
+		t.Fatalf("final pane popout records = %#v", added.PopoutWindows)
+	}
+	if added.PaneTree == nil || added.PaneTree.SplitDirection != models.SplitDirectionHorizontal || len(added.PaneTree.Children) != 2 {
+		t.Fatalf("final pane popout tree = %#v", added.PaneTree)
+	}
+	if added.PaneTree.Children[0].PaneID != "main" {
+		t.Fatalf("popped pane moved in the tree: %#v", added.PaneTree)
+	}
+	replacementID := added.PaneTree.Children[1].PaneID
+	if replacementID == "" || replacementID == "main" || added.ActivePaneID != replacementID {
+		t.Fatalf("replacement pane = %q active = %q", replacementID, added.ActivePaneID)
+	}
+	if len(added.PaneTabs) != 2 {
+		t.Fatalf("pane tabs = %#v", added.PaneTabs)
+	}
+	var replacementTabs *models.PaneTabs
+	for index := range added.PaneTabs {
+		if added.PaneTabs[index].PaneID == replacementID {
+			replacementTabs = &added.PaneTabs[index]
+		}
+		if added.PaneTabs[index].PaneID == "main" && (len(added.PaneTabs[index].Tabs) != 1 || added.PaneTabs[index].ActiveTabPath != "notes/one.md") {
+			t.Fatalf("popped pane tabs were rewritten: %#v", added.PaneTabs[index])
+		}
+	}
+	if replacementTabs == nil || len(replacementTabs.Tabs) != 1 || replacementTabs.Tabs[0].Path != "notes/one.md" || replacementTabs.Tabs[0].FileType != "markdown" || replacementTabs.ActiveTabPath != "notes/one.md" {
+		t.Fatalf("replacement pane did not clone the active note: %#v", replacementTabs)
+	}
+	if firstVisibleWorkspacePane(*added.PaneTree, added.PopoutWindows, "") != replacementID {
+		t.Fatalf("main window has no visible pane after final popout: %#v", added)
+	}
+	reloaded := NewStateService(&ConfigService{config: config})
+	if err := reloaded.Load(); err != nil {
+		t.Fatalf("Load after final pane popout: %v", err)
+	}
+	if got := reloaded.GetWorkspaceState(); !reflect.DeepEqual(got, added) {
+		t.Fatalf("persisted final pane popout = %#v, want %#v", got, added)
+	}
+
+	if _, err := service.CloseWorkspacePane(replacementID); err == nil {
+		t.Fatal("CloseWorkspacePane accepted the last visible pane while a popout remained")
+	}
+	if got := service.GetWorkspaceState(); !reflect.DeepEqual(got, added) {
+		t.Fatalf("rejected last-visible close changed runtime: %#v", got)
+	}
+
+	rejoined, matched, err := service.RemovePopoutWindowIfMatches(popout.ID, popout.PaneID)
+	if err != nil || !matched {
+		t.Fatalf("RemovePopoutWindowIfMatches: matched=%v err=%v", matched, err)
+	}
+	if len(rejoined.PopoutWindows) != 0 {
+		t.Fatalf("rejoin left popout records: %#v", rejoined.PopoutWindows)
+	}
+	if rejoined.PaneTree == nil || len(rejoined.PaneTree.Children) != 2 {
+		t.Fatalf("rejoin dropped a pane: %#v", rejoined.PaneTree)
+	}
+	var mainTabs, remainderTabs *models.PaneTabs
+	for index := range rejoined.PaneTabs {
+		switch rejoined.PaneTabs[index].PaneID {
+		case "main":
+			mainTabs = &rejoined.PaneTabs[index]
+		case replacementID:
+			remainderTabs = &rejoined.PaneTabs[index]
+		}
+	}
+	if mainTabs == nil || remainderTabs == nil {
+		t.Fatalf("rejoin lost a pane's tabs: %#v", rejoined.PaneTabs)
+	}
+	if len(mainTabs.Tabs) != 1 || mainTabs.Tabs[0].Path != "notes/one.md" || mainTabs.ActiveTabPath != "notes/one.md" {
+		t.Fatalf("rejoin rewrote the popped pane tabs: %#v", mainTabs)
+	}
+	if len(remainderTabs.Tabs) != 1 || remainderTabs.Tabs[0].Path != "notes/one.md" || remainderTabs.ActiveTabPath != "notes/one.md" {
+		t.Fatalf("rejoin dropped the main remainder note: %#v", remainderTabs)
+	}
+}
+
+func TestStateService_PopoutLastRemainingVisiblePaneClonesActiveNoteInMainPane(t *testing.T) {
+	vaultPath := t.TempDir()
+	config := models.DefaultConfig()
+	config.Vault.Path = vaultPath
+	service := NewStateService(&ConfigService{config: config})
+	workspace := models.WorkspaceState{
+		PaneTree: &models.PaneTree{
+			SplitDirection: models.SplitDirectionHorizontal,
+			Children:       []models.PaneTree{{PaneID: "main"}, {PaneID: "side"}},
+			Weights:        []float64{1, 1},
+		},
+		ActivePaneID: "main",
+		PaneTabs: []models.PaneTabs{
+			{PaneID: "main"},
+			{PaneID: "side", Tabs: []models.WorkspaceTab{{Path: "notes/side.md", FileType: "markdown"}}, ActiveTabPath: "notes/side.md"},
+		},
+	}
+	if err := service.SetWorkspaceState(workspace); err != nil {
+		t.Fatalf("SetWorkspaceState: %v", err)
+	}
+	if _, err := service.AddPopoutWindow(models.PopoutWindow{ID: "first", PaneID: "main", Width: 1, Height: 1}); err != nil {
+		t.Fatalf("AddPopoutWindow first pane: %v", err)
+	}
+	beforeSecond := service.GetWorkspaceState()
+	if beforeSecond.ActivePaneID != "side" || len(beforeSecond.PaneTree.Children) != 2 {
+		t.Fatalf("first popout changed more than the popout record: %#v", beforeSecond)
+	}
+	added, err := service.AddPopoutWindow(models.PopoutWindow{ID: "second", PaneID: "side", Width: 1, Height: 1})
+	if err != nil {
+		t.Fatalf("AddPopoutWindow last remaining visible pane: %v", err)
+	}
+	if len(added.PopoutWindows) != 2 {
+		t.Fatalf("popout records = %#v", added.PopoutWindows)
+	}
+	replacementID := firstVisibleWorkspacePane(*added.PaneTree, added.PopoutWindows, "")
+	if replacementID == "" || replacementID == "main" || replacementID == "side" || added.ActivePaneID != replacementID {
+		t.Fatalf("last remaining popout left an invalid main pane: %#v", added)
+	}
+	var cloned *models.PaneTabs
+	for index := range added.PaneTabs {
+		if added.PaneTabs[index].PaneID == replacementID {
+			cloned = &added.PaneTabs[index]
+		}
+		if added.PaneTabs[index].PaneID == "side" && (len(added.PaneTabs[index].Tabs) != 1 || added.PaneTabs[index].ActiveTabPath != "notes/side.md") {
+			t.Fatalf("popped last pane tabs were rewritten: %#v", added.PaneTabs[index])
+		}
+	}
+	if cloned == nil || len(cloned.Tabs) != 1 || cloned.Tabs[0].Path != "notes/side.md" || cloned.Tabs[0].FileType != "markdown" || cloned.ActiveTabPath != "notes/side.md" {
+		t.Fatalf("last remaining replacement did not clone the active note: %#v", cloned)
+	}
+	if _, err := service.CloseWorkspacePane(replacementID); err == nil {
+		t.Fatal("CloseWorkspacePane accepted the last visible pane")
+	}
+	if got := service.GetWorkspaceState(); !reflect.DeepEqual(got, added) {
+		t.Fatalf("rejected last-visible close changed runtime: %#v", got)
+	}
+}
+
+func TestStateService_PopoutUnknownPaneDoesNotChangeState(t *testing.T) {
 	vaultPath := t.TempDir()
 	config := models.DefaultConfig()
 	config.Vault.Path = vaultPath
@@ -380,24 +536,91 @@ func TestStateService_PopoutRejectsFinalVisiblePaneWithoutChangingState(t *testi
 	if err := service.SetWorkspaceState(workspace); err != nil {
 		t.Fatalf("SetWorkspaceState: %v", err)
 	}
-	statePath := service.getStatePath()
 	beforeRuntime := service.GetWorkspaceState()
-	beforeDisk, err := os.ReadFile(statePath)
+	beforeDisk, err := os.ReadFile(service.getStatePath())
 	if err != nil {
 		t.Fatalf("ReadFile before AddPopoutWindow: %v", err)
 	}
-	if _, err := service.AddPopoutWindow(models.PopoutWindow{ID: "only", PaneID: "main", Width: 1, Height: 1}); err == nil {
-		t.Fatal("AddPopoutWindow accepted the final visible pane")
+	if _, err := service.AddPopoutWindow(models.PopoutWindow{ID: "only", PaneID: "missing", Width: 1, Height: 1}); err == nil {
+		t.Fatal("AddPopoutWindow accepted a pane that is not in the workspace")
 	}
 	if got := service.GetWorkspaceState(); !reflect.DeepEqual(got, beforeRuntime) {
-		t.Fatalf("final pane rejection changed runtime: %#v", got)
+		t.Fatalf("unknown pane popout changed runtime: %#v", got)
 	}
-	afterDisk, err := os.ReadFile(statePath)
+	afterDisk, err := os.ReadFile(service.getStatePath())
 	if err != nil {
 		t.Fatalf("ReadFile after AddPopoutWindow: %v", err)
 	}
 	if !reflect.DeepEqual(afterDisk, beforeDisk) {
-		t.Fatal("final pane rejection changed state.json")
+		t.Fatal("unknown pane popout changed state.json")
+	}
+}
+
+func TestStateService_SplitThenCloseEmptyPaneLeavesSourceTabs(t *testing.T) {
+	vaultPath := t.TempDir()
+	config := models.DefaultConfig()
+	config.Vault.Path = vaultPath
+	service := NewStateService(&ConfigService{config: config})
+	if err := service.SetWorkspaceState(models.WorkspaceState{
+		PaneTree:     &models.PaneTree{PaneID: "main"},
+		ActivePaneID: "main",
+		PaneTabs: []models.PaneTabs{{
+			PaneID:        "main",
+			Tabs:          []models.WorkspaceTab{{Path: "notes/one.md", FileType: "markdown"}},
+			ActiveTabPath: "notes/one.md",
+		}},
+	}); err != nil {
+		t.Fatalf("SetWorkspaceState: %v", err)
+	}
+	split, err := service.SplitWorkspacePane("main", models.SplitDirectionHorizontal, "empty")
+	if err != nil {
+		t.Fatalf("SplitWorkspacePane: %v", err)
+	}
+	if split.ActivePaneID != "empty" {
+		t.Fatalf("split active = %q", split.ActivePaneID)
+	}
+	var mainTabs, emptyTabs *models.PaneTabs
+	for index := range split.PaneTabs {
+		switch split.PaneTabs[index].PaneID {
+		case "main":
+			mainTabs = &split.PaneTabs[index]
+		case "empty":
+			emptyTabs = &split.PaneTabs[index]
+		}
+	}
+	if mainTabs == nil || len(mainTabs.Tabs) != 1 || mainTabs.Tabs[0].Path != "notes/one.md" || mainTabs.ActiveTabPath != "notes/one.md" {
+		t.Fatalf("split rewrote source tabs: %#v", split.PaneTabs)
+	}
+	if emptyTabs == nil || len(emptyTabs.Tabs) != 0 {
+		t.Fatalf("split new pane was not empty: %#v", emptyTabs)
+	}
+	closed, err := service.CloseWorkspacePane("empty")
+	if err != nil {
+		t.Fatalf("CloseWorkspacePane empty: %v", err)
+	}
+	if closed.ActivePaneID != "main" || closed.PaneTree == nil || closed.PaneTree.PaneID != "main" || len(closed.PaneTabs) != 1 {
+		t.Fatalf("close empty result = %#v", closed)
+	}
+	if len(closed.PaneTabs[0].Tabs) != 1 || closed.PaneTabs[0].Tabs[0].Path != "notes/one.md" || closed.PaneTabs[0].ActiveTabPath != "notes/one.md" {
+		t.Fatalf("close empty rewrote source tabs: %#v", closed.PaneTabs)
+	}
+}
+
+func TestStateService_CloseWorkspacePaneRejectsTheOnlyPane(t *testing.T) {
+	vaultPath := t.TempDir()
+	config := models.DefaultConfig()
+	config.Vault.Path = vaultPath
+	service := NewStateService(&ConfigService{config: config})
+	workspace := models.WorkspaceState{PaneTree: &models.PaneTree{PaneID: "main"}, ActivePaneID: "main", PaneTabs: []models.PaneTabs{{PaneID: "main"}}}
+	if err := service.SetWorkspaceState(workspace); err != nil {
+		t.Fatalf("SetWorkspaceState: %v", err)
+	}
+	beforeRuntime := service.GetWorkspaceState()
+	if _, err := service.CloseWorkspacePane("main"); err == nil {
+		t.Fatal("CloseWorkspacePane accepted the only workspace pane")
+	}
+	if got := service.GetWorkspaceState(); !reflect.DeepEqual(got, beforeRuntime) {
+		t.Fatalf("final pane close changed runtime: %#v", got)
 	}
 }
 

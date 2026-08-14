@@ -14,6 +14,21 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
+const applicationVersion = "1.0.1"
+
+// applicationMenuMainThreadFixMarker stays reachable so production binaries
+// contain a strings-searchable proof of the v1.0.1 setMainMenu thread fix.
+var applicationMenuMainThreadFixMarker = "obails-v1.0.1-setApplicationMenu-main-thread"
+
+var applicationMenuRuntimeDispatcher = application.InvokeSync
+
+func armApplicationMenuMainThreadDispatch() {
+	if applicationMenuMainThreadFixMarker == "" {
+		panic("missing SetApplicationMenu main-thread fix marker")
+	}
+	services.SetApplicationMenuDispatcher(applicationMenuRuntimeDispatcher)
+}
+
 type themeMenuOption struct {
 	Group string
 	Label string
@@ -217,7 +232,7 @@ func main() {
 	// Create the application
 	app := application.New(application.Options{
 		Name:        applicationName,
-		Description: "A lightweight Obsidian alternative",
+		Description: "A lightweight Obsidian alternative " + applicationVersion,
 		Icon:        appIcon,
 		Services: []application.Service{
 			application.NewService(configService),
@@ -254,7 +269,10 @@ func main() {
 	services.SetApplicationMenuApplier(selectedTheme, func(theme string, names []string, active string) {
 		app.Menu.SetApplicationMenu(buildApplicationMenu(app, theme, names, active, windowService.SetMenuTheme))
 	})
+	// Before App.Run the platform impl is nil, so SetApplicationMenu only stores
+	// the menu for Wails to apply on the AppKit main thread during Run.
 	windowService.RefreshWorkspaceMenu()
+	armApplicationMenuMainThreadDispatch()
 
 	// Create the main window
 	mainMacWindow := windowVisuals.Mac

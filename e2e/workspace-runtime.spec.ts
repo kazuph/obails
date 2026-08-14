@@ -163,3 +163,134 @@ test.describe.serial("workspace startup popout recovery", () => {
     await expect(page.locator("html")).toHaveAttribute("data-active-pane-id", "startup-main");
   });
 });
+
+test.describe.serial("workspace last visible pane clones active note", () => {
+  let originalState = "";
+  let mainPath = "";
+  let mainName = "";
+  const poppedPaneId = "last-popped";
+  const remainderPaneId = "last-remainder";
+  const popoutId = "last-pane-popout";
+
+  test.beforeAll(async () => {
+    originalState = await readFile(statePath, "utf8");
+    const suffix = `${Date.now()}`;
+    mainName = `workspace-last-${suffix}.md`;
+    mainPath = path.join(fixtureVault, mainName);
+    await writeFile(mainPath, "# Popped last pane\n\nstill in popout", "utf8");
+    await writeFile(statePath, JSON.stringify({
+      workspace: {
+        paneTree: {
+          splitDirection: "horizontal",
+          weights: [1, 1],
+          children: [{ paneId: poppedPaneId }, { paneId: remainderPaneId }],
+        },
+        activePaneId: remainderPaneId,
+        paneTabs: [
+          { paneId: poppedPaneId, tabs: [{ path: mainName, fileType: "markdown" }], activeTabPath: mainName },
+          { paneId: remainderPaneId, tabs: [{ path: mainName, fileType: "markdown" }], activeTabPath: mainName },
+        ],
+        popoutWindows: [{ id: popoutId, paneId: poppedPaneId, x: 0, y: 0, width: 640, height: 480 }],
+      },
+      explorer: {},
+    }), "utf8");
+  });
+
+  test.afterAll(async () => {
+    await writeFile(statePath, originalState, "utf8");
+    await unlink(mainPath);
+  });
+
+  test("keeps the same active note visible in the main window and restores both panes on rejoin", async ({ page, context }) => {
+    const childPagePromise = context.waitForEvent("page");
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+    const child = await childPagePromise;
+    try {
+      await child.waitForLoadState("networkidle");
+
+      await expect(page.locator(".workspace-host .workspace-pane-slot")).toHaveCount(1);
+      await expect(page.locator(`.workspace-pane-slot[data-pane-id="${remainderPaneId}"]`)).toBeVisible();
+      await expect(page.locator(`.workspace-pane-slot[data-pane-id="${poppedPaneId}"]`)).toHaveCount(0);
+      await expect(page.locator(".workspace-pane-empty")).toHaveCount(0);
+      await expect(page.locator(`.rich-surface[data-pane-id="${remainderPaneId}"] textarea`).first()).toHaveValue(/still in popout/);
+      await expect(page.locator("html")).toHaveAttribute("data-active-pane-id", remainderPaneId);
+      await expect(page.locator("#close-pane-btn")).toBeDisabled();
+      await expect(page.locator("#popout-pane-btn")).toBeEnabled();
+      await expect(page.locator("#split-pane-right-btn")).toBeEnabled();
+
+      const route = new URL(child.url());
+      expect(route.searchParams.get("popout")).toBe(poppedPaneId);
+      expect(route.searchParams.get("id")).toBe(popoutId);
+      await expect(child.locator(`.rich-surface[data-pane-id="${poppedPaneId}"]`)).toBeVisible();
+      await expect(child.locator(`.rich-surface[data-pane-id="${poppedPaneId}"] textarea`).first()).toHaveValue(/still in popout/);
+
+      const childClosed = child.waitForEvent("close");
+      await child.locator("#rejoin-popout-btn").click();
+      await childClosed;
+    } finally {
+      if (!child.isClosed()) await child.close();
+    }
+
+    await expect(page.locator(`.workspace-pane-slot[data-pane-id="${remainderPaneId}"]`)).toBeVisible();
+    await expect(page.locator(`.workspace-pane-slot[data-pane-id="${poppedPaneId}"]`)).toBeVisible();
+    await expect(page.locator(`.rich-surface[data-pane-id="${remainderPaneId}"] textarea`).first()).toHaveValue(/still in popout/);
+    await expect(page.locator(`.rich-surface[data-pane-id="${poppedPaneId}"] textarea`).first()).toHaveValue(/still in popout/);
+  });
+});
+
+test.describe.serial("workspace pane split focus close", () => {
+  let originalState = "";
+  let sourcePath = "";
+  let sourceName = "";
+  const sourcePaneId = "split-source";
+
+  test.beforeAll(async () => {
+    originalState = await readFile(statePath, "utf8");
+    const suffix = `${Date.now()}`;
+    sourceName = `workspace-split-close-${suffix}.md`;
+    sourcePath = path.join(fixtureVault, sourceName);
+    await writeFile(sourcePath, "# Original note\n\nmust survive close", "utf8");
+    await writeFile(statePath, JSON.stringify({
+      workspace: {
+        paneTree: { paneId: sourcePaneId },
+        activePaneId: sourcePaneId,
+        paneTabs: [{ paneId: sourcePaneId, tabs: [{ path: sourceName, fileType: "markdown" }], activeTabPath: sourceName }],
+      },
+      explorer: {},
+    }), "utf8");
+  });
+
+  test.afterAll(async () => {
+    await writeFile(statePath, originalState, "utf8");
+    await unlink(sourcePath);
+  });
+
+  test("closes the exact new empty pane and keeps the original note visible", async ({ page }) => {
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+
+    await expect(page.locator(".workspace-host .workspace-pane-slot")).toHaveCount(1);
+    await expect(page.locator(`.workspace-pane-slot[data-pane-id="${sourcePaneId}"] textarea`).first()).toHaveValue(/must survive close/);
+
+    await page.locator("#split-pane-right-btn").click();
+    await expect(page.locator(".workspace-host .workspace-pane-slot")).toHaveCount(2);
+    const empty = page.locator(".workspace-pane-empty");
+    await expect(empty).toHaveText("Open a note from Explorer");
+    await expect(page.locator(`.workspace-pane-slot[data-pane-id="${sourcePaneId}"] textarea`).first()).toHaveValue(/must survive close/);
+    const newPaneId = await empty.evaluate((node) => node.closest(".workspace-pane-slot")?.getAttribute("data-pane-id") ?? "");
+    expect(newPaneId).not.toBe("");
+    expect(newPaneId).not.toBe(sourcePaneId);
+    await expect(page.locator("html")).toHaveAttribute("data-active-pane-id", newPaneId);
+
+    await empty.click();
+    await expect(page.locator("html")).toHaveAttribute("data-active-pane-id", newPaneId);
+    await page.locator("#close-pane-btn").click();
+
+    await expect(page.locator(".workspace-host .workspace-pane-slot")).toHaveCount(1);
+    await expect(page.locator(".workspace-pane-empty")).toHaveCount(0);
+    await expect(page.locator(`.workspace-pane-slot[data-pane-id="${sourcePaneId}"]`)).toBeVisible();
+    await expect(page.locator(`.workspace-pane-slot[data-pane-id="${sourcePaneId}"] textarea`).first()).toHaveValue(/must survive close/);
+    await expect(page.locator("html")).toHaveAttribute("data-active-pane-id", sourcePaneId);
+  });
+});

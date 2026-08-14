@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"sync"
 	"testing"
 
 	"github.com/kazuph/obails/models"
@@ -321,6 +322,83 @@ func TestWindowServicePopoutMutationsReturnSnapshotsAndProtectPairs(t *testing.T
 	})
 }
 
+func TestWindowService_CreatePopoutFinalVisiblePaneClonesActiveNoteInMainPane(t *testing.T) {
+	app := application.Get()
+	if app == nil {
+		app = application.New(application.Options{DisableDefaultSignalHandler: true})
+	}
+	configService, _ := newTestConfigService(t)
+	stateService := NewStateService(configService)
+	if err := stateService.SetWorkspaceState(models.WorkspaceState{
+		PaneTree:     &models.PaneTree{PaneID: "main"},
+		ActivePaneID: "main",
+		PaneTabs: []models.PaneTabs{{
+			PaneID:        "main",
+			Tabs:          []models.WorkspaceTab{{Path: "notes/one.md", FileType: "markdown"}},
+			ActiveTabPath: "notes/one.md",
+		}},
+	}); err != nil {
+		t.Fatalf("SetWorkspaceState: %v", err)
+	}
+	service := NewWindowService(app, stateService, WindowVisuals{})
+	created, err := service.CreatePopout("main", "only", 10, 20, 640, 480)
+	if err != nil {
+		t.Fatalf("CreatePopout final visible pane: %v", err)
+	}
+	if len(created.PopoutWindows) != 1 || created.PopoutWindows[0].PaneID != "main" || created.PopoutWindows[0].ID != "only" {
+		t.Fatalf("create snapshot popouts = %#v", created.PopoutWindows)
+	}
+	replacementID := firstVisibleWorkspacePane(*created.PaneTree, created.PopoutWindows, "")
+	if replacementID == "" || replacementID == "main" || created.ActivePaneID != replacementID {
+		t.Fatalf("create snapshot left no operable main pane: %#v", created)
+	}
+	var replacementTabs *models.PaneTabs
+	for index := range created.PaneTabs {
+		if created.PaneTabs[index].PaneID == replacementID {
+			replacementTabs = &created.PaneTabs[index]
+		}
+		if created.PaneTabs[index].PaneID == "main" && (len(created.PaneTabs[index].Tabs) != 1 || created.PaneTabs[index].ActiveTabPath != "notes/one.md") {
+			t.Fatalf("popped pane tabs were rewritten: %#v", created.PaneTabs[index])
+		}
+	}
+	if replacementTabs == nil || len(replacementTabs.Tabs) != 1 || replacementTabs.Tabs[0].Path != "notes/one.md" || replacementTabs.ActiveTabPath != "notes/one.md" {
+		t.Fatalf("main remainder did not clone the active note: %#v", replacementTabs)
+	}
+	tracked, exists := service.popouts["only"]
+	if !exists || tracked.paneID != "main" || tracked.window == nil {
+		t.Fatal("CreatePopout did not track the native window for the popped pane")
+	}
+	if got := stateService.GetWorkspaceState(); !reflect.DeepEqual(got, created) {
+		t.Fatalf("create snapshot is not authoritative: %#v", got)
+	}
+
+	closed, err := service.ClosePopout("main", "only")
+	if err != nil {
+		t.Fatalf("ClosePopout after final visible popout: %v", err)
+	}
+	if len(closed.PopoutWindows) != 0 || closed.ActivePaneID != replacementID {
+		t.Fatalf("rejoin snapshot = %#v", closed)
+	}
+	if firstVisibleWorkspacePane(*closed.PaneTree, closed.PopoutWindows, "") == "" {
+		t.Fatalf("rejoin left an empty main window: %#v", closed)
+	}
+	var mainTabs, remainderTabs *models.PaneTabs
+	for index := range closed.PaneTabs {
+		switch closed.PaneTabs[index].PaneID {
+		case "main":
+			mainTabs = &closed.PaneTabs[index]
+		case replacementID:
+			remainderTabs = &closed.PaneTabs[index]
+		}
+	}
+	if mainTabs == nil || remainderTabs == nil {
+		t.Fatalf("rejoin dropped a pane: %#v", closed.PaneTabs)
+	}
+	if len(mainTabs.Tabs) != 1 || mainTabs.Tabs[0].Path != "notes/one.md" || len(remainderTabs.Tabs) != 1 || remainderTabs.Tabs[0].Path != "notes/one.md" {
+		t.Fatalf("rejoin lost the cloned note identity: main=%#v remainder=%#v", mainTabs, remainderTabs)
+	}
+}
+
 func TestNativeCloseProtectsExactPairAndShutdownPersistence(t *testing.T) {
 	configService, _ := newTestConfigService(t)
 	stateService := NewStateService(configService)
@@ -381,5 +459,87 @@ func TestWindowService_RefreshWorkspaceMenuUsesSavedNamesWithoutChangingSession(
 	}
 	if got := stateService.GetWorkspaceState(); !reflect.DeepEqual(got, before) {
 		t.Fatalf("RefreshWorkspaceMenu changed session state: %#v", got)
+	}
+}
+
+func TestWindowService_RefreshWorkspaceMenuDispatchesOffTheCallingGoroutine(t *testing.T) {
+	configService, _ := newTestConfigService(t)
+	stateService := NewStateService(configService)
+	if err := stateService.SetWorkspaceState(models.WorkspaceState{
+		PaneTree:     &models.PaneTree{PaneID: "main"},
+		ActivePaneID: "main",
+		PaneTabs:     []models.PaneTabs{{PaneID: "main"}},
+	}); err != nil {
+		t.Fatalf("SetWorkspaceState: %v", err)
+	}
+	if _, err := stateService.SaveNamedWorkspace("Research"); err != nil {
+		t.Fatalf("SaveNamedWorkspace: %v", err)
+	}
+	service := NewWindowService(nil, stateService, WindowVisuals{})
+	var (
+		mu              sync.Mutex
+		dispatchN       int
+		applyN          int
+		applyTheme      string
+		applyNames      []string
+		applyActive     string
+		applyOnDispatch bool
+	)
+	SetApplicationMenuDispatcher(func(fn func()) {
+		mu.Lock()
+		dispatchN++
+		mu.Unlock()
+		fn()
+	})
+	t.Cleanup(func() { SetApplicationMenuDispatcher(nil) })
+	SetApplicationMenuApplier("nord", func(theme string, names []string, active string) {
+		mu.Lock()
+		defer mu.Unlock()
+		applyN++
+		applyTheme = theme
+		applyNames = append([]string(nil), names...)
+		applyActive = active
+		applyOnDispatch = dispatchN == 1
+	})
+	t.Cleanup(func() { SetApplicationMenuApplier("", nil) })
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		service.SetMenuTheme("dracula")
+		service.RefreshWorkspaceMenu()
+	}()
+	<-done
+
+	mu.Lock()
+	defer mu.Unlock()
+	if dispatchN != 1 || applyN != 1 || !applyOnDispatch {
+		t.Fatalf("off-main menu refresh dispatch=%d apply=%d applyOnDispatch=%v", dispatchN, applyN, applyOnDispatch)
+	}
+	if applyTheme != "dracula" || applyActive != "Research" || len(applyNames) != 1 || applyNames[0] != "Research" {
+		t.Fatalf("dispatched menu refresh = theme:%q names:%v active:%q", applyTheme, applyNames, applyActive)
+	}
+}
+
+func TestWindowService_RefreshWorkspaceMenuRunsInlineWhenDispatcherIsNil(t *testing.T) {
+	configService, _ := newTestConfigService(t)
+	stateService := NewStateService(configService)
+	if err := stateService.SetWorkspaceState(models.WorkspaceState{
+		PaneTree:     &models.PaneTree{PaneID: "main"},
+		ActivePaneID: "main",
+		PaneTabs:     []models.PaneTabs{{PaneID: "main"}},
+	}); err != nil {
+		t.Fatalf("SetWorkspaceState: %v", err)
+	}
+	service := NewWindowService(nil, stateService, WindowVisuals{})
+	SetApplicationMenuDispatcher(nil)
+	calls := 0
+	SetApplicationMenuApplier("github-light", func(string, []string, string) {
+		calls++
+	})
+	t.Cleanup(func() { SetApplicationMenuApplier("", nil) })
+	service.RefreshWorkspaceMenu()
+	if calls != 1 {
+		t.Fatalf("startup inline menu apply calls = %d, want 1", calls)
 	}
 }

@@ -53,8 +53,10 @@ import {
   type WorkspaceStateSnapshot,
   leafPaneIds,
   paneTabsFor,
+  visibleLeafPaneIds,
 } from "./lib/workspace-runtime-controller";
 import { splitWeightsFromPointer, withoutWorkspacePanes, workspaceLayoutTree, type WorkspaceLayoutNode } from "./lib/workspace-layout";
+import { bindLegacyPaneId, capturedClosePaneId, EMPTY_PANE_INSTRUCTION, factorySurfacePaneIds, shouldClearLegacyEditor } from "./lib/workspace-pane-identity";
 import { WorkspaceRefreshCoordinator } from "./lib/workspace-refresh";
 import { resolveWindowDimensions } from "./lib/workspace-state";
 import {
@@ -192,7 +194,7 @@ import {
 } from "./lib/named-workspace-commands";
 import { createWorkspacePaneTabStrip } from "./lib/workspace-pane-tab-strip";
 import { installFilenameInputKeyboard } from "./lib/composition-submit-guard";
-import { buildOperationStatusView } from "./lib/operation-status";
+import { buildOperationStatusView, describeHumanOperationError } from "./lib/operation-status";
 import { updatePaneSidebarCache, rewritePaneSidebarCachePath, type PaneSidebarCache } from "./lib/pane-sidebar-state";
 import * as pdfjsLib from "pdfjs-dist";
 
@@ -421,20 +423,20 @@ function removeMissingPaneSurfaces(snapshot: WorkspaceStateSnapshot) {
 }
 
 function assignInitialLegacySurface(snapshot: WorkspaceStateSnapshot) {
-    if (!legacyRichSurfaceRoot || !snapshot.activePaneId) {
-        return;
-    }
-    if (legacySurfacePaneId !== snapshot.activePaneId) {
-        const previousPaneId = legacySurfacePaneId;
-        const replacement = paneSurfaces.get(snapshot.activePaneId);
-        replacement?.root.remove();
-        paneSurfaces.delete(snapshot.activePaneId);
-        legacySurfacePaneId = snapshot.activePaneId;
+    if (!legacyRichSurfaceRoot) return;
+    const paneIds = leafPaneIds(snapshot.paneTree);
+    const nextLegacyPaneId = bindLegacyPaneId({
+        assigned: legacySurfaceAssigned,
+        currentLegacyPaneId: legacySurfacePaneId,
+        paneIds,
+        snapshotActivePaneId: snapshot.activePaneId,
+    });
+    if (!legacySurfaceAssigned || nextLegacyPaneId !== legacySurfacePaneId) {
+        legacySurfacePaneId = nextLegacyPaneId;
         legacyRichSurfaceRoot.dataset.paneId = legacySurfacePaneId;
         legacyRichSurfaceRoot.setAttribute("aria-label", `Document pane ${legacySurfacePaneId}`);
         editor.setAttribute("aria-label", `Editor in pane ${legacySurfacePaneId}`);
         htmlEditor.setAttribute("aria-label", `HTML editor in pane ${legacySurfacePaneId}`);
-        if (leafPaneIds(snapshot.paneTree).includes(previousPaneId)) ensurePaneSurface(previousPaneId);
     }
     legacySurfaceAssigned = true;
 }
@@ -453,6 +455,9 @@ function renderWorkspaceLayout(snapshot: WorkspaceStateSnapshot) {
             slot.className = "workspace-pane-slot";
             slot.dataset.paneId = node.paneId;
             slot.style.flexGrow = String(node.weight);
+            slot.addEventListener("pointerdown", () => {
+                void activateWorkspacePaneFromUi(node.paneId);
+            });
             const tabStrip = paneTabStrips.get(node.paneId);
             if (tabStrip) slot.append(tabStrip);
             const root = roots.get(node.paneId);
@@ -528,10 +533,17 @@ function activeHtmlEditorElement(): HTMLTextAreaElement {
     return activeRichSurface()?.htmlEditor || htmlEditor;
 }
 
+function focusWorkspacePane(paneId: string) {
+    const surface = paneSurfaces.get(paneId);
+    const target = surface?.editor || (paneId === legacySurfacePaneId ? editor : null);
+    if (!target || document.activeElement === target) return;
+    target.focus({ preventScroll: true });
+}
+
 function showEmptyForActivePane() {
     const surface = activeRichSurface();
     if (!surface) {
-        showEmptyMainPane();
+        if (shouldClearLegacyEditor(activePaneId, legacySurfacePaneId, false)) showEmptyMainPane();
         return;
     }
     surface.editorContainer.style.display = "flex";
@@ -541,8 +553,8 @@ function showEmptyForActivePane() {
     surface.htmlEditorContainer.style.display = "none";
     surface.timelinePanel.style.display = "none";
     surface.editor.value = "";
-    surface.preview.textContent = "Select a note from the file tree.";
-    surface.editorTitle.textContent = "Select a note...";
+    surface.preview.textContent = EMPTY_PANE_INSTRUCTION;
+    surface.editorTitle.textContent = EMPTY_PANE_INSTRUCTION;
     surface.previewTitle.textContent = "Preview";
     surface.outlineList.innerHTML = '<div class="outline-empty">Headings you write will gather here</div>';
 }
@@ -992,19 +1004,10 @@ function applyWorkspaceSnapshot(snapshot: WorkspaceStateSnapshot) {
     const paneIds = leafPaneIds(snapshot.paneTree);
     assignInitialLegacySurface(snapshot);
     const nextActivePaneId = popoutRoute?.paneId || snapshot.activePaneId || paneIds[0];
-    if (paneIds.length > 0 && !paneIds.includes(legacySurfacePaneId)) {
-        legacySurfacePaneId = paneIds[0];
-        const legacyRoot = workspaceHost.querySelector<HTMLElement>(".legacy-rich-surface");
-        if (legacyRoot) {
-            legacyRoot.dataset.paneId = legacySurfacePaneId;
-            legacyRoot.setAttribute("aria-label", `Document pane ${legacySurfacePaneId}`);
-        }
-        editor.setAttribute("aria-label", `Editor in pane ${legacySurfacePaneId}`);
-        htmlEditor.setAttribute("aria-label", `HTML editor in pane ${legacySurfacePaneId}`);
-    }
-    const visiblePaneIds = popoutRoute ? [popoutRoute.paneId] : paneIds;
-    for (const paneId of visiblePaneIds) {
-        if (paneId !== legacySurfacePaneId) ensurePaneSurface(paneId);
+    const previousActivePaneId = activePaneId;
+    const visiblePaneIds = popoutRoute ? [popoutRoute.paneId] : visibleLeafPaneIds(snapshot.paneTree, snapshot.popoutWindows);
+    for (const paneId of factorySurfacePaneIds(visiblePaneIds, legacySurfacePaneId)) {
+        ensurePaneSurface(paneId);
     }
     removeMissingPaneSurfaces(snapshot);
     if (nextActivePaneId) {
@@ -1017,7 +1020,7 @@ function applyWorkspaceSnapshot(snapshot: WorkspaceStateSnapshot) {
     }
     renderWorkspacePaneTabs(snapshot);
     renderWorkspaceLayout(snapshot);
-    workspaceHost.dataset.paneCount = String(paneIds.length);
+    workspaceHost.dataset.paneCount = String(visiblePaneIds.length);
     const activeDocument = primaryDocumentRuntime.activeEditableDocument;
     const activeFailure = activeDocument?.failure;
     if (activeDocument && activeFailure) {
@@ -1034,10 +1037,14 @@ function applyWorkspaceSnapshot(snapshot: WorkspaceStateSnapshot) {
     }
     renderActiveSharedSidebar();
     document.documentElement.dataset.activePaneId = activePaneId;
-    splitPaneRightButton.disabled = Boolean(popoutRoute) || paneIds.length === 0;
-    splitPaneDownButton.disabled = Boolean(popoutRoute) || paneIds.length === 0;
-    closePaneButton.disabled = Boolean(popoutRoute) || paneIds.length <= 1;
+    if (legacyRichSurfaceRoot) legacyRichSurfaceRoot.dataset.active = legacySurfacePaneId === activePaneId ? "true" : "false";
+    splitPaneRightButton.disabled = Boolean(popoutRoute) || visiblePaneIds.length === 0;
+    splitPaneDownButton.disabled = Boolean(popoutRoute) || visiblePaneIds.length === 0;
+    closePaneButton.disabled = Boolean(popoutRoute) || visiblePaneIds.length <= 1;
     applyPopoutToolbarMode();
+    if (nextActivePaneId && nextActivePaneId !== previousActivePaneId) {
+        queueMicrotask(() => focusWorkspacePane(nextActivePaneId));
+    }
 }
 
 function applyPopoutToolbarMode() {
@@ -1065,6 +1072,7 @@ function renderWorkspacePaneTabs(snapshot: WorkspaceStateSnapshot) {
                 activateTab: (targetPaneId, path) => void activateWorkspaceTabFromUi(targetPaneId, path),
                 closeTab: (targetPaneId, path) => void closeWorkspaceTabFromUi(targetPaneId, path),
                 renameTab: (targetPaneId, path) => void renameWorkspaceTabFromUi(targetPaneId, path),
+                activatePane: (targetPaneId) => void activateWorkspacePaneFromUi(targetPaneId),
             },
         );
         // Keep the visible × from createWorkspacePaneTabStrip; icon injection hid AX names.
@@ -1080,6 +1088,7 @@ function renderWorkspacePaneTabs(snapshot: WorkspaceStateSnapshot) {
 
 async function activateWorkspacePaneFromUi(paneId: string) {
     if (popoutRoute && paneId !== popoutRoute.paneId) return;
+    document.documentElement.dataset.activePaneId = paneId;
     if (paneId === activePaneId) return;
     const snapshot = await workspaceController.activatePane(paneId);
     if (!snapshot) return;
@@ -1136,7 +1145,7 @@ async function openActiveWorkspaceTab(snapshot: WorkspaceStateSnapshot) {
     if (tab) {
         await openFile(tab.path, tab.fileType, { workspaceAlreadyOpen: true });
     } else {
-        showEmptyMainPane();
+        showEmptyForActivePane();
     }
 }
 
@@ -1154,12 +1163,13 @@ async function splitActiveWorkspacePane(direction: "horizontal" | "vertical") {
     if (popoutRoute) return;
     const newPaneId = `pane-${crypto.randomUUID()}`;
     const snapshot = await workspaceController.splitPane(activePaneId, direction, newPaneId);
-    if (snapshot) showEmptyForActivePane();
+    if (snapshot) await openActiveWorkspaceTab(snapshot);
 }
 
 async function closeActiveWorkspacePane() {
     if (popoutRoute) return;
-    const snapshot = await workspaceController.closePane(activePaneId);
+    const paneId = capturedClosePaneId(document.documentElement.dataset.activePaneId || "", activePaneId);
+    const snapshot = await workspaceController.closePane(paneId);
     if (snapshot) await openActiveWorkspaceTab(snapshot);
 }
 
@@ -1188,6 +1198,7 @@ async function createActivePanePopout() {
         announceOperation("Could not pop out this pane because its pending save failed.");
         return;
     }
+    const poppedPaneId = activePaneId;
     const popoutId = `popout-${crypto.randomUUID()}`;
     const dimensions = resolveWindowDimensions(
         window.outerWidth,
@@ -1201,7 +1212,7 @@ async function createActivePanePopout() {
     }
     try {
         const snapshot = await WindowService.CreatePopout(
-            activePaneId,
+            poppedPaneId,
             popoutId,
             window.screenX,
             window.screenY,
@@ -1209,9 +1220,10 @@ async function createActivePanePopout() {
             dimensions.height,
         );
         await workspaceController.adoptBackendSnapshot(snapshot);
-        announceOperation(`Opened pane “${activePaneId}” in a new window.`);
+        await openActiveWorkspaceTab(snapshot);
+        announceOperation(`Opened pane “${poppedPaneId}” in a new window.`);
     } catch (error) {
-        announceOperation(`Could not pop out this pane: ${describeOperationError(error)}.`);
+        announceOperation(`Could not pop out this pane: ${describeHumanOperationError(error, "the new window could not be opened")}.`);
     }
 }
 
@@ -1789,8 +1801,8 @@ function setupToolbarIcons() {
     setButtonIcon(document.getElementById("vault-search-btn")!, "search");
     setButtonIcon(document.getElementById("refresh-btn")!, "refresh");
     setButtonIcon(document.getElementById("source-toggle-btn")!, "code");
-    setButtonIcon(document.getElementById("split-pane-right-btn")!, "page-single");
-    setButtonIcon(document.getElementById("split-pane-down-btn")!, "page-continuous");
+    setButtonIcon(document.getElementById("split-pane-right-btn")!, "split-right");
+    setButtonIcon(document.getElementById("split-pane-down-btn")!, "split-down");
     setButtonIcon(document.getElementById("close-pane-btn")!, "close");
     setButtonIcon(document.getElementById("popout-pane-btn")!, "external-link");
     setButtonIconWithLabel(document.getElementById("rejoin-popout-btn")!, "external-link", "Rejoin");

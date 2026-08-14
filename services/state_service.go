@@ -1,6 +1,8 @@
 package services
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -311,7 +313,8 @@ func (s *StateService) CloseWorkspacePane(paneID string) (models.WorkspaceState,
 		if !paneTreeContainsID(*workspace.PaneTree, paneID) {
 			return fmt.Errorf("pane %q is not in the workspace", paneID)
 		}
-		if paneTreeLeafCount(*workspace.PaneTree) <= 1 {
+		remainingVisible := firstVisibleWorkspacePane(*workspace.PaneTree, workspace.PopoutWindows, paneID)
+		if remainingVisible == "" {
 			return fmt.Errorf("cannot close the final workspace pane")
 		}
 		nextTree, removed := removeWorkspacePaneTree(*workspace.PaneTree, paneID)
@@ -322,7 +325,7 @@ func (s *StateService) CloseWorkspacePane(paneID string) (models.WorkspaceState,
 		workspace.PaneTabs = removeWorkspacePaneTabs(workspace.PaneTabs, paneID)
 		workspace.PopoutWindows = removeWorkspacePanePopouts(workspace.PopoutWindows, paneID)
 		if workspace.ActivePaneID == paneID {
-			workspace.ActivePaneID = workspace.PaneTabs[0].PaneID
+			workspace.ActivePaneID = remainingVisible
 		}
 		return nil
 	})
@@ -446,14 +449,31 @@ func (s *StateService) DeleteNamedWorkspace(name string) (models.WorkspaceState,
 
 // AddPopoutWindow validates and persists one newly detached pane, returning
 // the authoritative workspace snapshot after the write succeeds.
+// If this would hide the last visible main-window pane, a replacement sibling
+// is created with a copy of the popped pane's active tab (same path/fileType)
+// so the main window keeps showing that note. The original pane stays in the
+// popout. The copy is identity-only: each window owns an independent runtime.
 func (s *StateService) AddPopoutWindow(popout models.PopoutWindow) (models.WorkspaceState, error) {
 	return s.updateWorkspace(func(workspace *models.WorkspaceState) error {
 		if workspace.PaneTree == nil {
 			return fmt.Errorf("workspace has no pane tree")
 		}
+		if !paneTreeContainsID(*workspace.PaneTree, popout.PaneID) {
+			return fmt.Errorf("pane %q is not in the workspace", popout.PaneID)
+		}
 		visiblePaneID := firstVisibleWorkspacePane(*workspace.PaneTree, workspace.PopoutWindows, popout.PaneID)
 		if visiblePaneID == "" {
-			return fmt.Errorf("cannot pop out the final visible workspace pane")
+			replacementID, err := newWorkspacePaneID(*workspace.PaneTree)
+			if err != nil {
+				return err
+			}
+			split, changed := splitWorkspacePaneTree(*workspace.PaneTree, popout.PaneID, models.SplitDirectionHorizontal, replacementID)
+			if !changed {
+				return fmt.Errorf("pane %q is not a leaf pane", popout.PaneID)
+			}
+			workspace.PaneTree = &split
+			workspace.PaneTabs = append(workspace.PaneTabs, cloneActiveTabForReplacement(workspace, popout.PaneID, replacementID))
+			visiblePaneID = replacementID
 		}
 		workspace.PopoutWindows = append(workspace.PopoutWindows, popout)
 		if workspace.ActivePaneID == popout.PaneID {
@@ -562,6 +582,33 @@ func (s *StateService) updateWorkspace(mutate func(*models.WorkspaceState) error
 	}
 	s.state = candidate
 	return candidate.Clone().Workspace, nil
+}
+
+func cloneActiveTabForReplacement(workspace *models.WorkspaceState, sourcePaneID, replacementID string) models.PaneTabs {
+	replacement := models.PaneTabs{PaneID: replacementID}
+	pane, err := workspacePane(workspace, sourcePaneID)
+	if err != nil {
+		return replacement
+	}
+	var tab models.WorkspaceTab
+	found := false
+	for _, candidate := range pane.Tabs {
+		if candidate.Path == pane.ActiveTabPath {
+			tab = candidate
+			found = true
+			break
+		}
+	}
+	if !found && len(pane.Tabs) > 0 {
+		tab = pane.Tabs[len(pane.Tabs)-1]
+		found = true
+	}
+	if !found {
+		return replacement
+	}
+	replacement.Tabs = []models.WorkspaceTab{{Path: tab.Path, FileType: tab.FileType}}
+	replacement.ActiveTabPath = tab.Path
+	return replacement
 }
 
 func workspacePane(workspace *models.WorkspaceState, paneID string) (*models.PaneTabs, error) {
@@ -750,15 +797,18 @@ func paneTreeContainsID(node models.PaneTree, paneID string) bool {
 	return false
 }
 
-func paneTreeLeafCount(node models.PaneTree) int {
-	if len(node.Children) == 0 {
-		return 1
+func newWorkspacePaneID(tree models.PaneTree) (string, error) {
+	for range 8 {
+		randomBytes := make([]byte, 16)
+		if _, err := rand.Read(randomBytes); err != nil {
+			return "", fmt.Errorf("could not create a replacement workspace pane")
+		}
+		id := "pane-" + hex.EncodeToString(randomBytes)
+		if exactWorkspaceID(id) && !paneTreeContainsID(tree, id) {
+			return id, nil
+		}
 	}
-	count := 0
-	for _, child := range node.Children {
-		count += paneTreeLeafCount(child)
-	}
-	return count
+	return "", fmt.Errorf("could not create a replacement workspace pane")
 }
 
 func firstVisibleWorkspacePane(tree models.PaneTree, popouts []models.PopoutWindow, excludingPaneID string) string {

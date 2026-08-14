@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { workspaceLeafRestoreTargets } from "../../lib/workspace-restore";
+import { workspaceLeafRestoreTargets, workspacePaneActiveTab } from "../../lib/workspace-restore";
 import type { WorkspaceStateSnapshot } from "../../lib/workspace-snapshot";
 
 describe("workspaceLeafRestoreTargets", () => {
@@ -35,5 +35,36 @@ describe("workspaceLeafRestoreTargets", () => {
     };
 
     expect(workspaceLeafRestoreTargets(snapshot, "main", new Set(["main"]))).toEqual([]);
+  });
+
+  it("keeps the original leaf as a restore target while the new empty pane is active", () => {
+    const snapshot: WorkspaceStateSnapshot = {
+      paneTree: { splitDirection: "horizontal", children: [{ paneId: "left" }, { paneId: "right" }], weights: [1, 1] },
+      activePaneId: "right",
+      paneTabs: [
+        { paneId: "left", tabs: [{ path: "notes/one.md", fileType: "markdown" }], activeTabPath: "notes/one.md" },
+        { paneId: "right", tabs: [] },
+      ],
+    };
+    expect(workspacePaneActiveTab(snapshot, "left")).toEqual({ path: "notes/one.md", fileType: "markdown" });
+    expect(workspacePaneActiveTab(snapshot, "right")).toBeUndefined();
+    expect(workspaceLeafRestoreTargets(snapshot, "right", new Set(["left", "right"]))).toEqual([
+      { paneId: "left", tab: { path: "notes/one.md", fileType: "markdown" } },
+    ]);
+  });
+
+  it("keeps the cloned active note on the main remainder pane after final popout", () => {
+    const snapshot: WorkspaceStateSnapshot = {
+      paneTree: { splitDirection: "horizontal", children: [{ paneId: "main" }, { paneId: "remainder" }], weights: [1, 1] },
+      activePaneId: "remainder",
+      paneTabs: [
+        { paneId: "main", tabs: [{ path: "notes/one.md", fileType: "markdown" }], activeTabPath: "notes/one.md" },
+        { paneId: "remainder", tabs: [{ path: "notes/one.md", fileType: "markdown" }], activeTabPath: "notes/one.md" },
+      ],
+      popoutWindows: [{ id: "only", paneId: "main", x: 0, y: 0, width: 640, height: 480 }],
+    };
+    expect(workspacePaneActiveTab(snapshot, "remainder")).toEqual({ path: "notes/one.md", fileType: "markdown" });
+    expect(workspacePaneActiveTab(snapshot, "main")).toEqual({ path: "notes/one.md", fileType: "markdown" });
+    expect(workspaceLeafRestoreTargets(snapshot, "remainder", new Set(["remainder"]))).toEqual([]);
   });
 });

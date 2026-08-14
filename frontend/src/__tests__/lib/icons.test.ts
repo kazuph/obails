@@ -18,6 +18,8 @@ const ACTION_ICONS: IconName[] = [
   "trash",
   "page-single",
   "page-continuous",
+  "split-right",
+  "split-down",
 ];
 
 describe("icons", () => {
@@ -26,10 +28,14 @@ describe("icons", () => {
     expect(renderIcon("folder-open")).toContain("<svg");
   });
 
-  it("sets button inner html", () => {
+  it("keeps aria-label and title when injecting an icon", () => {
     const button = document.createElement("button");
-    setButtonIcon(button, "refresh");
-    expect(button.innerHTML).toContain("<svg");
+    button.setAttribute("aria-label", "Split pane right");
+    button.title = "Split pane right";
+    setButtonIcon(button, "split-right");
+    expect(button.getAttribute("aria-label")).toBe("Split pane right");
+    expect(button.title).toBe("Split pane right");
+    expect(button.querySelector("svg")).not.toBeNull();
   });
 
   it("keeps a visible text label beside an action icon", () => {
@@ -61,5 +67,14 @@ describe("icons", () => {
     for (const name of [...FILE_TYPE_ICONS, ...ACTION_ICONS]) {
       expect(renderIcon(name), name).toContain("currentColor");
     }
+  });
+
+  it("uses Lucide Columns2 and Rows2 path data for split icons", () => {
+    expect(renderIcon("split-right")).toContain('width="18" height="18" x="3" y="3" rx="2"');
+    expect(renderIcon("split-right")).toContain('d="M12 3v18"');
+    expect(renderIcon("split-down")).toContain('width="18" height="18" x="3" y="3" rx="2"');
+    expect(renderIcon("split-down")).toContain('d="M3 12h18"');
+    expect(renderIcon("split-right")).not.toContain("<line");
+    expect(renderIcon("split-down")).not.toContain("<line");
   });
 });

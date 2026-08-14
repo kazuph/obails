@@ -40,6 +40,14 @@ export function leafPaneIds(tree: WorkspacePaneTreeSnapshot | null | undefined):
   return (tree.children ?? []).flatMap(leafPaneIds);
 }
 
+export function visibleLeafPaneIds(
+  tree: WorkspacePaneTreeSnapshot | null | undefined,
+  popoutWindows?: ReadonlyArray<{ paneId: string }> | null,
+): string[] {
+  const hidden = new Set((popoutWindows ?? []).map((popout) => popout.paneId));
+  return leafPaneIds(tree).filter((paneId) => !hidden.has(paneId));
+}
+
 export function isWorkspaceStateSnapshot(value: unknown): value is WorkspaceStateSnapshot {
   if (!value || typeof value !== "object") return false;
   const snapshot = value as Partial<WorkspaceStateSnapshot>;

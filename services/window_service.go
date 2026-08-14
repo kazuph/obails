@@ -32,6 +32,11 @@ type workspaceMenuApplier struct {
 
 var applicationWorkspaceMenu workspaceMenuApplier
 
+var (
+	applicationMenuDispatchMu sync.Mutex
+	applicationMenuDispatch   func(func())
+)
+
 // SetApplicationMenuApplier stores the current theme and the callback that
 // rebuilds the native application menu from saved workspace names.
 func SetApplicationMenuApplier(theme string, apply func(theme string, names []string, activeName string)) {
@@ -39,6 +44,39 @@ func SetApplicationMenuApplier(theme string, apply func(theme string, names []st
 	defer applicationWorkspaceMenu.mu.Unlock()
 	applicationWorkspaceMenu.theme = theme
 	applicationWorkspaceMenu.apply = apply
+}
+
+// SetApplicationMenuDispatcher installs the hop used before SetApplicationMenu.
+// Wails alpha.74 MenuManager.SetApplicationMenu calls AppKit setMainMenu on the
+// caller goroutine; production arms this with application.InvokeSync after the
+// pre-Run store so runtime binding calls run on the AppKit main thread.
+// A nil dispatcher keeps the callback inline for startup (impl is not created
+// yet) and for tests.
+func SetApplicationMenuDispatcher(dispatch func(func())) {
+	applicationMenuDispatchMu.Lock()
+	defer applicationMenuDispatchMu.Unlock()
+	applicationMenuDispatch = dispatch
+}
+
+// ApplicationMenuDispatcher returns the armed SetApplicationMenu hop.
+func ApplicationMenuDispatcher() func(func()) {
+	applicationMenuDispatchMu.Lock()
+	defer applicationMenuDispatchMu.Unlock()
+	return applicationMenuDispatch
+}
+
+func dispatchApplicationMenu(fn func()) {
+	if fn == nil {
+		return
+	}
+	applicationMenuDispatchMu.Lock()
+	dispatch := applicationMenuDispatch
+	applicationMenuDispatchMu.Unlock()
+	if dispatch == nil {
+		fn()
+		return
+	}
+	dispatch(fn)
 }
 
 type trackedPopout struct {
@@ -90,7 +128,9 @@ func (s *WindowService) RefreshWorkspaceMenu() {
 	for _, saved := range workspace.SavedWorkspaces {
 		names = append(names, saved.Name)
 	}
-	apply(theme, names, workspace.ActiveNamedWorkspace)
+	dispatchApplicationMenu(func() {
+		apply(theme, names, workspace.ActiveNamedWorkspace)
+	})
 }
 
 // BeginShutdown preserves persisted popout records while Wails closes native windows.
