@@ -56,7 +56,8 @@ import {
   visibleLeafPaneIds,
 } from "./lib/workspace-runtime-controller";
 import { splitWeightsFromPointer, withoutWorkspacePanes, workspaceLayoutTree, type WorkspaceLayoutNode } from "./lib/workspace-layout";
-import { bindLegacyPaneId, capturedClosePaneId, EMPTY_PANE_INSTRUCTION, factorySurfacePaneIds, shouldClearLegacyEditor } from "./lib/workspace-pane-identity";
+import { bindLegacyPaneId, capturedClosePaneId, factorySurfacePaneIds, LAST_VISIBLE_PANE_CLOSE_REASON, paneCloseAffordance, shouldClearLegacyEditor } from "./lib/workspace-pane-identity";
+import { createEmptyPaneBody } from "./lib/workspace-pane-empty-body";
 import { WorkspaceRefreshCoordinator } from "./lib/workspace-refresh";
 import { resolveWindowDimensions } from "./lib/workspace-state";
 import {
@@ -454,6 +455,7 @@ function renderWorkspaceLayout(snapshot: WorkspaceStateSnapshot) {
             const slot = document.createElement("section");
             slot.className = "workspace-pane-slot";
             slot.dataset.paneId = node.paneId;
+            slot.dataset.active = node.paneId === activePaneId ? "true" : "false";
             slot.style.flexGrow = String(node.weight);
             slot.addEventListener("pointerdown", () => {
                 void activateWorkspacePaneFromUi(node.paneId);
@@ -506,6 +508,7 @@ function renderWorkspaceLayout(snapshot: WorkspaceStateSnapshot) {
         const slot = document.createElement("section");
         slot.className = "workspace-pane-slot";
         slot.dataset.paneId = popoutRoute.paneId;
+        slot.dataset.active = popoutRoute.paneId === activePaneId ? "true" : "false";
         const tabStrip = paneTabStrips.get(popoutRoute.paneId);
         if (tabStrip) slot.append(tabStrip);
         if (root) slot.append(root);
@@ -540,12 +543,9 @@ function focusWorkspacePane(paneId: string) {
     target.focus({ preventScroll: true });
 }
 
-function showEmptyForActivePane() {
-    const surface = activeRichSurface();
-    if (!surface) {
-        if (shouldClearLegacyEditor(activePaneId, legacySurfacePaneId, false)) showEmptyMainPane();
-        return;
-    }
+function showEmptyForPane(paneId: string) {
+    const surface = paneSurfaces.get(paneId);
+    if (!surface) return;
     surface.editorContainer.style.display = "flex";
     surface.imageViewer.style.display = "none";
     surface.audioViewer.style.display = "none";
@@ -553,10 +553,20 @@ function showEmptyForActivePane() {
     surface.htmlEditorContainer.style.display = "none";
     surface.timelinePanel.style.display = "none";
     surface.editor.value = "";
-    surface.preview.textContent = EMPTY_PANE_INSTRUCTION;
-    surface.editorTitle.textContent = EMPTY_PANE_INSTRUCTION;
+    surface.preview.replaceChildren(createEmptyPaneBody(document, paneId, (targetPaneId) => {
+        void activateWorkspacePaneFromUi(targetPaneId);
+    }));
     surface.previewTitle.textContent = "Preview";
     surface.outlineList.innerHTML = '<div class="outline-empty">Headings you write will gather here</div>';
+}
+
+function showEmptyForActivePane() {
+    const surface = activeRichSurface();
+    if (!surface) {
+        if (shouldClearLegacyEditor(activePaneId, legacySurfacePaneId, false)) showEmptyMainPane();
+        return;
+    }
+    showEmptyForPane(activePaneId);
 }
 
 function hideRichSurfaceViewers(surface: RichSurface) {
@@ -1018,8 +1028,11 @@ function applyWorkspaceSnapshot(snapshot: WorkspaceStateSnapshot) {
         saveScheduler = primaryDocumentRuntime.saveScheduler;
         restoreActivePaneViewState();
     }
-    renderWorkspacePaneTabs(snapshot);
+    renderWorkspacePaneTabs(snapshot, visiblePaneIds.length);
     renderWorkspaceLayout(snapshot);
+    for (const paneId of visiblePaneIds) {
+        if (!paneTabsFor(snapshot, paneId)?.tabs.length) showEmptyForPane(paneId);
+    }
     workspaceHost.dataset.paneCount = String(visiblePaneIds.length);
     const activeDocument = primaryDocumentRuntime.activeEditableDocument;
     const activeFailure = activeDocument?.failure;
@@ -1040,7 +1053,6 @@ function applyWorkspaceSnapshot(snapshot: WorkspaceStateSnapshot) {
     if (legacyRichSurfaceRoot) legacyRichSurfaceRoot.dataset.active = legacySurfacePaneId === activePaneId ? "true" : "false";
     splitPaneRightButton.disabled = Boolean(popoutRoute) || visiblePaneIds.length === 0;
     splitPaneDownButton.disabled = Boolean(popoutRoute) || visiblePaneIds.length === 0;
-    closePaneButton.disabled = Boolean(popoutRoute) || visiblePaneIds.length <= 1;
     applyPopoutToolbarMode();
     if (nextActivePaneId && nextActivePaneId !== previousActivePaneId) {
         queueMicrotask(() => focusWorkspacePane(nextActivePaneId));
@@ -1050,15 +1062,15 @@ function applyWorkspaceSnapshot(snapshot: WorkspaceStateSnapshot) {
 function applyPopoutToolbarMode() {
     splitPaneRightButton.hidden = Boolean(popoutRoute);
     splitPaneDownButton.hidden = Boolean(popoutRoute);
-    closePaneButton.hidden = Boolean(popoutRoute);
     popoutPaneButton.hidden = Boolean(popoutRoute);
     rejoinPopoutButton.hidden = !popoutRoute;
 }
 
-function renderWorkspacePaneTabs(snapshot: WorkspaceStateSnapshot) {
+function renderWorkspacePaneTabs(snapshot: WorkspaceStateSnapshot, visiblePaneCount: number) {
     workspacePaneTabs.replaceChildren();
     workspacePaneTabs.hidden = true;
     paneTabStrips.clear();
+    const paneClose = paneCloseAffordance({ isPopout: Boolean(popoutRoute), visibleMainPaneCount: visiblePaneCount });
     for (const paneId of leafPaneIds(snapshot.paneTree)) {
         if (popoutRoute && paneId !== popoutRoute.paneId) continue;
         const pane = paneTabsFor(snapshot, paneId);
@@ -1073,7 +1085,9 @@ function renderWorkspacePaneTabs(snapshot: WorkspaceStateSnapshot) {
                 closeTab: (targetPaneId, path) => void closeWorkspaceTabFromUi(targetPaneId, path),
                 renameTab: (targetPaneId, path) => void renameWorkspaceTabFromUi(targetPaneId, path),
                 activatePane: (targetPaneId) => void activateWorkspacePaneFromUi(targetPaneId),
+                closePane: (targetPaneId) => void closeWorkspacePaneFromUi(targetPaneId),
             },
+            { paneClose },
         );
         // Keep the visible × from createWorkspacePaneTabStrip; icon injection hid AX names.
         group.querySelectorAll<HTMLButtonElement>(".workspace-pane-tab-close").forEach((button) => {
@@ -1166,11 +1180,31 @@ async function splitActiveWorkspacePane(direction: "horizontal" | "vertical") {
     if (snapshot) await openActiveWorkspaceTab(snapshot);
 }
 
+async function closeWorkspacePaneFromUi(paneId: string) {
+    if (popoutRoute) return;
+    try {
+        const visiblePaneIds = workspaceSnapshot
+            ? visibleLeafPaneIds(workspaceSnapshot.paneTree, workspaceSnapshot.popoutWindows)
+            : [];
+        if (visiblePaneIds.length <= 1) {
+            announceOperation(LAST_VISIBLE_PANE_CLOSE_REASON);
+            return;
+        }
+        const snapshot = await workspaceController.closePane(paneId);
+        if (!snapshot) {
+            announceOperation("Could not close this pane.");
+            return;
+        }
+        await openActiveWorkspaceTab(snapshot);
+    } catch (error) {
+        announceOperation(`Could not close this pane: ${describeHumanOperationError(error, "the pane could not be closed")}.`);
+    }
+}
+
 async function closeActiveWorkspacePane() {
     if (popoutRoute) return;
     const paneId = capturedClosePaneId(document.documentElement.dataset.activePaneId || "", activePaneId);
-    const snapshot = await workspaceController.closePane(paneId);
-    if (snapshot) await openActiveWorkspaceTab(snapshot);
+    await closeWorkspacePaneFromUi(paneId);
 }
 
 function getPopoutRoute(): PopoutRoute | null {
@@ -1488,7 +1522,6 @@ const workspaceHost = document.getElementById("workspace-host") as HTMLElement;
 const workspacePaneTabs = document.getElementById("workspace-pane-tabs") as HTMLElement;
 const splitPaneRightButton = document.getElementById("split-pane-right-btn") as HTMLButtonElement;
 const splitPaneDownButton = document.getElementById("split-pane-down-btn") as HTMLButtonElement;
-const closePaneButton = document.getElementById("close-pane-btn") as HTMLButtonElement;
 const popoutPaneButton = document.getElementById("popout-pane-btn") as HTMLButtonElement;
 const rejoinPopoutButton = document.getElementById("rejoin-popout-btn") as HTMLButtonElement;
 
@@ -1803,7 +1836,6 @@ function setupToolbarIcons() {
     setButtonIcon(document.getElementById("source-toggle-btn")!, "code");
     setButtonIcon(document.getElementById("split-pane-right-btn")!, "split-right");
     setButtonIcon(document.getElementById("split-pane-down-btn")!, "split-down");
-    setButtonIcon(document.getElementById("close-pane-btn")!, "close");
     setButtonIcon(document.getElementById("popout-pane-btn")!, "external-link");
     setButtonIconWithLabel(document.getElementById("rejoin-popout-btn")!, "external-link", "Rejoin");
     setButtonIcon(document.getElementById("collapse-all-folders-btn")!, "folder-closed");
@@ -2061,7 +2093,6 @@ function setupEventListeners() {
     document.getElementById("source-toggle-btn")!.addEventListener("click", toggleSourceEditor);
     splitPaneRightButton.addEventListener("click", () => void splitActiveWorkspacePane("horizontal"));
     splitPaneDownButton.addEventListener("click", () => void splitActiveWorkspacePane("vertical"));
-    closePaneButton.addEventListener("click", () => void closeActiveWorkspacePane());
     popoutPaneButton.addEventListener("click", () => void createActivePanePopout());
     rejoinPopoutButton.addEventListener("click", () => void rejoinCurrentPopout());
     document.getElementById("graph-relayout")!.addEventListener("click", refreshGraphData);

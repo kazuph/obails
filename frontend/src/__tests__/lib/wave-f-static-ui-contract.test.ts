@@ -38,8 +38,7 @@ describe("Wave F static UI contract", () => {
     expect(documentRef.getElementById("split-pane-right-btn")?.getAttribute("title")).toBe("Split pane right");
     expect(documentRef.getElementById("split-pane-down-btn")?.getAttribute("aria-label")).toBe("Split pane down");
     expect(documentRef.getElementById("split-pane-down-btn")?.getAttribute("title")).toBe("Split pane down");
-    expect(documentRef.getElementById("close-pane-btn")?.getAttribute("aria-label")).toBe("Close active pane");
-    expect(documentRef.getElementById("close-pane-btn")?.getAttribute("title")).toBe("Close active pane");
+    expect(documentRef.getElementById("close-pane-btn")).toBeNull();
     expect(documentRef.getElementById("workspace-name")).toBeNull();
     expect(documentRef.getElementById("save-workspace-btn")).toBeNull();
     expect(documentRef.getElementById("restore-workspace-btn")).toBeNull();
@@ -225,15 +224,21 @@ describe("Wave F static UI contract", () => {
     expect(fn).not.toContain("cannot pop out the final visible workspace pane");
   });
 
-  it("disables close-pane from the remaining visible main-window panes, not the full tree", () => {
+  it("disables per-pane close from the remaining visible main-window panes, not the full tree", () => {
     const source = readFileSync(resolve(__dirname, "../../main.ts"), "utf8");
     const start = source.indexOf("function applyWorkspaceSnapshot");
     const end = source.indexOf("function applyPopoutToolbarMode");
     const fn = source.slice(start, end);
 
     expect(fn).toContain("visibleLeafPaneIds(snapshot.paneTree, snapshot.popoutWindows)");
-    expect(fn).toContain("closePaneButton.disabled = Boolean(popoutRoute) || visiblePaneIds.length <= 1");
-    expect(fn).not.toContain("closePaneButton.disabled = Boolean(popoutRoute) || paneIds.length <= 1");
+    expect(fn).toContain("renderWorkspacePaneTabs(snapshot, visiblePaneIds.length)");
+    expect(fn).not.toContain("closePaneButton");
+
+    const tabsStart = source.indexOf("function renderWorkspacePaneTabs");
+    const tabsFn = source.slice(tabsStart, source.indexOf("async function activateWorkspacePaneFromUi"));
+    expect(tabsFn).toContain("paneCloseAffordance");
+    expect(tabsFn).toContain("closePane: (targetPaneId) => void closeWorkspacePaneFromUi(targetPaneId)");
+    expect(tabsFn).not.toContain("closePaneButton");
   });
 
   it("keeps the legacy surface owner stable and clears only the active pane", () => {
@@ -250,12 +255,15 @@ describe("Wave F static UI contract", () => {
     expect(source.slice(splitStart, splitEnd)).toContain("openActiveWorkspaceTab");
     expect(source.slice(splitStart, splitEnd)).not.toContain("showEmptyMainPane");
 
-    const closeStart = source.indexOf("async function closeActiveWorkspacePane");
+    const closeStart = source.indexOf("async function closeWorkspacePaneFromUi");
     const closeEnd = source.indexOf("function getPopoutRoute");
     const closeFn = source.slice(closeStart, closeEnd);
     expect(closeFn).toContain("capturedClosePaneId");
     expect(closeFn).toContain("dataset.activePaneId");
     expect(closeFn).toContain("closePane(paneId)");
+    expect(closeFn).toContain("describeHumanOperationError");
+    expect(closeFn).toContain("LAST_VISIBLE_PANE_CLOSE_REASON");
+    expect(closeFn).not.toMatch(/Could not close this pane: \$\{describeOperationError/);
 
     const activateStart = source.indexOf("async function activateWorkspacePaneFromUi");
     const activateFn = source.slice(activateStart, source.indexOf("async function activateWorkspaceTabFromUi"));
@@ -264,6 +272,7 @@ describe("Wave F static UI contract", () => {
     const renderStart = source.indexOf("function renderWorkspaceLayout");
     const renderFn = source.slice(renderStart, source.indexOf("function activeRichSurface"));
     expect(renderFn).toContain("activateWorkspacePaneFromUi(node.paneId)");
+    expect(renderFn).toContain("slot.dataset.active");
 
     const applyStart = source.indexOf("function applyWorkspaceSnapshot");
     const applyFn = source.slice(applyStart, source.indexOf("function applyPopoutToolbarMode"));
@@ -275,12 +284,19 @@ describe("Wave F static UI contract", () => {
     const openEnd = source.indexOf("async function restoreWorkspaceLeafTabs");
     expect(source.slice(openStart, openEnd)).toContain("showEmptyForActivePane");
     expect(source.slice(openStart, openEnd)).not.toContain("showEmptyMainPane");
-    expect(source.slice(source.indexOf("function showEmptyForActivePane"), source.indexOf("function hideRichSurfaceViewers"))).toContain("EMPTY_PANE_INSTRUCTION");
+    const emptyStart = source.indexOf("function showEmptyForPane");
+    const emptyFn = source.slice(emptyStart, source.indexOf("function hideRichSurfaceViewers"));
+    expect(emptyFn).toContain("createEmptyPaneBody");
+    expect(emptyFn).not.toContain("editorTitle.textContent");
+    expect(emptyFn).not.toContain("EMPTY_PANE_INSTRUCTION");
+    const emptyBodySource = readFileSync(resolve(__dirname, "../../lib/workspace-pane-empty-body.ts"), "utf8");
+    expect(emptyBodySource).toContain("EMPTY_PANE_INSTRUCTION");
 
     const iconsStart = source.indexOf("function setupToolbarIcons");
     const iconsFn = source.slice(iconsStart, source.indexOf("function toStateKey"));
     expect(iconsFn).toContain('"split-right"');
     expect(iconsFn).toContain('"split-down"');
+    expect(iconsFn).not.toContain("close-pane-btn");
     expect(iconsFn).not.toMatch(/split-pane-right-btn.*page-single/);
   });
 });

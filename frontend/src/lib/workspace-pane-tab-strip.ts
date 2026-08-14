@@ -1,11 +1,22 @@
 import type { WorkspacePaneTabsSnapshot } from "./workspace-snapshot";
-import { EMPTY_PANE_INSTRUCTION } from "./workspace-pane-identity";
+import {
+  CLOSE_PANE_LABEL,
+  EMPTY_PANE_TAB_LABEL,
+  LAST_VISIBLE_PANE_CLOSE_REASON,
+  closeTabLabel,
+  type PaneCloseAffordance,
+} from "./workspace-pane-identity";
 
 export type WorkspacePaneTabActions = {
   activateTab: (paneId: string, path: string) => void;
   closeTab: (paneId: string, path: string) => void;
   renameTab: (paneId: string, path: string) => void;
   activatePane?: (paneId: string) => void;
+  closePane?: (paneId: string) => void;
+};
+
+export type WorkspacePaneTabStripOptions = {
+  paneClose?: PaneCloseAffordance;
 };
 
 export function createWorkspacePaneTabStrip(
@@ -15,6 +26,7 @@ export function createWorkspacePaneTabStrip(
   activePaneId: string,
   displayName: (path: string) => string,
   actions: WorkspacePaneTabActions,
+  options: WorkspacePaneTabStripOptions = {},
 ): HTMLElement {
   const strip = documentRef.createElement("section");
   strip.className = "workspace-pane-tabs workspace-pane-tab-group";
@@ -55,12 +67,13 @@ export function createWorkspacePaneTabStrip(
     const closeButton = documentRef.createElement("button");
     closeButton.type = "button";
     closeButton.className = "workspace-pane-tab-close";
-    const closeLabel = `Close ${displayName(tab.path)} in ${paneId}`;
+    const closeLabel = closeTabLabel(displayName(tab.path), paneId);
     // Visible × text (not icon-only) so macOS AX exposes a real AXButton title.
     closeButton.textContent = "×";
     closeButton.setAttribute("aria-label", closeLabel);
     closeButton.title = closeLabel;
     closeButton.dataset.path = tab.path;
+    closeButton.dataset.close = "tab";
     closeButton.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
@@ -76,20 +89,52 @@ export function createWorkspacePaneTabStrip(
     strip.append(tabChrome);
   }
   if (!pane?.tabs.length) {
-    const empty = documentRef.createElement("span");
-    empty.className = "workspace-pane-empty";
-    empty.textContent = EMPTY_PANE_INSTRUCTION;
-    empty.setAttribute("role", "button");
-    empty.tabIndex = 0;
-    empty.setAttribute("aria-label", `Empty pane. ${EMPTY_PANE_INSTRUCTION}`);
-    empty.title = `Empty pane. ${EMPTY_PANE_INSTRUCTION}`;
-    empty.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        actions.activatePane?.(paneId);
-      }
+    const selected = paneId === activePaneId;
+    const tabChrome = documentRef.createElement("div");
+    tabChrome.className = "workspace-pane-tab";
+    tabChrome.dataset.empty = "true";
+    tabChrome.setAttribute("aria-selected", String(selected));
+
+    const title = documentRef.createElement("button");
+    title.type = "button";
+    title.className = "workspace-pane-tab-title";
+    title.setAttribute("aria-pressed", String(selected));
+    title.setAttribute("aria-label", EMPTY_PANE_TAB_LABEL);
+    title.title = EMPTY_PANE_TAB_LABEL;
+    title.tabIndex = selected ? 0 : -1;
+    title.textContent = EMPTY_PANE_TAB_LABEL;
+    title.addEventListener("click", (event) => {
+      if (event.detail > 1) return;
+      actions.activatePane?.(paneId);
     });
-    strip.append(empty);
+
+    tabChrome.append(title);
+    const paneClose = options.paneClose ?? "enabled";
+    if (paneClose !== "hidden") {
+      const closeButton = documentRef.createElement("button");
+      closeButton.type = "button";
+      closeButton.className = "workspace-pane-tab-close";
+      closeButton.dataset.close = "pane";
+      closeButton.textContent = "×";
+      const enabled = paneClose === "enabled";
+      const closeLabel = enabled ? CLOSE_PANE_LABEL : LAST_VISIBLE_PANE_CLOSE_REASON;
+      closeButton.setAttribute("aria-label", closeLabel);
+      closeButton.title = closeLabel;
+      closeButton.disabled = !enabled;
+      if (!enabled) closeButton.setAttribute("aria-disabled", "true");
+      closeButton.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (event.detail > 1 || closeButton.disabled) return;
+        actions.closePane?.(paneId);
+      });
+      closeButton.addEventListener("dblclick", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+      });
+      tabChrome.append(closeButton);
+    }
+    strip.append(tabChrome);
   }
   return strip;
 }

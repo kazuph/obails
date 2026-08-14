@@ -146,9 +146,10 @@ test.describe.serial("workspace startup popout recovery", () => {
       await expect(child.locator(".rich-surface")).toHaveCount(1);
       await expect(child.locator(`.rich-surface[data-pane-id="${paneId}"]`)).toBeVisible();
       await expect(child.locator(`.rich-surface[data-pane-id="${paneId}"] textarea`).first()).toHaveValue(/child visible/);
-      for (const selector of ["#split-pane-right-btn", "#split-pane-down-btn", "#close-pane-btn", "#popout-pane-btn"]) {
+      for (const selector of ["#split-pane-right-btn", "#split-pane-down-btn", "#popout-pane-btn"]) {
         await expect(child.locator(selector)).toBeHidden();
       }
+      await expect(child.locator("#close-pane-btn")).toHaveCount(0);
       await expect(child.locator("#rejoin-popout-btn")).toBeVisible();
       await expect(child.locator("#rejoin-popout-btn")).toContainText("Rejoin");
     } finally {
@@ -212,10 +213,11 @@ test.describe.serial("workspace last visible pane clones active note", () => {
       await expect(page.locator(".workspace-host .workspace-pane-slot")).toHaveCount(1);
       await expect(page.locator(`.workspace-pane-slot[data-pane-id="${remainderPaneId}"]`)).toBeVisible();
       await expect(page.locator(`.workspace-pane-slot[data-pane-id="${poppedPaneId}"]`)).toHaveCount(0);
-      await expect(page.locator(".workspace-pane-empty")).toHaveCount(0);
+      await expect(page.locator(".workspace-pane-empty-body")).toHaveCount(0);
       await expect(page.locator(`.rich-surface[data-pane-id="${remainderPaneId}"] textarea`).first()).toHaveValue(/still in popout/);
       await expect(page.locator("html")).toHaveAttribute("data-active-pane-id", remainderPaneId);
-      await expect(page.locator("#close-pane-btn")).toBeDisabled();
+      await expect(page.locator("#close-pane-btn")).toHaveCount(0);
+      await expect(page.locator(".workspace-pane-tab-close[data-close='pane']")).toHaveCount(0);
       await expect(page.locator("#popout-pane-btn")).toBeEnabled();
       await expect(page.locator("#split-pane-right-btn")).toBeEnabled();
 
@@ -275,20 +277,24 @@ test.describe.serial("workspace pane split focus close", () => {
 
     await page.locator("#split-pane-right-btn").click();
     await expect(page.locator(".workspace-host .workspace-pane-slot")).toHaveCount(2);
-    const empty = page.locator(".workspace-pane-empty");
-    await expect(empty).toHaveText("Open a note from Explorer");
+    const emptyBody = page.locator(".workspace-pane-empty-body");
+    await expect(emptyBody).toHaveText("Open a note from Explorer");
     await expect(page.locator(`.workspace-pane-slot[data-pane-id="${sourcePaneId}"] textarea`).first()).toHaveValue(/must survive close/);
-    const newPaneId = await empty.evaluate((node) => node.closest(".workspace-pane-slot")?.getAttribute("data-pane-id") ?? "");
+    const emptySlot = page.locator(".workspace-pane-slot").filter({ has: emptyBody });
+    await expect(emptySlot.locator(".workspace-pane-tab[data-empty='true'] .workspace-pane-tab-title")).toHaveText("Empty pane");
+    await expect(emptySlot.locator(".workspace-pane-tabs")).not.toContainText("Open a note from Explorer");
+    const newPaneId = await emptySlot.getAttribute("data-pane-id");
     expect(newPaneId).not.toBe("");
     expect(newPaneId).not.toBe(sourcePaneId);
     await expect(page.locator("html")).toHaveAttribute("data-active-pane-id", newPaneId);
+    await expect(emptySlot).toHaveAttribute("data-active", "true");
 
-    await empty.click();
+    await emptyBody.click();
     await expect(page.locator("html")).toHaveAttribute("data-active-pane-id", newPaneId);
-    await page.locator("#close-pane-btn").click();
+    await emptySlot.locator(".workspace-pane-tab-close[data-close='pane']").click();
 
     await expect(page.locator(".workspace-host .workspace-pane-slot")).toHaveCount(1);
-    await expect(page.locator(".workspace-pane-empty")).toHaveCount(0);
+    await expect(page.locator(".workspace-pane-empty-body")).toHaveCount(0);
     await expect(page.locator(`.workspace-pane-slot[data-pane-id="${sourcePaneId}"]`)).toBeVisible();
     await expect(page.locator(`.workspace-pane-slot[data-pane-id="${sourcePaneId}"] textarea`).first()).toHaveValue(/must survive close/);
     await expect(page.locator("html")).toHaveAttribute("data-active-pane-id", sourcePaneId);

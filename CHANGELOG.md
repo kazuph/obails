@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.2 - 2026-08-14
+
+分割後の空ペイン案内が tab strip と本文に二重表示され、どのペインが active か分からず、空ペインを閉じられない不具合を直したパッチです。Claude Code plugin `ob` の版は `0.1.2` のままです。
+
+### 修正
+
+- 空ペインの「Open a note from Explorer」は本文 empty state に1か所だけ出す。tab strip には静かな `Empty pane` プレースホルダと、その exact pane だけを閉じる × を置く
+- 最後の visible pane の × は無効化し、閉じられない理由を title/aria に出す。note tab の ×（tab close）と empty pane の ×（pane close）は aria/title で区別する
+- active pane を既存 tab active 表現（accent inset）と `data-active` で明示し、DOM focus / backend ActivePaneID と一致させる
+- 上部ツールバーの Close active pane は per-pane exact close と二重になるため削除する。Split pane right / Split pane down の tooltip/aria は維持する
+
 ## 1.0.1 - 2026-08-13
 
 起動直後にクラッシュする不具合を直したパッチです。Claude Code plugin `ob` の版は `0.1.2` のままです。

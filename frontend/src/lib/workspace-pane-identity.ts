@@ -1,4 +1,22 @@
 export const EMPTY_PANE_INSTRUCTION = "Open a note from Explorer";
+export const EMPTY_PANE_TAB_LABEL = "Empty pane";
+export const CLOSE_PANE_LABEL = "Close this pane";
+export const LAST_VISIBLE_PANE_CLOSE_REASON = "Cannot close the last remaining pane";
+
+export type PaneCloseAffordance = "enabled" | "disabled" | "hidden";
+
+export function closeTabLabel(name: string, paneId: string): string {
+  return `Close ${name} in ${paneId}`;
+}
+
+export function paneCloseAffordance(options: {
+  isPopout: boolean;
+  visibleMainPaneCount: number;
+}): PaneCloseAffordance {
+  if (options.isPopout) return "hidden";
+  if (options.visibleMainPaneCount <= 1) return "disabled";
+  return "enabled";
+}
 
 export function bindLegacyPaneId(options: {
   assigned: boolean;

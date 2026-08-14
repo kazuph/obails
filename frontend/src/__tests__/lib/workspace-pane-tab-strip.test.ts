@@ -11,7 +11,7 @@ const WORKSPACE_PANE_TAB_CHROME_SELECTORS = [
   ".workspace-pane-tab",
   ".workspace-pane-tab-title",
   ".workspace-pane-tab-close",
-  ".workspace-pane-empty",
+  ".workspace-pane-empty-body",
 ] as const;
 
 const WORKSPACE_PANE_TAB_CHROME_VARS = [
@@ -165,20 +165,71 @@ describe("createWorkspacePaneTabStrip", () => {
     expect(right.querySelector<HTMLButtonElement>(".workspace-pane-tab-close")?.title).toBe("Close right.md in right");
   });
 
-  it("renders an accessible empty pane without an internal pane id button", () => {
+  it("renders quiet empty-pane tab chrome with a pane close control, not the Explorer instruction", () => {
     const operations: string[] = [];
     const strip = createWorkspacePaneTabStrip(document, "generated-pane", { paneId: "generated-pane", tabs: [] }, "generated-pane", (path) => path, {
       activateTab: () => {},
       closeTab: () => {},
       renameTab: () => {},
       activatePane: (paneId) => operations.push(`focus:${paneId}`),
+      closePane: (paneId) => operations.push(`close-pane:${paneId}`),
     });
-    expect(strip.textContent).toBe("Open a note from Explorer");
-    expect(strip.querySelector("button")).toBeNull();
-    expect(strip.querySelector(".workspace-pane-empty")?.getAttribute("aria-label")).toBe("Empty pane. Open a note from Explorer");
-    expect(strip.querySelector(".workspace-pane-empty")?.getAttribute("title")).toBe("Empty pane. Open a note from Explorer");
-    strip.querySelector<HTMLElement>(".workspace-pane-empty")!.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
-    expect(operations).toEqual(["focus:generated-pane"]);
+    const emptyTab = strip.querySelector<HTMLElement>(".workspace-pane-tab[data-empty='true']")!;
+    const title = emptyTab.querySelector<HTMLButtonElement>(".workspace-pane-tab-title")!;
+    const close = emptyTab.querySelector<HTMLButtonElement>(".workspace-pane-tab-close")!;
+    expect(title.textContent).toBe("Empty pane");
+    expect(title.getAttribute("aria-label")).toBe("Empty pane");
+    expect(title.title).toBe("Empty pane");
+    expect(emptyTab.getAttribute("aria-selected")).toBe("true");
+    expect(strip.textContent).not.toContain("Open a note from Explorer");
+    expect(close.textContent).toBe("×");
+    expect(close.dataset.close).toBe("pane");
+    expect(close.getAttribute("aria-label")).toBe("Close this pane");
+    expect(close.title).toBe("Close this pane");
+    expect(close.disabled).toBe(false);
+    title.click();
+    close.click();
+    expect(operations).toEqual(["focus:generated-pane", "close-pane:generated-pane"]);
+  });
+
+  it("disables empty-pane close on the last remaining pane and hides it in a popout", () => {
+    const disabled = createWorkspacePaneTabStrip(document, "only", { paneId: "only", tabs: [] }, "only", (path) => path, {
+      activateTab: () => {},
+      closeTab: () => {},
+      renameTab: () => {},
+      closePane: () => { throw new Error("must not close the last pane"); },
+    }, { paneClose: "disabled" });
+    const disabledClose = disabled.querySelector<HTMLButtonElement>(".workspace-pane-tab-close")!;
+    expect(disabledClose.disabled).toBe(true);
+    expect(disabledClose.getAttribute("aria-disabled")).toBe("true");
+    expect(disabledClose.getAttribute("aria-label")).toBe("Cannot close the last remaining pane");
+    expect(disabledClose.title).toBe("Cannot close the last remaining pane");
+    disabledClose.click();
+
+    const hidden = createWorkspacePaneTabStrip(document, "popout", { paneId: "popout", tabs: [] }, "popout", (path) => path, {
+      activateTab: () => {},
+      closeTab: () => {},
+      renameTab: () => {},
+    }, { paneClose: "hidden" });
+    expect(hidden.querySelector(".workspace-pane-tab-close")).toBeNull();
+    expect(hidden.querySelector(".workspace-pane-tab-title")?.textContent).toBe("Empty pane");
+  });
+
+  it("keeps note tab close distinct from empty pane close", () => {
+    const strip = createWorkspacePaneTabStrip(document, "right", {
+      paneId: "right",
+      tabs: [{ path: "right.md", fileType: "markdown" }],
+      activeTabPath: "right.md",
+    }, "right", (path) => path, {
+      activateTab: () => {},
+      closeTab: () => {},
+      renameTab: () => {},
+    });
+    const close = strip.querySelector<HTMLButtonElement>(".workspace-pane-tab-close")!;
+    expect(close.dataset.close).toBe("tab");
+    expect(close.getAttribute("aria-label")).toBe("Close right.md in right");
+    expect(close.title).toBe("Close right.md in right");
+    expect(close.getAttribute("aria-label")).not.toBe("Close this pane");
   });
 
   it("keeps at least 10ch of the title visible and scrolls the strip instead of crushing tabs", () => {
@@ -226,6 +277,11 @@ describe("createWorkspacePaneTabStrip", () => {
     // jsdom lacks real layout; contract is CSS that forces content-sized tabs + strip scroll.
     expect(strip.className).toContain("workspace-pane-tabs");
     expect(strip.querySelectorAll(".workspace-pane-tab").length).toBe(2);
+
+    expect(mainCss).toContain('.workspace-pane-slot[data-active="true"] > .workspace-pane-tabs');
+    expect(mainCss).toContain("inset 0 -2px 0 var(--accent)");
+    expect(mainCss).toContain(".workspace-pane-empty-body");
+    expect(mainCss).not.toContain(".workspace-pane-empty {");
 
     container.remove();
   });

@@ -17,7 +17,7 @@
         PackageDisplayName="Obails"
         PublisherName="CN=kazuph"
         PublisherDisplayName="kazuph"
-        Version="1.0.1.0"
+        Version="1.0.2.0"
         PackageDescription="A obails application">
         <Capabilities>
             <Capability Name="runFullTrust" />

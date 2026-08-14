@@ -65,7 +65,6 @@ test.describe("Static accessibility semantics", () => {
     const namedButtons = [
       ["split-pane-right-btn", "Split pane right"],
       ["split-pane-down-btn", "Split pane down"],
-      ["close-pane-btn", "Close active pane"],
       ["popout-pane-btn", "Pop out pane"],
       ["image-fullscreen", "View image fullscreen"],
       ["image-fs-close", "Close fullscreen image"],
@@ -99,7 +98,6 @@ test.describe("Static accessibility semantics", () => {
     const workspaceToolbarButtons = [
       ["split-pane-right-btn", "Split pane right", "Split pane right"],
       ["split-pane-down-btn", "Split pane down", "Split pane down"],
-      ["close-pane-btn", "Close active pane", "Close active pane"],
       ["popout-pane-btn", "Pop out pane", "Pop out active pane into a new window"],
     ] as const;
 
@@ -109,6 +107,8 @@ test.describe("Static accessibility semantics", () => {
       await expect(button).toHaveAttribute("title", title);
       await expect(button).toHaveText("");
     }
+
+    await expect(page.locator("#close-pane-btn")).toHaveCount(0);
 
     await expect(page.locator("#workspace-name, #save-workspace-btn, #restore-workspace-btn, #saved-workspace-names")).toHaveCount(0);
 
