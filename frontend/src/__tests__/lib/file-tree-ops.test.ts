@@ -16,6 +16,7 @@ import {
   nextFileTreeSelection,
   nextSearchExpansionState,
   normalizeAndSortFileTree,
+  resolveFileTreeSort,
   planMovesToFolder,
   rewritePathAfterMove,
   type SortableFileInfo,
@@ -101,12 +102,12 @@ describe("file-tree-ops", () => {
     expect(getDisplayName("recordings/meeting.m4a", "file")).toBe("meeting.m4a");
   });
 
-  it("keeps existing name order when audio is added", () => {
+  it("keeps configured descending file order when audio is not the majority", () => {
     expect(sortNames([
       file("a.md", "markdown"),
       file("c.md", "markdown"),
       file("b.wav", "audio"),
-    ])).toEqual(["a.md", "b.wav", "c.md"]);
+    ], { field: "name", direction: "descending" })).toEqual(["c.md", "b.wav", "a.md"]);
   });
 
   it("sorts name, modified, and created fields in either direction", () => {
@@ -119,16 +120,23 @@ describe("file-tree-ops", () => {
     expect(normalizeAndSortFileTree(files, { field: "created", direction: "descending" }).map((item) => item.name)).toEqual(["z.md", "a.md"]);
   });
 
+  it("restores each persisted sort field independently instead of resetting to ascending", () => {
+    expect(resolveFileTreeSort("name", "descending")).toEqual({ field: "name", direction: "descending" });
+    expect(resolveFileTreeSort(undefined, "descending")).toEqual({ field: "name", direction: "descending" });
+    expect(resolveFileTreeSort("created", undefined)).toEqual({ field: "created", direction: "descending" });
+    expect(resolveFileTreeSort(undefined, undefined)).toEqual({ field: "name", direction: "descending" });
+  });
+
   it("keeps folders first and sorted ascending even when files are audio-heavy", () => {
     expect(sortNames([
       file("track-02.wav", "audio"),
       folder("z-folder"),
       file("track-01.wav", "audio"),
       folder("a-folder"),
-    ])).toEqual(["a-folder", "z-folder", "track-01.wav", "track-02.wav"]);
+    ], { field: "name", direction: "descending" })).toEqual(["a-folder", "z-folder", "track-01.wav", "track-02.wav"]);
   });
 
-  it("keeps the configured name order inside every folder regardless of audio mix", () => {
+  it("restores the existing per-folder audio-majority ordering rule", () => {
     const sorted = normalizeAndSortFileTree([
       folder("albums", [
         file("03.wav", "audio", "albums/03.wav"),
@@ -140,10 +148,10 @@ describe("file-tree-ops", () => {
         file("c.md", "markdown", "notes/c.md"),
         file("b.md", "markdown", "notes/b.md"),
       ]),
-    ]);
+    ], { field: "name", direction: "descending" });
 
     expect(sorted[0].children?.map((child) => child.name)).toEqual(["01.wav", "03.wav", "memo.md"]);
-    expect(sorted[1].children?.map((child) => child.name)).toEqual(["a.wav", "b.md", "c.md"]);
+    expect(sorted[1].children?.map((child) => child.name)).toEqual(["c.md", "b.md", "a.wav"]);
   });
 
   it("matches the vault-relative path rather than only a basename", () => {
@@ -198,7 +206,7 @@ describe("file-tree-ops", () => {
     expect(filterMoveDestinationFolders(folders, ["notes/a.md"])).toEqual(folders);
   });
 
-  it("keeps name ascending order with many audio files mixed among notes", () => {
+  it("keeps an explicitly selected ascending order when audio is not the majority", () => {
     const files = [
       file("note-c.md", "markdown"),
       file("track-03.wav", "audio"),
@@ -207,7 +215,7 @@ describe("file-tree-ops", () => {
       file("track-02.wav", "audio"),
       file("note-b.md", "markdown"),
     ];
-    expect(sortNames(files)).toEqual([
+    expect(sortNames(files, { field: "name", direction: "ascending" })).toEqual([
       "note-a.md",
       "note-b.md",
       "note-c.md",
@@ -218,8 +226,8 @@ describe("file-tree-ops", () => {
   });
 });
 
-function sortNames(files: SortableFileInfo[]): string[] {
-  return normalizeAndSortFileTree(files).map((file) => file.name);
+function sortNames(files: SortableFileInfo[], sort = { field: "name", direction: "descending" } as const): string[] {
+  return normalizeAndSortFileTree(files, sort).map((file) => file.name);
 }
 
 function file(name: string, fileType: string, path = name): SortableFileInfo {

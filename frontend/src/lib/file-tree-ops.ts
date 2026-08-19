@@ -1,6 +1,7 @@
 export type ItemKind = "file" | "folder";
 
 const INVALID_NAME_CHARS = /[<>:"/\\|?*]/;
+const AUDIO_EXTENSIONS = new Set(["mp3", "m4a", "wav", "ogg", "flac", "aac", "opus"]);
 export type SortableFileInfo = {
   name: string;
   path: string;
@@ -15,7 +16,18 @@ export type FileTreeSortField = "name" | "modified" | "created";
 export type FileTreeSortDirection = "ascending" | "descending";
 export type FileTreeSort = { field: FileTreeSortField; direction: FileTreeSortDirection };
 
-export const DEFAULT_FILE_TREE_SORT: FileTreeSort = { field: "name", direction: "ascending" };
+export const DEFAULT_FILE_TREE_SORT: FileTreeSort = { field: "name", direction: "descending" };
+
+export function resolveFileTreeSort(field: unknown, direction: unknown): FileTreeSort {
+  return {
+    field: field === "name" || field === "modified" || field === "created"
+      ? field
+      : DEFAULT_FILE_TREE_SORT.field,
+    direction: direction === "ascending" || direction === "descending"
+      ? direction
+      : DEFAULT_FILE_TREE_SORT.direction,
+  };
+}
 
 export function validateItemName(name: string): string {
   const trimmed = name.trim();
@@ -165,9 +177,13 @@ export function compareFileInfoForSort(
   a: SortableFileInfo,
   b: SortableFileInfo,
   sort: FileTreeSort = DEFAULT_FILE_TREE_SORT,
+  filesAscending = false,
 ): number {
   if (a.isDir !== b.isDir) {
     return a.isDir ? -1 : 1;
+  }
+  if (a.isDir) {
+    return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
   }
   const compare = sort.field === "name"
     ? a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" })
@@ -176,17 +192,40 @@ export function compareFileInfoForSort(
       sort.field === "modified" ? b.modifiedAt : b.createdAt,
     );
   const result = compare || a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
-  return sort.direction === "descending" ? -result : result;
+  return filesAscending || sort.direction === "ascending" ? result : -result;
 }
 
 export function normalizeAndSortFileTree<T extends SortableFileInfo>(files: T[], sort: FileTreeSort = DEFAULT_FILE_TREE_SORT): T[] {
+  const filesAscending = sort.field === "name" && hasAudioMajority(files);
 
   return files
     .map((file) => ({
       ...file,
       children: file.children?.length ? normalizeAndSortFileTree(file.children, sort) : [],
     }) as T)
-    .sort((a, b) => compareFileInfoForSort(a, b, sort));
+    .sort((a, b) => compareFileInfoForSort(a, b, sort, filesAscending));
+}
+
+export function hasAudioMajority(files: SortableFileInfo[]): boolean {
+  let audioCount = 0;
+  let otherFileCount = 0;
+
+  for (const file of files) {
+    if (file.isDir) continue;
+    if (isAudioFile(file)) {
+      audioCount += 1;
+    } else {
+      otherFileCount += 1;
+    }
+  }
+
+  return audioCount > otherFileCount;
+}
+
+function isAudioFile(file: SortableFileInfo): boolean {
+  if ((file.fileType || "").toLowerCase() === "audio") return true;
+  const extension = file.path.split(".").pop()?.toLowerCase() || "";
+  return AUDIO_EXTENSIONS.has(extension);
 }
 
 function compareDates(a: string | Date | undefined, b: string | Date | undefined): number {

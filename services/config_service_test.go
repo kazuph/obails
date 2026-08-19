@@ -200,8 +200,22 @@ func TestConfigService_FileExplorerPreferencesPersist(t *testing.T) {
 	if saved.AutoReveal || saved.SortField != "created" || saved.SortDirection != "descending" {
 		t.Fatalf("preferences were not persisted: %#v", saved)
 	}
+	reloaded := &ConfigService{configPath: configPath, useCustomConfig: true, config: models.DefaultConfig()}
+	if err := reloaded.Load(); err != nil {
+		t.Fatalf("Load persisted explorer preferences: %v", err)
+	}
+	if got := reloaded.GetFileExplorerConfig(); got.AutoReveal || got.SortField != "created" || got.SortDirection != "descending" {
+		t.Fatalf("reloaded explorer preferences changed: %#v", got)
+	}
 	if err := cs.SetFileExplorerSort("size", "ascending"); err == nil {
 		t.Fatal("invalid sort field was accepted")
+	}
+}
+
+func TestDefaultConfig_FileExplorerUsesNameDescending(t *testing.T) {
+	got := models.DefaultConfig().UI.FileExplorer
+	if got.SortField != "name" || got.SortDirection != "descending" {
+		t.Fatalf("default file explorer sort = %s/%s, want name/descending", got.SortField, got.SortDirection)
 	}
 }
 

@@ -139,6 +139,7 @@ import {
   nextFileTreeSelection,
   nextSearchExpansionState,
   normalizeAndSortFileTree,
+  resolveFileTreeSort,
   planMovesToFolder,
   rewritePathAfterMove,
   shouldIgnoreTreeClick,
@@ -1763,6 +1764,7 @@ async function init() {
         mountLegacyRichSurface();
         await refreshCommandSnapshot();
         const config = await ConfigService.GetConfig();
+        const explorer = await ConfigService.GetFileExplorerConfig();
         const explorerSession = await StateService.GetExplorerSessionState();
         const configuredSidebarWidth = await ConfigService.GetSidebarWidth();
         const leftWidth = (explorerSession.leftSidebarWidth ?? 0) > 0 ? explorerSession.leftSidebarWidth! : configuredSidebarWidth;
@@ -1771,12 +1773,8 @@ async function init() {
         document.getElementById("sidebar")!.style.width = `${leftWidth}px`;
         document.documentElement.style.setProperty("--backlinks-width", `${rightWidth}px`);
         appThemeFromConfig = normalizeThemeValue(config?.UI?.Theme || "");
-        const explorer = config?.UI?.FileExplorer;
-        fileTreeAutoReveal = explorer?.AutoReveal ?? true;
-        const configuredSort = explorer ? parseFileTreeSort(explorer.SortField, explorer.SortDirection) : null;
-        if (configuredSort) {
-            fileTreeSort = configuredSort;
-        }
+        fileTreeAutoReveal = explorer.AutoReveal;
+        fileTreeSort = resolveFileTreeSort(explorer.SortField, explorer.SortDirection);
         (document.getElementById("file-tree-sort-field") as HTMLSelectElement).value = fileTreeSort.field;
         (document.getElementById("file-tree-sort-direction") as HTMLSelectElement).value = fileTreeSort.direction;
         if (config?.Vault?.Path) {

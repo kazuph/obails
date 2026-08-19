@@ -312,7 +312,7 @@ func DefaultConfig() *Config {
 			FileExplorer: FileExplorerConfig{
 				AutoReveal:    true,
 				SortField:     "name",
-				SortDirection: "ascending",
+				SortDirection: "descending",
 			},
 		},
 	}

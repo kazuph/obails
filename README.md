@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.0.2-blue" alt="Version">
+  <img src="https://img.shields.io/badge/version-1.0.4-blue" alt="Version">
   <img src="https://img.shields.io/badge/platform-macOS-blue" alt="Platform">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
   <img src="https://img.shields.io/badge/wails-v3.0.0--alpha.60-orange" alt="Wails">
@@ -183,7 +183,7 @@ wails3 task darwin:package
 
 ## Changelog
 
-See [CHANGELOG.md](CHANGELOG.md) for the `v1.0.2` empty-pane UX fix, the `v1.0.1` crash fix, and the `v1.0.0` release notes.
+See [CHANGELOG.md](CHANGELOG.md) for the latest `v1.0.4` Explorer default-sort fix and earlier release notes.
 
 ## Roadmap
 

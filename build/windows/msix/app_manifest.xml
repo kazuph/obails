@@ -10,7 +10,7 @@
   <Identity 
     Name="com.example.obails"
     Publisher="CN=kazuph"
-    Version="1.0.2.0"
+    Version="1.0.4.0"
     ProcessorArchitecture="x64" />
   
   <Properties>

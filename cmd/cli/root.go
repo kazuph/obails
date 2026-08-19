@@ -10,7 +10,7 @@ import (
 
 var (
 	// Version is set at build time
-	version = "1.0.2"
+	version = "1.0.4"
 
 	// Global flags
 	outputFormat string
