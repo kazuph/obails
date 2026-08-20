@@ -156,11 +156,15 @@ describe("createWorkspacePaneTabStrip", () => {
     expect(left.querySelector(".workspace-pane-tab")?.getAttribute("role")).toBeNull();
     expect(left.querySelector(".workspace-pane-tab-title")?.getAttribute("role")).toBeNull();
     expect(left.querySelector(".workspace-pane-tab-title")?.getAttribute("aria-label")).toBe("Tab note-a.md");
+    expect(left.querySelector("[data-pane-action='source-toggle']")?.getAttribute("aria-label")).toBe("Toggle Source");
+    expect(left.querySelector("[data-pane-action='split-right']")?.getAttribute("aria-label")).toBe("Split pane right");
+    expect(left.querySelector("[data-pane-action='split-down']")?.getAttribute("aria-label")).toBe("Split pane down");
     expect(right.querySelector<HTMLButtonElement>(".workspace-pane-tab-close")?.getAttribute("aria-label"))
       .toBe("Close right.md in right");
     expect(right.querySelector<HTMLButtonElement>(".workspace-pane-tab-close")?.textContent).toBe("×");
     (left.querySelector<HTMLElement>(".workspace-pane-tab-title")!).click();
     (right.querySelector<HTMLElement>(".workspace-pane-tab-close")!).click();
+    (left.querySelector<HTMLElement>("[data-pane-action='source-toggle']")!).click();
     expect(operations).toEqual(["activate:generated-left-pane:note-a.md", "close:right:right.md"]);
     expect(right.querySelector<HTMLButtonElement>(".workspace-pane-tab-close")?.title).toBe("Close right.md in right");
   });
@@ -262,9 +266,10 @@ describe("createWorkspacePaneTabStrip", () => {
     const stripStyle = getComputedStyle(strip);
     const layout = measureTabChromeLayout(strip);
 
-    expect(stripStyle.overflowX).toBe("auto");
+    expect(stripStyle.overflowX).toBe("hidden");
     expect(stripStyle.flexWrap).toBe("nowrap");
-    expect(getComputedStyle(strip).minWidth === "max-content" || getComputedStyle(strip).width === "max-content").toBe(true);
+    expect(getComputedStyle(strip.querySelector(".workspace-pane-tab-list")!).overflowX).toBe("auto");
+    expect(getComputedStyle(strip).width).toBe("100%");
     expect(tabStyle.flexShrink).toBe("0");
     expect(titleStyle.minWidth).toBe("10ch");
     expect(titleStyle.maxWidth).toBe("28ch");
@@ -278,11 +283,38 @@ describe("createWorkspacePaneTabStrip", () => {
     expect(strip.className).toContain("workspace-pane-tabs");
     expect(strip.querySelectorAll(".workspace-pane-tab").length).toBe(2);
 
-    expect(mainCss).toContain('.workspace-pane-slot[data-active="true"] > .workspace-pane-tabs');
-    expect(mainCss).toContain("inset 0 -2px 0 var(--accent)");
+    expect(mainCss).toContain('.workspace-pane-slot[data-active="false"] > .workspace-pane-tabs');
+    expect(mainCss).not.toContain("inset 0 -2px 0 var(--accent)");
     expect(mainCss).toContain(".workspace-pane-empty-body");
     expect(mainCss).not.toContain(".workspace-pane-empty {");
 
     container.remove();
+  });
+
+  it("routes pane-level source and split actions from the tab strip right edge", () => {
+    const operations: string[] = [];
+    const strip = createWorkspacePaneTabStrip(document, "pane-a", {
+      paneId: "pane-a",
+      tabs: [{ path: "note-a.md", fileType: "markdown" }],
+      activeTabPath: "note-a.md",
+    }, "pane-a", (path) => path, {
+      activateTab: () => {},
+      closeTab: () => {},
+      renameTab: () => {},
+      toggleSource: (paneId) => operations.push(`source:${paneId}`),
+      splitPaneRight: (paneId) => operations.push(`right:${paneId}`),
+      splitPaneDown: (paneId) => operations.push(`down:${paneId}`),
+    }, { sourceVisible: true });
+
+    const source = strip.querySelector<HTMLButtonElement>("[data-pane-action='source-toggle']")!;
+    const right = strip.querySelector<HTMLButtonElement>("[data-pane-action='split-right']")!;
+    const down = strip.querySelector<HTMLButtonElement>("[data-pane-action='split-down']")!;
+
+    expect(strip.querySelector(".workspace-pane-actions")).not.toBeNull();
+    expect(source.getAttribute("aria-pressed")).toBe("true");
+    source.click();
+    right.click();
+    down.click();
+    expect(operations).toEqual(["source:pane-a", "right:pane-a", "down:pane-a"]);
   });
 });

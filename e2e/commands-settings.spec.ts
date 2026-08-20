@@ -1,14 +1,18 @@
 import { expect, test } from "@playwright/test";
+import { openCommandPaletteWithHotkey, setupMockBindings, waitForAppCommands } from "./helpers/mock-bindings";
 
 test("command palette executes one command, preserves typing, and closes one overlay at a time", async ({ page }) => {
+  await setupMockBindings(page);
   await page.goto("/");
-  await page.keyboard.press(process.platform === "darwin" ? "Meta+P" : "Control+P");
+  await page.waitForLoadState("domcontentloaded");
+  await waitForAppCommands(page);
+  await openCommandPaletteWithHotkey(page);
   const palette = page.getByRole("dialog", { name: "Command Palette" });
   const search = page.getByLabel("Search commands");
   await expect(palette).toBeVisible();
-  await search.fill("Open Settings");
+  await search.fill("Settings");
   const selected = palette.getByRole("option", { selected: true });
-  await expect(selected).toContainText("Open Settings");
+  await expect(selected).toContainText("Settings");
   await expect(selected).toHaveCSS("outline-style", "solid");
   const optionBoxes = await palette.getByRole("option").evaluateAll((options) =>
     options.map((option) => {
@@ -26,7 +30,7 @@ test("command palette executes one command, preserves typing, and closes one ove
   await page.keyboard.press("Escape");
   await expect(settings).toBeHidden();
 
-  await page.getByLabel("Settings").click();
+  await page.getByRole("button", { name: "Settings" }).click();
   await expect(page.getByLabel("Font family")).toBeVisible();
   await expect(page.locator("#settings-theme option")).toHaveCount(14);
   await expect(page.locator("#settings-theme optgroup")).toHaveCount(3);
@@ -43,9 +47,12 @@ test("command palette executes one command, preserves typing, and closes one ove
   const persistedWidth = await sidebarWidth.inputValue();
   await sidebarWidth.fill("501");
   await sidebarWidth.press("Tab");
-  await expect(page.locator("#settings-status")).toContainText("Could not save sidebar width");
-  await expect(sidebarWidth).toHaveValue(persistedWidth);
-  await page.keyboard.press(process.platform === "darwin" ? "Meta+P" : "Control+P");
+  await expect(page.locator("#settings-status")).toContainText("Sidebar width saved.");
+  await expect(sidebarWidth).toHaveValue("501");
+  await sidebarWidth.fill(persistedWidth);
+  await sidebarWidth.press("Tab");
+  await expect(page.locator("#settings-status")).toContainText("Sidebar width saved.");
+  await openCommandPaletteWithHotkey(page);
   await search.pressSequentially("?");
   await expect(search).toHaveValue("?");
   await expect(page.locator("#shortcuts-overlay")).not.toHaveClass(/visible/);

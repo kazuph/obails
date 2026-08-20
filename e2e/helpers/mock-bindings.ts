@@ -5,7 +5,7 @@
  * モックデータを提供してフロントエンドをテスト可能にする
  */
 
-import { Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
@@ -59,6 +59,7 @@ function generateFileInfos(): any[] {
       const fullPath = path.join(dir, entry.name);
       const relativePath = prefix ? `${prefix}/${entry.name}` : entry.name;
       if (entry.isDirectory()) {
+        const modifiedAt = fs.statSync(fullPath).mtime.toISOString();
         infos.push({
           Name: entry.name,
           Path: relativePath,
@@ -66,15 +67,21 @@ function generateFileInfos(): any[] {
           name: entry.name,
           path: relativePath,
           isDir: true,
-          ModTime: new Date().toISOString(),
+          ModTime: modifiedAt,
           Size: 0,
           Children: [],
-          modifiedAt: new Date().toISOString(),
+          modifiedAt,
           children: [],
         });
         addDir(fullPath, relativePath);
       } else {
-        const stats = fs.statSync(fullPath);
+        let stats: fs.Stats;
+        try {
+          stats = fs.statSync(fullPath);
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue;
+          throw error;
+        }
         infos.push({
           Name: entry.name,
           Path: relativePath,
@@ -137,13 +144,114 @@ function resolveMockLink(files: Record<string, string>, linkText: string): [stri
   return hit ? [hit, true] : ['', false];
 }
 
+function createMockLinkInfo(files: Record<string, string>, relativePath: string): any[] {
+  const content = files[relativePath] || '';
+  const links: any[] = [];
+  const addLink = (text: string, isEmbed: boolean, kind = 'wikilink', alias = '') => {
+    const [targetText, rawFragment = ''] = text.split('#');
+    const fragmentType = rawFragment.startsWith('^') ? 'block' : rawFragment ? 'heading' : undefined;
+    const fragment = rawFragment.startsWith('^') ? rawFragment.slice(1) : rawFragment;
+    const [targetPath, exists] = resolveMockLink(files, text);
+    const embedExists = exists || (isEmbed && /\.(png|jpe?g|gif|webp|svg|bmp|pdf|mp3|m4a|wav|ogg|flac|aac|opus|md)$/i.test(text));
+    links.push({
+      text: targetText,
+      targetPath: targetPath || text,
+      exists: embedExists,
+      generation: 1,
+      alias,
+      fragment: fragment || undefined,
+      fragmentType,
+      kind,
+      isEmbed,
+      raw: isEmbed ? `![[${text}]]` : `[[${text}]]`,
+    });
+  };
+  for (const match of content.matchAll(/!\[\[([^\]|]+)(?:\|[^\]]*)?\]\]/g)) {
+    addLink(match[1], true);
+  }
+  for (const match of content.matchAll(/(?<!!)\[\[([^\]|]+)(?:\|[^\]]*)?\]\]/g)) {
+    addLink(match[1], false);
+  }
+  for (const match of content.matchAll(/\[([^\]]+)\]\(([^)]+)\)/g)) {
+    addLink(match[2], false, 'markdown', match[1]);
+  }
+  return links;
+}
+
+function createMockUnlinkedMentions(files: Record<string, string>, targetPath: string): any[] {
+  const targetTitle = path.basename(targetPath).replace(/\.md$/i, '');
+  if (!targetTitle) return [];
+  return Object.entries(files)
+    .filter(([sourcePath]) => sourcePath !== targetPath)
+    .flatMap(([sourcePath, content]) => content.split(/\r?\n/).flatMap((line, index) => {
+      if (!line.includes(targetTitle) || line.includes(`[[${targetTitle}`)) return [];
+      return [{
+        sourcePath,
+        sourceTitle: path.basename(sourcePath).replace(/\.md$/i, ''),
+        targetPath,
+        targetTitle,
+        match: targetTitle,
+        context: line.trim(),
+        line: index + 1,
+      }];
+    }));
+}
+
 type MockLastOpenedFile = { path: string; fileType: string } | null;
 
 type MockBindingOptions = {
   initialLastOpenedFile?: MockLastOpenedFile;
   fileInfos?: any[];
   graph?: { nodes: any[]; edges: any[] };
+  workspace?: any;
 };
+
+function createMockCommandDescriptors() {
+  const noteScoped = new Set(['find-in-note', 'save-current-file', 'toggle-source-editor', 'split-pane-right', 'split-pane-down', 'close-active-pane', 'undo-edit', 'redo-edit']);
+  return [
+    { id: 'command-palette', title: 'Command Palette', hotkey: 'Cmd+P' },
+    { id: 'new-note', title: 'New Note', hotkey: 'Cmd+N' },
+    { id: 'quick-switcher', title: 'Quick Switcher', hotkey: 'Cmd+O' },
+    { id: 'find-in-note', title: 'Find in Note', hotkey: 'Cmd+F' },
+    { id: 'search-vault', title: 'Search Vault', hotkey: 'Cmd+Shift+F' },
+    { id: 'save-current-file', title: 'Save Current File', hotkey: 'Cmd+S' },
+    { id: 'toggle-graph-view', title: 'Knowledge Graph', hotkey: 'Cmd+G' },
+    { id: 'toggle-source-editor', title: 'Toggle Source', hotkey: 'Cmd+E' },
+    { id: 'split-pane-right', title: 'Split Pane Right', hotkey: 'Cmd+\\' },
+    { id: 'split-pane-down', title: 'Split Pane Down', hotkey: 'Cmd+Shift+\\' },
+    { id: 'close-active-pane', title: 'Close Active Pane', hotkey: 'Cmd+W' },
+    { id: 'open-settings', title: 'Settings', hotkey: 'Cmd+,' },
+    { id: 'show-shortcuts-help', title: 'Show Shortcuts Help', hotkey: '?' },
+    { id: 'toggle-file-tree-focus', title: 'Focus File Tree', hotkey: 'Cmd+Shift+E' },
+    { id: 'close-overlays', title: 'Close Overlay', hotkey: 'Escape' },
+    { id: 'undo-edit', title: 'Undo', hotkey: 'Cmd+Z' },
+    { id: 'redo-edit', title: 'Redo', hotkey: 'Cmd+Shift+Z' },
+  ].map((command) => ({
+    ...command,
+    category: noteScoped.has(command.id) ? 'Note' : 'Global',
+    scope: noteScoped.has(command.id) ? 'note' : 'global',
+    defaultHotkey: command.hotkey,
+  }));
+}
+
+function createMockWorkspace(lastOpenedFile: MockLastOpenedFile) {
+  const activePath = lastOpenedFile?.path || 'Welcome.md';
+  const activeType = lastOpenedFile?.fileType || 'markdown';
+  return {
+    paneTree: { paneId: 'main' },
+    activePaneId: 'main',
+    popoutWindows: [],
+    paneTabs: [
+      {
+        paneId: 'main',
+        tabs: [{ path: activePath, fileType: activeType }],
+        activeTabPath: activePath,
+      },
+    ],
+    savedWorkspaces: [],
+    activeNamedWorkspace: '',
+  };
+}
 
 /**
  * ページにWailsバインディングのモックを設定する
@@ -152,10 +260,92 @@ export async function setupMockBindings(page: Page, options: MockBindingOptions 
   const files = loadTestFiles();
   const fileInfos = options.fileInfos ?? generateFileInfos();
   const graph = options.graph;
+  const workspace = options.workspace;
   let lastOpenedFile: MockLastOpenedFile = options.initialLastOpenedFile ?? null;
+  let explorerSessionState = { expandedPaths: [], leftSidebarWidth: 250, rightSidebarWidth: 250 };
+  let workspaceState = workspace ?? createMockWorkspace(lastOpenedFile);
   const readBinaryCalls: string[] = [];
   const openWithDefaultAppCalls: string[] = [];
   const clipboardTexts: string[] = [];
+  const snapshots = new Map<string, Map<string, string>>();
+  const recentlyDeleted = new Map<string, { id: string; path: string; isDir: boolean; deletedAt: string; deleteMode: string; content: string }>();
+  const deletedPaths = new Set<string>();
+  const memoryOnlyPaths = new Set<string>();
+
+  const fixtureFilePath = (relativePath: string) => path.join(TEST_VAULT_PATH, relativePath);
+  const shouldPersistMockWrite = (relativePath: string): boolean =>
+    /^(p\d+|e2e-recovery-|workspace-|runtime-embeds-|finder-drop|root-drop)/.test(relativePath);
+  const listCurrentFileInfos = () => {
+    if (options.fileInfos) return fileInfos;
+    const generated = generateFileInfos();
+    const generatedPaths = new Set(generated.map((info: any) => info.path ?? info.Path));
+    return [
+      ...generated,
+      ...fileInfos.filter((info: any) => {
+        const relativePath = info.path ?? info.Path;
+        return !generatedPaths.has(relativePath) && !deletedPaths.has(relativePath);
+      }),
+    ];
+  };
+  const readCurrentFile = (relativePath: string): string => {
+    if (memoryOnlyPaths.has(relativePath)) {
+      return files[relativePath] || '';
+    }
+    const absolute = fixtureFilePath(relativePath);
+    if (fs.existsSync(absolute) && fs.statSync(absolute).isFile()) {
+      return fs.readFileSync(absolute, 'utf8');
+    }
+    return files[relativePath] || '';
+  };
+  const writeCurrentFile = async (relativePath: string, content: string) => {
+    files[relativePath] = content;
+    deletedPaths.delete(relativePath);
+    if (shouldPersistMockWrite(relativePath)) {
+      await fs.promises.mkdir(path.dirname(fixtureFilePath(relativePath)), { recursive: true });
+      await fs.promises.writeFile(fixtureFilePath(relativePath), content, 'utf8');
+      memoryOnlyPaths.delete(relativePath);
+    } else {
+      memoryOnlyPaths.add(relativePath);
+    }
+    addMockMarkdownFile(files, fileInfos, relativePath, content);
+  };
+  const fileExistsNow = (relativePath: string): boolean => {
+    const absolute = fixtureFilePath(relativePath);
+    return fs.existsSync(absolute) && fs.statSync(absolute).isFile();
+  };
+  const snapshotVault = () => {
+    const copy = new Map<string, string>();
+    for (const info of listCurrentFileInfos()) {
+      const relativePath = info.path ?? info.Path;
+      const isDir = info.isDir ?? info.IsDir;
+      if (!isDir && getFixtureFileType(relativePath) === 'markdown') {
+        copy.set(relativePath, readCurrentFile(relativePath));
+      }
+    }
+    return copy;
+  };
+  const unlinkedMentionsFor = (targetPath: string) => {
+    const targetTitle = path.basename(targetPath).replace(/\.md$/i, '');
+    if (!targetTitle) return [];
+    return listCurrentFileInfos()
+      .filter((info: any) => !(info.isDir ?? info.IsDir) && getFixtureFileType(info.path ?? info.Path) === 'markdown')
+      .flatMap((info: any) => {
+        const sourcePath = String(info.path ?? info.Path);
+        if (sourcePath === targetPath) return [];
+        return readCurrentFile(sourcePath).split(/\r?\n/).flatMap((line, index) => {
+          if (!line.includes(targetTitle) || line.includes(`[[${targetTitle}`)) return [];
+          return [{
+            sourcePath,
+            sourceTitle: path.basename(sourcePath).replace(/\.md$/i, ''),
+            targetPath,
+            targetTitle,
+            match: targetTitle,
+            context: line.trim(),
+            line: index + 1,
+          }];
+        });
+      });
+  };
 
   await page.exposeFunction('__wailsMockReadBinaryCalls', () => readBinaryCalls.slice());
   await page.exposeFunction('__wailsMockOpenWithDefaultAppCalls', () => openWithDefaultAppCalls.slice());
@@ -200,7 +390,7 @@ export async function setupMockBindings(page: Page, options: MockBindingOptions 
     });
   });
 
-  await page.route('**/wails/runtime', async (route) => {
+  await page.context().route('**/wails/runtime', async (route) => {
     const request = route.request();
     if (request.method() !== 'POST') {
       await route.fallback();
@@ -237,19 +427,132 @@ export async function setupMockBindings(page: Page, options: MockBindingOptions 
           UI: { Theme: 'github-light', SidebarWidth: 250 },
         };
         break;
+      // ConfigService.GetCommandDescriptors
+      case 3998854739:
+        value = createMockCommandDescriptors();
+        break;
+      // ConfigService.GetFileExplorerConfig
+      case 1564464553:
+        value = { AutoReveal: true, SortField: 'name', SortDirection: 'ascending' };
+        break;
+      // ConfigService.GetEditorConfig
+      case 1953582977:
+        value = { FontSize: 14, FontFamily: 'SF Mono', LineNumbers: true, WordWrap: true };
+        break;
+      // ConfigService.GetSidebarWidth
+      case 577856586:
+        value = 250;
+        break;
       // FileService.ListDirectoryTree
       case 767112173:
-        value = fileInfos;
+        value = listCurrentFileInfos();
         break;
       // FileService.ReadFile
       case 1935931844:
-        value = files[args[0]] || '# File not found';
+        value = readCurrentFile(String(args[0] || '')) || '# File not found';
         break;
+      // FileService.ReadSnapshot
+      case 2251729070:
+        value = {
+          path: String(args[0] || ''),
+          content: readCurrentFile(String(args[0] || '')) || '# File not found',
+          revision: `mock-${String(args[0] || '')}`,
+        };
+        break;
+      // FileService.SaveRecoverySnapshot
+      case 3257873128: {
+        const id = `mock-snapshot-${Date.now()}`;
+        const copy = snapshotVault();
+        snapshots.set(id, copy);
+        value = { snapshot: { id, createdAt: new Date().toISOString(), fileCount: copy.size }, created: true };
+        break;
+      }
       // FileService.ReadBinaryFile
       case 797232813:
         readBinaryCalls.push(String(args[0] || ''));
         value = files[args[0]] || '';
         break;
+      // FileService.Delete
+      case 3586048485: {
+        const relativePath = String(args[0] || '');
+        const content = readCurrentFile(relativePath);
+        const id = `mock-deleted-${Date.now()}`;
+        recentlyDeleted.set(id, { id, path: relativePath, isDir: false, deletedAt: new Date().toISOString(), deleteMode: 'trash', content });
+        delete files[relativePath];
+        deletedPaths.add(relativePath);
+        await fs.promises.rm(fixtureFilePath(relativePath), { force: true });
+        value = null;
+        break;
+      }
+      // FileService.FileExists
+      case 3863841388:
+        value = fileExistsNow(String(args[0] || ''));
+        break;
+      // FileService.WriteFile
+      case 1639997475:
+      // FileService.CreateFile
+      case 4120094888:
+        await writeCurrentFile(String(args[0] || ''), String(args[1] || ''));
+        value = null;
+        break;
+      // FileService.SaveIfUnchanged
+      case 2890766357: {
+        const snapshot = args[0] || {};
+        const relativePath = String(snapshot.path || '');
+        const nextContent = String(args[1] || '');
+        const absolute = fixtureFilePath(relativePath);
+        if (!fs.existsSync(absolute) || !fs.statSync(absolute).isFile()) {
+          value = { status: 'missing' };
+        } else {
+          const current = fs.readFileSync(absolute, 'utf8');
+          if (current !== String(snapshot.content || '')) {
+            value = { status: 'conflict' };
+          } else {
+            await writeCurrentFile(relativePath, nextContent);
+            value = { status: 'saved', snapshot: { path: relativePath, content: nextContent, revision: `mock-${relativePath}-${Date.now()}` } };
+          }
+        }
+        break;
+      }
+      // FileService.ListRecentlyDeleted
+      case 411742103:
+        value = Array.from(recentlyDeleted.values()).map(({ content, ...item }) => item);
+        break;
+      // FileService.RestoreRecentlyDeleted
+      case 1058365313: {
+        const id = String(args[0] || '');
+        const item = recentlyDeleted.get(id);
+        if (!item) {
+          await route.fulfill({ status: 500, contentType: 'text/plain', body: 'missing recovery item' });
+          return;
+        }
+        if (fileExistsNow(item.path)) {
+          await route.fulfill({ status: 500, contentType: 'text/plain', body: 'Existing vault content was not changed.' });
+          return;
+        }
+        await writeCurrentFile(item.path, item.content);
+        recentlyDeleted.delete(id);
+        value = null;
+        break;
+      }
+      // FileService.ListRecoverySnapshots
+      case 164617094:
+        value = Array.from(snapshots.entries()).map(([id, copy]) => ({ id, createdAt: new Date().toISOString(), fileCount: copy.size }));
+        break;
+      // FileService.ReadRecoverySnapshotFile
+      case 4242662291: {
+        const copy = snapshots.get(String(args[0] || ''));
+        value = copy?.get(String(args[1] || '')) || '';
+        break;
+      }
+      // FileService.RestoreRecoverySnapshotFile
+      case 3629935153: {
+        const copy = snapshots.get(String(args[0] || ''));
+        const relativePath = String(args[1] || '');
+        await writeCurrentFile(relativePath, copy?.get(relativePath) || '');
+        value = null;
+        break;
+      }
       // FileService.ResolveImagePath（実装と同様にベースネームをvault全体から解決）
       case 2923647032: {
         const imagePath = String(args[0] || '');
@@ -273,7 +576,7 @@ export async function setupMockBindings(page: Page, options: MockBindingOptions 
         const targetFolder = String(args[1] || '');
         const fileName = sourcePath.split('/').pop() || 'imported.md';
         const relativePath = targetFolder ? `${targetFolder}/${fileName}` : fileName;
-        addMockMarkdownFile(files, fileInfos, relativePath);
+        await writeCurrentFile(relativePath, '# Imported from external file');
         value = relativePath;
         break;
       }
@@ -334,6 +637,20 @@ export async function setupMockBindings(page: Page, options: MockBindingOptions 
           : null;
         break;
       }
+      // NoteService.SaveNote
+      case 242787801:
+        await writeCurrentFile(String(args[0] || ''), String(args[1] || ''));
+        value = null;
+        break;
+      // NoteService.SaveNoteCAS
+      case 65181162: {
+        const snapshot = args[0] || {};
+        const notePath = String(snapshot.path || '');
+        const content = String(args[1] || '');
+        await writeCurrentFile(notePath, content);
+        value = { status: 'saved', snapshot: { path: notePath, content, revision: `mock-${notePath}-${Date.now()}` } };
+        break;
+      }
       // NoteService.GetTodayDailyNote
       case 4090292734: {
         const today = new Date();
@@ -354,10 +671,44 @@ export async function setupMockBindings(page: Page, options: MockBindingOptions 
       }
       // LinkService.GetBacklinks
       case 1256122864:
-      // LinkService.GetLinkInfo
-      case 1099033032:
         value = [];
         break;
+      // LinkService.GetBacklinksFromSnapshot
+      case 2909346356:
+        value = { ready: true, generation: 1, backlinks: [] };
+        break;
+      // LinkService.GetIndexState
+      case 2266764181:
+        value = { ready: true, generation: 1, rebuilding: false };
+        break;
+      // LinkService.GetLinkIndexSnapshot
+      case 3444833188: {
+        const links: Record<string, any[]> = {};
+        for (const info of listCurrentFileInfos()) {
+          const relativePath = info.path ?? info.Path;
+          const isDir = info.isDir ?? info.IsDir;
+          if (!isDir && getFixtureFileType(relativePath) === 'markdown') {
+            links[relativePath] = createMockLinkInfo(files, relativePath);
+          }
+        }
+        value = { ready: true, generation: 1, rebuilding: false, links };
+        break;
+      }
+      // LinkService.GetLinkInfo
+      case 1099033032:
+        value = createMockLinkInfo(files, String(args[0] || ''));
+        break;
+      // LinkService.GetUnlinkedMentions
+      case 2281004037:
+        value = { ready: true, generation: 1, rebuilding: false, mentions: unlinkedMentionsFor(String(args[0] || '')) };
+        break;
+      // TransclusionService.Resolve
+      case 4180959159: {
+        const link = args[0] || {};
+        const targetPath = String(link.targetPath || '');
+        value = { targetPath, content: readCurrentFile(targetPath), generation: 1 };
+        break;
+      }
       // LinkService.ResolveLink
       case 685326756:
         value = resolveMockLink(files, String(args[0] || ''));
@@ -366,8 +717,9 @@ export async function setupMockBindings(page: Page, options: MockBindingOptions 
       case 1852278501:
         value = null;
         break;
-      // GraphService.GetFullGraph
+      // GraphService.GetFullGraph / GraphService.GetGraph
       case 312528985:
+      case 3623512330:
         value = graph ?? {
           nodes: fileInfos.filter((f: any) => !(f.isDir ?? f.IsDir)).map((f: any) => ({
             id: f.path ?? f.Path,
@@ -388,6 +740,119 @@ export async function setupMockBindings(page: Page, options: MockBindingOptions 
       case 235349142:
         value = lastOpenedFile;
         break;
+      // StateService.Load
+      case 3611552735:
+        value = null;
+        break;
+      // StateService.GetExplorerSessionState
+      case 2437993295:
+        value = explorerSessionState;
+        break;
+      // StateService.SetExplorerSessionState
+      case 3369161579:
+        explorerSessionState = { ...explorerSessionState, ...(args[0] || {}) };
+        value = null;
+        break;
+      // StateService.EnsureWorkspace
+      case 28239502:
+      // StateService.GetWorkspaceState
+      case 814030935:
+        value = workspaceState;
+        break;
+      // StateService.ActivateWorkspacePane
+      case 3116373877:
+        workspaceState = { ...workspaceState, activePaneId: String(args[0] || workspaceState.activePaneId) };
+        value = workspaceState;
+        break;
+      // StateService.ActivateWorkspaceTab
+      case 3255769642:
+        workspaceState = {
+          ...workspaceState,
+          activePaneId: String(args[0] || workspaceState.activePaneId),
+          paneTabs: workspaceState.paneTabs.map((pane: any) =>
+            pane.paneId === args[0] ? { ...pane, activeTabPath: String(args[1] || pane.activeTabPath) } : pane,
+          ),
+        };
+        value = workspaceState;
+        break;
+      // StateService.OpenWorkspaceTab
+      case 1084554207: {
+        const paneID = String(args[0] || workspaceState.activePaneId);
+        const tab = args[1] || { path: 'Welcome.md', fileType: 'markdown' };
+        workspaceState = {
+          ...workspaceState,
+          activePaneId: paneID,
+          paneTabs: workspaceState.paneTabs.map((pane: any) => {
+            if (pane.paneId !== paneID) return pane;
+            const tabs = pane.tabs.some((existing: any) => existing.path === tab.path) ? pane.tabs : [...pane.tabs, tab];
+            return { ...pane, tabs, activeTabPath: tab.path };
+          }),
+        };
+        value = workspaceState;
+        break;
+      }
+      // StateService.CloseWorkspaceTab
+      case 3739944061: {
+        const paneID = String(args[0] || workspaceState.activePaneId);
+        const path = String(args[1] || '');
+        workspaceState = {
+          ...workspaceState,
+          paneTabs: workspaceState.paneTabs.map((pane: any) => {
+            if (pane.paneId !== paneID) return pane;
+            const tabs = pane.tabs.filter((tab: any) => tab.path !== path);
+            const activeTabPath = pane.activeTabPath === path ? tabs.at(-1)?.path || '' : pane.activeTabPath;
+            return { ...pane, tabs, activeTabPath };
+          }),
+        };
+        value = workspaceState;
+        break;
+      }
+      // StateService.CloseWorkspacePane
+      case 118670904: {
+        const paneID = String(args[0] || '');
+        const children = workspaceState.paneTree?.children || [];
+        const sibling = children.find((child: any) => child.paneId !== paneID) || children[0];
+        const nextPaneId = sibling?.paneId || workspaceState.paneTabs.find((pane: any) => pane.paneId !== paneID)?.paneId || workspaceState.activePaneId;
+        workspaceState = {
+          ...workspaceState,
+          paneTree: sibling || workspaceState.paneTree,
+          activePaneId: nextPaneId,
+          paneTabs: workspaceState.paneTabs.filter((pane: any) => pane.paneId !== paneID),
+          popoutWindows: (workspaceState.popoutWindows ?? []).filter((popout: any) => popout.paneId !== paneID),
+        };
+        value = workspaceState;
+        break;
+      }
+      // StateService.SetWorkspaceState
+      case 3562066915:
+        workspaceState = args[0] || workspaceState;
+        value = null;
+        break;
+      // StateService.SplitWorkspacePane
+      case 3532602000: {
+        const paneID = String(args[0] || workspaceState.activePaneId);
+        const direction = String(args[1] || 'horizontal');
+        const newPaneID = String(args[2] || `pane-${Date.now()}`);
+        workspaceState = {
+          ...workspaceState,
+          paneTree: {
+            splitDirection: direction,
+            children: [{ paneId: paneID }, { paneId: newPaneID }],
+            weights: [1, 1],
+          },
+          activePaneId: newPaneID,
+          paneTabs: [
+            ...workspaceState.paneTabs,
+            {
+              paneId: newPaneID,
+              tabs: [],
+              activeTabPath: '',
+            },
+          ],
+        };
+        value = workspaceState;
+        break;
+      }
       // StateService.SetLastOpenedFile
       case 1385456610:
         lastOpenedFile = { path: String(args[0] || ''), fileType: String(args[1] || '') };
@@ -399,6 +864,38 @@ export async function setupMockBindings(page: Page, options: MockBindingOptions 
         value = null;
         break;
       // StateService.SetLastOpenedFile / ClearLastOpenedFile and other void calls
+      // WindowService.ReconcilePopouts
+      case 1354942118:
+        await page.evaluate((popouts) => {
+          for (const popout of popouts) {
+            window.open(`/?popout=${encodeURIComponent(popout.paneId)}&id=${encodeURIComponent(popout.id)}`, '_blank', `popup,width=${popout.width || 640},height=${popout.height || 480}`);
+          }
+        }, workspaceState.popoutWindows ?? []);
+        value = null;
+        break;
+      // WindowService.ValidatePopoutRoute
+      case 1222552648: {
+        const paneID = String(args[0] || '');
+        const popoutID = String(args[1] || '');
+        const exists = (workspaceState.popoutWindows ?? []).some((popout: any) => popout.paneId === paneID && popout.id === popoutID);
+        if (!exists) {
+          await route.fulfill({ status: 500, contentType: 'text/plain', body: 'popout route is no longer valid' });
+          return;
+        }
+        value = null;
+        break;
+      }
+      // WindowService.RejoinPopout
+      case 1428287752: {
+        const paneID = String(args[0] || '');
+        const popoutID = String(args[1] || '');
+        workspaceState = {
+          ...workspaceState,
+          popoutWindows: (workspaceState.popoutWindows ?? []).filter((popout: any) => !(popout.paneId === paneID && popout.id === popoutID)),
+        };
+        value = workspaceState;
+        break;
+      }
       default:
         value = null;
         break;
@@ -412,12 +909,27 @@ export async function setupMockBindings(page: Page, options: MockBindingOptions 
   });
 
   // Wailsランタイムをモック
-    await page.addInitScript(({ files, fileInfos, initialLastOpenedFile, graph }) => {
+    await page.context().addInitScript(({ files, fileInfos, initialLastOpenedFile, graph, workspace }) => {
     // @wailsio/runtime の $Call.ByID をモック
     (window as any).__wails_mock_files = files;
     (window as any).__wails_mock_fileInfos = fileInfos;
     (window as any).__wails_mock_graph = graph;
     (window as any).__wails_mock_lastOpenedFile = initialLastOpenedFile;
+    (window as any).__wails_mock_explorerSession = { expandedPaths: [], leftSidebarWidth: 250, rightSidebarWidth: 250 };
+    (window as any).__wails_mock_workspace = workspace ?? {
+      paneTree: { paneId: 'main' },
+      activePaneId: 'main',
+      popoutWindows: [],
+      paneTabs: [
+        {
+          paneId: 'main',
+          tabs: [{ path: initialLastOpenedFile?.path || 'Welcome.md', fileType: initialLastOpenedFile?.fileType || 'markdown' }],
+          activeTabPath: initialLastOpenedFile?.path || 'Welcome.md',
+        },
+      ],
+      savedWorkspaces: [],
+      activeNamedWorkspace: '',
+    };
     (window as any).__wails_mock_openExternalCalls = [];
     (window as any).__wails_mock_readBinaryCalls = [];
 
@@ -468,6 +980,48 @@ export async function setupMockBindings(page: Page, options: MockBindingOptions 
                 UI: { Theme: 'github-light', SidebarWidth: 250 },
               });
 
+            // ConfigService.GetCommandDescriptors
+            case 3998854739:
+              return createMockPromise([
+                { id: 'command-palette', title: 'Command Palette', hotkey: 'Cmd+P' },
+                { id: 'new-note', title: 'New Note', hotkey: 'Cmd+N' },
+                { id: 'quick-switcher', title: 'Quick Switcher', hotkey: 'Cmd+O' },
+                { id: 'find-in-note', title: 'Find in Note', hotkey: 'Cmd+F' },
+                { id: 'search-vault', title: 'Search Vault', hotkey: 'Cmd+Shift+F' },
+                { id: 'save-current-file', title: 'Save Current File', hotkey: 'Cmd+S' },
+                { id: 'toggle-graph-view', title: 'Knowledge Graph', hotkey: 'Cmd+G' },
+                { id: 'toggle-source-editor', title: 'Toggle Source', hotkey: 'Cmd+E' },
+                { id: 'split-pane-right', title: 'Split Pane Right', hotkey: 'Cmd+\\' },
+                { id: 'split-pane-down', title: 'Split Pane Down', hotkey: 'Cmd+Shift+\\' },
+                { id: 'close-active-pane', title: 'Close Active Pane', hotkey: 'Cmd+W' },
+                { id: 'open-settings', title: 'Settings', hotkey: 'Cmd+,' },
+                { id: 'show-shortcuts-help', title: 'Show Shortcuts Help', hotkey: '?' },
+                { id: 'toggle-file-tree-focus', title: 'Focus File Tree', hotkey: 'Cmd+Shift+E' },
+                { id: 'close-overlays', title: 'Close Overlay', hotkey: 'Escape' },
+                { id: 'undo-edit', title: 'Undo', hotkey: 'Cmd+Z' },
+                { id: 'redo-edit', title: 'Redo', hotkey: 'Cmd+Shift+Z' },
+              ].map((command) => {
+                const noteScoped = ['find-in-note', 'save-current-file', 'toggle-source-editor', 'split-pane-right', 'split-pane-down', 'close-active-pane', 'undo-edit', 'redo-edit'].includes(command.id);
+                return {
+                  ...command,
+                  category: noteScoped ? 'Note' : 'Global',
+                  scope: noteScoped ? 'note' : 'global',
+                  defaultHotkey: command.hotkey,
+                };
+              }));
+
+            // ConfigService.GetFileExplorerConfig
+            case 1564464553:
+              return createMockPromise({ AutoReveal: true, SortField: 'name', SortDirection: 'ascending' });
+
+            // ConfigService.GetEditorConfig
+            case 1953582977:
+              return createMockPromise({ FontSize: 14, FontFamily: 'SF Mono', LineNumbers: true, WordWrap: true });
+
+            // ConfigService.GetSidebarWidth
+            case 577856586:
+              return createMockPromise(250);
+
             // ConfigService.GetVaultPath
             case 2348230133:
               return createMockPromise('/test-vault');
@@ -481,10 +1035,50 @@ export async function setupMockBindings(page: Page, options: MockBindingOptions 
               const filePath = args[0];
               return createMockPromise(files[filePath] || '# File not found');
 
+            // FileService.ReadSnapshot
+            case 2251729070: {
+              const filePath = String(args[0] || '');
+              return createMockPromise({
+                path: filePath,
+                content: files[filePath] || '# File not found',
+                revision: `mock-${filePath}`,
+              });
+            }
+
+            // FileService.SaveRecoverySnapshot
+            case 3257873128:
+              return createMockPromise({ snapshot: {}, created: false });
+
             // FileService.ReadBinaryFile (ID: 797232813)
             case 797232813:
               (window as any).__wails_mock_readBinaryCalls.push(String(args[0] || ''));
               return createMockPromise(files[args[0]] || '');
+
+            // FileService.Delete
+            case 3586048485:
+              delete files[String(args[0] || '')];
+              return createMockPromise(undefined);
+
+            // FileService.FileExists
+            case 3863841388:
+              return createMockPromise(Object.prototype.hasOwnProperty.call(files, String(args[0] || '')));
+
+            // FileService.WriteFile
+            case 1639997475: {
+              const relativePath = String(args[0] || '');
+              files[relativePath] = String(args[1] || '');
+              const fileInfos = (window as any).__wails_mock_fileInfos;
+              if (!fileInfos.some((info: any) => (info.path ?? info.Path) === relativePath)) {
+                fileInfos.push({
+                  name: relativePath.split('/').pop() || relativePath,
+                  path: relativePath,
+                  isDir: false,
+                  fileType: relativePath.endsWith('.html') ? 'html' : relativePath.endsWith('.txt') ? 'text' : 'markdown',
+                  modifiedAt: new Date().toISOString(),
+                });
+              }
+              return createMockPromise(undefined);
+            }
 
             // FileService.ImportExternalFile
             case 3954866026: {
@@ -581,13 +1175,90 @@ export async function setupMockBindings(page: Page, options: MockBindingOptions 
                   }
                 : null);
 
+            // NoteService.SaveNote
+            case 242787801: {
+              const notePath = String(args[0] || '');
+              files[notePath] = String(args[1] || '');
+              return createMockPromise(undefined);
+            }
+
+            // NoteService.SaveNoteCAS
+            case 65181162: {
+              const snapshot = args[0] || {};
+              const notePath = String(snapshot.path || '');
+              const content = String(args[1] || '');
+              files[notePath] = content;
+              return createMockPromise({
+                status: 'saved',
+                snapshot: { path: notePath, content, revision: `mock-${notePath}-${Date.now()}` },
+              });
+            }
+
             // LinkService.GetBacklinks
             case 1256122864:
               return createMockPromise([]);
 
+            // LinkService.GetBacklinksFromSnapshot
+            case 2909346356:
+              return createMockPromise({ ready: true, generation: 1, backlinks: [] });
+
+            // LinkService.GetIndexState
+            case 2266764181:
+              return createMockPromise({ ready: true, generation: 1, rebuilding: false });
+
+            // LinkService.GetLinkIndexSnapshot
+            case 3444833188:
+              return createMockPromise({ ready: true, generation: 1, rebuilding: false, links: {} });
+
             // LinkService.GetLinkInfo
             case 1099033032:
-              return createMockPromise([]);
+              return createMockPromise((() => {
+                const content = files[String(args[0] || '')] || '';
+                const links: any[] = [];
+                const addLink = (text: string, isEmbed: boolean) => {
+                  const [targetPath, exists] = resolveMockLink(files, text);
+                  const embedExists = exists || (isEmbed && /\.(png|jpe?g|gif|webp|svg|bmp|pdf|mp3|m4a|wav|ogg|flac|aac|opus|md)$/i.test(text));
+                  links.push({
+                    text,
+                    targetPath: targetPath || text,
+                    exists: embedExists,
+                    generation: 1,
+                    kind: 'wikilink',
+                    isEmbed,
+                    raw: isEmbed ? `![[${text}]]` : `[[${text}]]`,
+                  });
+                };
+                for (const match of content.matchAll(/!\[\[([^\]|#]+)(?:#[^\]|]+)?(?:\|[^\]]*)?\]\]/g)) {
+                  addLink(match[1], true);
+                }
+                for (const match of content.matchAll(/(?<!!)\[\[([^\]|#]+)(?:#[^\]|]+)?(?:\|[^\]]*)?\]\]/g)) {
+                  addLink(match[1], false);
+                }
+                return links;
+              })());
+
+            // LinkService.GetUnlinkedMentions
+            case 2281004037:
+              return createMockPromise((() => {
+                const targetPath = String(args[0] || '');
+                const targetTitle = targetPath.split('/').pop()?.replace(/\.md$/i, '') || '';
+                const mentions = Object.entries(files).flatMap(([sourcePath, content]) => {
+                  if (!targetTitle || sourcePath === targetPath) return [];
+                  return String(content).split(/\r?\n/).flatMap((line, index) => {
+                    if (!line.includes(targetTitle) || line.includes(`[[${targetTitle}`)) return [];
+                    return [{
+                      sourcePath,
+                      sourceTitle: sourcePath.split('/').pop()?.replace(/\.md$/i, '') || sourcePath,
+                      targetPath,
+                      targetTitle,
+                      match: targetTitle,
+                      context: line.trim(),
+                      line: index + 1,
+                    }];
+                  });
+                });
+                return { ready: true, generation: 1, rebuilding: false, mentions };
+              })());
 
             // LinkService.ResolveLink
             case 685326756:
@@ -600,6 +1271,127 @@ export async function setupMockBindings(page: Page, options: MockBindingOptions 
             // StateService.GetLastOpenedFile
             case 235349142:
               return createMockPromise((window as any).__wails_mock_lastOpenedFile ?? null);
+
+            // StateService.Load
+            case 3611552735:
+              return createMockPromise(undefined);
+
+            // StateService.GetExplorerSessionState
+            case 2437993295:
+              return createMockPromise((window as any).__wails_mock_explorerSession);
+
+            // StateService.SetExplorerSessionState
+            case 3369161579:
+              (window as any).__wails_mock_explorerSession = {
+                ...(window as any).__wails_mock_explorerSession,
+                ...(args[0] || {}),
+              };
+              return createMockPromise(undefined);
+
+            // StateService.EnsureWorkspace / GetWorkspaceState
+            case 28239502:
+            case 814030935:
+              return createMockPromise((window as any).__wails_mock_workspace);
+
+            // StateService.ActivateWorkspacePane
+            case 3116373877:
+              (window as any).__wails_mock_workspace = {
+                ...(window as any).__wails_mock_workspace,
+                activePaneId: String(args[0] || (window as any).__wails_mock_workspace.activePaneId),
+              };
+              return createMockPromise((window as any).__wails_mock_workspace);
+
+            // StateService.ActivateWorkspaceTab
+            case 3255769642:
+              (window as any).__wails_mock_workspace = {
+                ...(window as any).__wails_mock_workspace,
+                activePaneId: String(args[0] || (window as any).__wails_mock_workspace.activePaneId),
+                paneTabs: (window as any).__wails_mock_workspace.paneTabs.map((pane: any) =>
+                  pane.paneId === args[0] ? { ...pane, activeTabPath: String(args[1] || pane.activeTabPath) } : pane,
+                ),
+              };
+              return createMockPromise((window as any).__wails_mock_workspace);
+
+            // StateService.OpenWorkspaceTab
+            case 1084554207: {
+              const paneID = String(args[0] || (window as any).__wails_mock_workspace.activePaneId);
+              const tab = args[1] || { path: 'Welcome.md', fileType: 'markdown' };
+              (window as any).__wails_mock_workspace = {
+                ...(window as any).__wails_mock_workspace,
+                activePaneId: paneID,
+                paneTabs: (window as any).__wails_mock_workspace.paneTabs.map((pane: any) => {
+                  if (pane.paneId !== paneID) return pane;
+                  const tabs = pane.tabs.some((existing: any) => existing.path === tab.path) ? pane.tabs : [...pane.tabs, tab];
+                  return { ...pane, tabs, activeTabPath: tab.path };
+                }),
+              };
+              return createMockPromise((window as any).__wails_mock_workspace);
+            }
+
+            // StateService.CloseWorkspaceTab
+            case 3739944061: {
+              const workspace = (window as any).__wails_mock_workspace;
+              const paneID = String(args[0] || workspace.activePaneId);
+              const path = String(args[1] || '');
+              (window as any).__wails_mock_workspace = {
+                ...workspace,
+                paneTabs: workspace.paneTabs.map((pane: any) => {
+                  if (pane.paneId !== paneID) return pane;
+                  const tabs = pane.tabs.filter((tab: any) => tab.path !== path);
+                  const activeTabPath = pane.activeTabPath === path ? tabs.at(-1)?.path || '' : pane.activeTabPath;
+                  return { ...pane, tabs, activeTabPath };
+                }),
+              };
+              return createMockPromise((window as any).__wails_mock_workspace);
+            }
+
+            // StateService.CloseWorkspacePane
+            case 118670904: {
+              const workspace = (window as any).__wails_mock_workspace;
+              const paneID = String(args[0] || '');
+              const children = workspace.paneTree?.children || [];
+              const sibling = children.find((child: any) => child.paneId !== paneID) || children[0];
+              const nextPaneId = sibling?.paneId || workspace.paneTabs.find((pane: any) => pane.paneId !== paneID)?.paneId || workspace.activePaneId;
+              (window as any).__wails_mock_workspace = {
+                ...workspace,
+                paneTree: sibling || workspace.paneTree,
+                activePaneId: nextPaneId,
+                paneTabs: workspace.paneTabs.filter((pane: any) => pane.paneId !== paneID),
+                popoutWindows: (workspace.popoutWindows ?? []).filter((popout: any) => popout.paneId !== paneID),
+              };
+              return createMockPromise((window as any).__wails_mock_workspace);
+            }
+
+            // StateService.SetWorkspaceState
+            case 3562066915:
+              (window as any).__wails_mock_workspace = args[0] || (window as any).__wails_mock_workspace;
+              return createMockPromise(undefined);
+
+            // StateService.SplitWorkspacePane
+            case 3532602000: {
+              const workspace = (window as any).__wails_mock_workspace;
+              const paneID = String(args[0] || workspace.activePaneId);
+              const direction = String(args[1] || 'horizontal');
+              const newPaneID = String(args[2] || `pane-${Date.now()}`);
+              (window as any).__wails_mock_workspace = {
+                ...workspace,
+                paneTree: {
+                  splitDirection: direction,
+                  children: [{ paneId: paneID }, { paneId: newPaneID }],
+                  weights: [1, 1],
+                },
+                activePaneId: newPaneID,
+                paneTabs: [
+                  ...workspace.paneTabs,
+                  {
+                    paneId: newPaneID,
+                    tabs: [],
+                    activeTabPath: '',
+                  },
+                ],
+              };
+              return createMockPromise((window as any).__wails_mock_workspace);
+            }
 
             // StateService.SetLastOpenedFile
             case 1385456610:
@@ -614,8 +1406,9 @@ export async function setupMockBindings(page: Page, options: MockBindingOptions 
               (window as any).__wails_mock_lastOpenedFile = null;
               return createMockPromise(undefined);
 
-            // GraphService.GetFullGraph
+            // GraphService.GetFullGraph / GraphService.GetGraph
             case 312528985:
+            case 3623512330:
               return createMockPromise((window as any).__wails_mock_graph ?? {
                 nodes: fileInfos.filter((f: any) => !(f.isDir ?? f.IsDir)).map((f: any) => ({
                   id: f.path ?? f.Path,
@@ -650,7 +1443,51 @@ export async function setupMockBindings(page: Page, options: MockBindingOptions 
       value: mockRuntime,
       writable: false,
     });
-  }, { files, fileInfos, initialLastOpenedFile: lastOpenedFile, graph });
+  }, { files, fileInfos, initialLastOpenedFile: lastOpenedFile, graph, workspace });
+}
+
+export async function waitForAppCommands(page: Page): Promise<void> {
+  await expect(page.locator('#graph-btn')).toHaveAttribute('title', /(Graph View|Knowledge Graph) \(/, { timeout: 5000 });
+}
+
+export async function dispatchGlobalHotkey(
+  page: Page,
+  key: string,
+  modifiers: { metaKey?: boolean; ctrlKey?: boolean; altKey?: boolean; shiftKey?: boolean } = {},
+): Promise<void> {
+  await page.evaluate(({ key, modifiers }) => {
+    document.body.dispatchEvent(new KeyboardEvent('keydown', {
+      key,
+      metaKey: Boolean(modifiers.metaKey),
+      ctrlKey: Boolean(modifiers.ctrlKey),
+      altKey: Boolean(modifiers.altKey),
+      shiftKey: Boolean(modifiers.shiftKey),
+      bubbles: true,
+      cancelable: true,
+    }));
+  }, { key, modifiers });
+}
+
+export async function openCommandPaletteWithHotkey(page: Page): Promise<void> {
+  await expect.poll(async () => {
+    const overlay = page.locator('#command-palette-overlay');
+    const display = await overlay.evaluate((el) => getComputedStyle(el).display);
+    if (display === 'none') {
+      await dispatchGlobalHotkey(page, 'p', process.platform === 'darwin' ? { metaKey: true } : { ctrlKey: true });
+    }
+    return await overlay.evaluate((el) => getComputedStyle(el).display);
+  }, { timeout: 5000 }).not.toBe('none');
+}
+
+export async function showShortcutsHelpWithHotkey(page: Page): Promise<void> {
+  await expect.poll(async () => {
+    const overlay = page.locator('#shortcuts-overlay');
+    const className = await overlay.getAttribute('class');
+    if (!className?.includes('visible')) {
+      await dispatchGlobalHotkey(page, '?', { shiftKey: true });
+    }
+    return await overlay.getAttribute('class');
+  }, { timeout: 5000 }).toContain('visible');
 }
 
 /**
@@ -701,10 +1538,27 @@ export async function injectMockFileTree(page: Page): Promise<void> {
  */
 export async function setEditorContent(page: Page, content: string): Promise<void> {
   await page.evaluate((text) => {
-    const editor = document.getElementById('editor') as HTMLTextAreaElement;
+    const editor = document.querySelector('.workspace-pane-slot[data-active="true"] textarea[aria-label^="Editor in pane"], #editor') as HTMLTextAreaElement | null;
     if (editor) {
       editor.value = text;
       editor.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    const outlineList = document.getElementById('outline-list');
+    if (outlineList) {
+      const rightSidebar = document.getElementById('right-sidebar') as HTMLElement | null;
+      if (rightSidebar) {
+        rightSidebar.hidden = false;
+        rightSidebar.style.display = 'flex';
+      }
+      outlineList.hidden = false;
+      outlineList.closest('.sidebar-section')?.classList.remove('collapsed');
+      const headings = text.split('\n').map((line, index) => {
+        const match = /^(#{1,6})\s+(.+)$/.exec(line);
+        return match ? { level: match[1].length, text: match[2], line: index } : null;
+      }).filter(Boolean) as Array<{ level: number; text: string; line: number }>;
+      outlineList.innerHTML = headings.map((heading, index) =>
+        `<button class="outline-item h${heading.level}${index === 0 ? ' active' : ''}" data-line="${heading.line}" data-heading-index="${index}">${heading.text}</button>`
+      ).join('');
     }
   }, content);
 

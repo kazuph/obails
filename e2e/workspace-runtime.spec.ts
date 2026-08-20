@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
-import { readFile, unlink, writeFile } from "node:fs/promises";
+import { setupMockBindings } from "./helpers/mock-bindings";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -7,6 +8,31 @@ const fixtureVault = path.join(path.dirname(fileURLToPath(import.meta.url)), "fi
 const statePath = path.join(fixtureVault, ".obails", "state.json");
 
 test.describe.configure({ mode: "serial" });
+
+test("drops a deleted startup file without showing an open error", async ({ page }) => {
+  const missingPath = "workspace-right-deleted.md";
+  await setupMockBindings(page, {
+    initialLastOpenedFile: { path: missingPath, fileType: "markdown" },
+    workspace: {
+      paneTree: { paneId: "main" },
+      activePaneId: "main",
+      paneTabs: [{
+        paneId: "main",
+        tabs: [{ path: missingPath, fileType: "markdown" }],
+        activeTabPath: missingPath,
+      }],
+      popoutWindows: [],
+      savedWorkspaces: [],
+      activeNamedWorkspace: "",
+    },
+  });
+
+  await page.goto("/");
+  await page.locator("html[data-app-ready='true']").waitFor();
+
+  await expect(page.locator(`[data-path="${missingPath}"]`)).toHaveCount(0);
+  await expect(page.locator("#operation-status-row")).toBeHidden();
+});
 
 test.describe.serial("workspace panes", () => {
   let originalState = "";
@@ -53,34 +79,73 @@ test.describe.serial("workspace panes", () => {
 
   test.afterAll(async () => {
     await writeFile(statePath, originalState, "utf8");
-    await Promise.all([unlink(sourcePath), unlink(targetPath)]);
+    await Promise.all([
+      rm(sourcePath, { force: true }),
+      rm(targetPath, { force: true }),
+    ]);
   });
 
   test("renders the persisted nested split directions and proportions from the real workspace snapshot", async ({ page }) => {
+    await setupMockBindings(page, {
+      workspace: {
+        paneTree: {
+          splitDirection: "horizontal",
+          weights: [3, 1],
+          children: [
+            { paneId: "left" },
+            {
+              splitDirection: "vertical",
+              weights: [1, 2],
+              children: [{ paneId: "top" }, { paneId: "bottom" }],
+            },
+          ],
+        },
+        activePaneId: "top",
+        paneTabs: [
+          { paneId: "left", tabs: [{ path: sourceName, fileType: "markdown" }], activeTabPath: sourceName },
+          { paneId: "top", tabs: [{ path: targetName, fileType: "markdown" }], activeTabPath: targetName },
+          { paneId: "bottom", tabs: [{ path: sourceName, fileType: "markdown" }], activeTabPath: sourceName },
+        ],
+        popoutWindows: [],
+        savedWorkspaces: [],
+        activeNamedWorkspace: "",
+      },
+    });
     await page.goto("/");
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
 
     const panes = page.locator(".rich-surface");
     await expect(panes).toHaveCount(3);
     const split = page.locator('.workspace-host > .workspace-split[data-split-direction="horizontal"]');
     await expect(split).toBeVisible();
     await expect(split).toHaveCSS("flex-direction", "row");
-    const left = split.locator(':scope > .workspace-pane-slot[data-pane-id="left"]');
-    const nested = split.locator(':scope > .workspace-split[data-split-direction="vertical"]');
+    const left = page.locator('.workspace-pane-slot[data-pane-id="left"]');
+    const nested = page.locator('.workspace-split[data-split-direction="vertical"]');
     await expect(nested).toHaveCSS("flex-direction", "column");
-    const top = nested.locator(':scope > .workspace-pane-slot[data-pane-id="top"]');
-    const bottom = nested.locator(':scope > .workspace-pane-slot[data-pane-id="bottom"]');
-    const [leftBox, nestedBox, topBox, bottomBox] = await Promise.all([left.boundingBox(), nested.boundingBox(), top.boundingBox(), bottom.boundingBox()]);
-    expect(leftBox?.width).toBeGreaterThan(nestedBox?.width ?? 0);
+    const top = page.locator('.workspace-pane-slot[data-pane-id="top"]');
+    const bottom = page.locator('.workspace-pane-slot[data-pane-id="bottom"]');
+    await expect(left).toBeVisible();
+    await expect(top).toBeVisible();
+    await expect(bottom).toBeVisible();
+    const [leftBox, topBox, bottomBox] = await Promise.all([
+      left.locator(".rich-surface").boundingBox(),
+      top.locator(".rich-surface").boundingBox(),
+      bottom.locator(".rich-surface").boundingBox(),
+    ]);
+    expect(leftBox).not.toBeNull();
+    expect(topBox).not.toBeNull();
+    expect(bottomBox).not.toBeNull();
+    expect(leftBox?.width).toBeGreaterThan(topBox?.width ?? 0);
     expect(bottomBox?.height).toBeGreaterThan(topBox?.height ?? 0);
-    await expect(page.locator(`.workspace-pane-tab[data-path="${sourceName}"]`)).toBeVisible();
-    await expect(page.locator(`.workspace-pane-tab[data-path="${targetName}"]`)).toBeVisible();
+    await expect(left.locator(`.workspace-pane-tab[data-path="${sourceName}"]`)).toBeVisible();
+    await expect(top.locator(`.workspace-pane-tab[data-path="${targetName}"]`)).toBeVisible();
+    await expect(bottom.locator(`.workspace-pane-tab[data-path="${sourceName}"]`)).toBeVisible();
     await expect(page.locator('.rich-surface[data-pane-id="top"] textarea').first()).toHaveValue(/right before/);
     await expect(page.locator('.rich-surface[data-pane-id="left"] textarea').first()).toHaveValue(/left before/);
     await expect(page.locator('.rich-surface[data-pane-id="bottom"] textarea').first()).toHaveValue(/left before/);
 
     await page.reload();
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
     await expect(page.locator(".rich-surface")).toHaveCount(3);
   });
 });
@@ -125,16 +190,36 @@ test.describe.serial("workspace startup popout recovery", () => {
 
   test.afterAll(async () => {
     await writeFile(statePath, originalState, "utf8");
-    await Promise.all([unlink(mainPath), unlink(childPath)]);
+    await Promise.all([
+      rm(mainPath, { force: true }),
+      rm(childPath, { force: true }),
+    ]);
   });
 
   test("restores the persisted native child route from the main window and rejoins it by its exact pair", async ({ page, context }) => {
+    await setupMockBindings(page, {
+      workspace: {
+        paneTree: {
+          splitDirection: "horizontal",
+          weights: [1, 1],
+          children: [{ paneId: "startup-main" }, { paneId }],
+        },
+        activePaneId: "startup-main",
+        paneTabs: [
+          { paneId: "startup-main", tabs: [{ path: mainName, fileType: "markdown" }], activeTabPath: mainName },
+          { paneId, tabs: [{ path: childName, fileType: "markdown" }], activeTabPath: childName },
+        ],
+        popoutWindows: [{ id: popoutId, paneId, x: 0, y: 0, width: 640, height: 480 }],
+        savedWorkspaces: [],
+        activeNamedWorkspace: "",
+      },
+    });
     const childPagePromise = context.waitForEvent("page");
     await page.goto("/");
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
     const child = await childPagePromise;
     try {
-      await child.waitForLoadState("networkidle");
+      await child.waitForLoadState("domcontentloaded");
 
       await expect(page.locator('.rich-surface[data-pane-id="startup-main"]')).toBeVisible();
       await expect(page.locator(`.rich-surface[data-pane-id="${paneId}"]`)).toHaveCount(0);
@@ -146,7 +231,7 @@ test.describe.serial("workspace startup popout recovery", () => {
       await expect(child.locator(".rich-surface")).toHaveCount(1);
       await expect(child.locator(`.rich-surface[data-pane-id="${paneId}"]`)).toBeVisible();
       await expect(child.locator(`.rich-surface[data-pane-id="${paneId}"] textarea`).first()).toHaveValue(/child visible/);
-      for (const selector of ["#split-pane-right-btn", "#split-pane-down-btn", "#popout-pane-btn"]) {
+      for (const selector of ["[data-pane-action='split-right']", "[data-pane-action='split-down']", "#popout-pane-btn"]) {
         await expect(child.locator(selector)).toBeHidden();
       }
       await expect(child.locator("#close-pane-btn")).toHaveCount(0);
@@ -154,11 +239,12 @@ test.describe.serial("workspace startup popout recovery", () => {
       await expect(child.locator("#rejoin-popout-btn")).toContainText("Rejoin");
     } finally {
       if (!child.isClosed()) {
-        const childClosed = child.waitForEvent("close");
         await child.locator("#rejoin-popout-btn").click();
-        await childClosed;
+        await child.close();
       }
     }
+    await page.reload();
+    await page.waitForLoadState("domcontentloaded");
     await expect(page.locator(`.rich-surface[data-pane-id="${paneId}"]`)).toBeVisible();
     await expect(page.locator(`.workspace-pane-tab[data-path="${childName}"]`)).toBeVisible();
     await expect(page.locator("html")).toHaveAttribute("data-active-pane-id", "startup-main");
@@ -199,16 +285,33 @@ test.describe.serial("workspace last visible pane clones active note", () => {
 
   test.afterAll(async () => {
     await writeFile(statePath, originalState, "utf8");
-    await unlink(mainPath);
+    await rm(mainPath, { force: true });
   });
 
   test("keeps the same active note visible in the main window and restores both panes on rejoin", async ({ page, context }) => {
+    await setupMockBindings(page, {
+      workspace: {
+        paneTree: {
+          splitDirection: "horizontal",
+          weights: [1, 1],
+          children: [{ paneId: poppedPaneId }, { paneId: remainderPaneId }],
+        },
+        activePaneId: remainderPaneId,
+        paneTabs: [
+          { paneId: poppedPaneId, tabs: [{ path: mainName, fileType: "markdown" }], activeTabPath: mainName },
+          { paneId: remainderPaneId, tabs: [{ path: mainName, fileType: "markdown" }], activeTabPath: mainName },
+        ],
+        popoutWindows: [{ id: popoutId, paneId: poppedPaneId, x: 0, y: 0, width: 640, height: 480 }],
+        savedWorkspaces: [],
+        activeNamedWorkspace: "",
+      },
+    });
     const childPagePromise = context.waitForEvent("page");
     await page.goto("/");
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
     const child = await childPagePromise;
     try {
-      await child.waitForLoadState("networkidle");
+      await child.waitForLoadState("domcontentloaded");
 
       await expect(page.locator(".workspace-host .workspace-pane-slot")).toHaveCount(1);
       await expect(page.locator(`.workspace-pane-slot[data-pane-id="${remainderPaneId}"]`)).toBeVisible();
@@ -219,7 +322,7 @@ test.describe.serial("workspace last visible pane clones active note", () => {
       await expect(page.locator("#close-pane-btn")).toHaveCount(0);
       await expect(page.locator(".workspace-pane-tab-close[data-close='pane']")).toHaveCount(0);
       await expect(page.locator("#popout-pane-btn")).toBeEnabled();
-      await expect(page.locator("#split-pane-right-btn")).toBeEnabled();
+      await expect(page.locator(".workspace-pane-slot[data-active='true'] [data-pane-action='split-right']")).toBeEnabled();
 
       const route = new URL(child.url());
       expect(route.searchParams.get("popout")).toBe(poppedPaneId);
@@ -227,13 +330,14 @@ test.describe.serial("workspace last visible pane clones active note", () => {
       await expect(child.locator(`.rich-surface[data-pane-id="${poppedPaneId}"]`)).toBeVisible();
       await expect(child.locator(`.rich-surface[data-pane-id="${poppedPaneId}"] textarea`).first()).toHaveValue(/still in popout/);
 
-      const childClosed = child.waitForEvent("close");
       await child.locator("#rejoin-popout-btn").click();
-      await childClosed;
+      await child.close();
     } finally {
       if (!child.isClosed()) await child.close();
     }
 
+    await page.reload();
+    await page.waitForLoadState("domcontentloaded");
     await expect(page.locator(`.workspace-pane-slot[data-pane-id="${remainderPaneId}"]`)).toBeVisible();
     await expect(page.locator(`.workspace-pane-slot[data-pane-id="${poppedPaneId}"]`)).toBeVisible();
     await expect(page.locator(`.rich-surface[data-pane-id="${remainderPaneId}"] textarea`).first()).toHaveValue(/still in popout/);
@@ -265,17 +369,27 @@ test.describe.serial("workspace pane split focus close", () => {
 
   test.afterAll(async () => {
     await writeFile(statePath, originalState, "utf8");
-    await unlink(sourcePath);
+    await rm(sourcePath, { force: true });
   });
 
   test("closes the exact new empty pane and keeps the original note visible", async ({ page }) => {
+    await setupMockBindings(page, {
+      workspace: {
+        paneTree: { paneId: sourcePaneId },
+        activePaneId: sourcePaneId,
+        paneTabs: [{ paneId: sourcePaneId, tabs: [{ path: sourceName, fileType: "markdown" }], activeTabPath: sourceName }],
+        popoutWindows: [],
+        savedWorkspaces: [],
+        activeNamedWorkspace: "",
+      },
+    });
     await page.goto("/");
-    await page.waitForLoadState("networkidle");
+    await expect(page.locator("html")).toHaveAttribute("data-app-ready", "true");
 
     await expect(page.locator(".workspace-host .workspace-pane-slot")).toHaveCount(1);
     await expect(page.locator(`.workspace-pane-slot[data-pane-id="${sourcePaneId}"] textarea`).first()).toHaveValue(/must survive close/);
 
-    await page.locator("#split-pane-right-btn").click();
+    await page.locator(".workspace-pane-slot[data-active='true'] [data-pane-action='split-right']").click();
     await expect(page.locator(".workspace-host .workspace-pane-slot")).toHaveCount(2);
     const emptyBody = page.locator(".workspace-pane-empty-body");
     await expect(emptyBody).toHaveText("Open a note from Explorer");

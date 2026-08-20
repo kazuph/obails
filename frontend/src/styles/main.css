@@ -314,8 +314,7 @@
    外側の大きな角丸はネイティブ macOS ウィンドウ形状と競合するため付けない。 */
 [data-theme^="liquid-glass"] .main-content {
     background: var(--bg-primary);
-    margin: 10px;
-    margin-left: 2px;
+    margin: 8px;
     border-radius: 0;
     overflow: hidden;
     box-shadow:
@@ -403,6 +402,7 @@
     /* 動き: 全アニメはこの2つを参照する */
     --duration: 0.18s;
     --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+    --header-h: 44px;
     /* フォーカスリングは accent 由来の1種のみ */
     --focus-ring: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent);
 }
@@ -491,7 +491,8 @@ body {
 }
 
 .sidebar-header {
-    padding: 0.75rem 1rem;
+    height: var(--header-h);
+    padding: 0 1rem;
     padding-left: 80px; /* macOS window buttons space */
     border-bottom: 1px solid var(--border);
     -webkit-app-region: drag;
@@ -538,6 +539,7 @@ body {
 
 /* File Search */
 .file-search {
+    position: relative;
     padding: 0.5rem;
     border-bottom: 1px solid var(--border);
     display: flex;
@@ -580,29 +582,55 @@ body {
     color: var(--text-primary);
 }
 
-.file-tree-controls {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+.file-search-actions {
+    display: flex;
     align-items: center;
     gap: 0.25rem;
-    padding: 0.35rem 0.5rem 0;
+    flex: 0 0 auto;
 }
 
-.file-tree-controls .icon-btn {
-    color: var(--text-secondary);
+.file-tree-sort-menu {
+    position: absolute;
+    top: calc(100% - 0.25rem);
+    right: 0.5rem;
+    z-index: 30;
+    min-width: 13rem;
+    padding: 0.25rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-m);
+    background: var(--bg-primary);
+    box-shadow: var(--shadow-2);
 }
 
-.file-tree-controls select {
+.file-tree-sort-menu-item {
     width: 100%;
-    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.42rem 0.55rem;
+    border: 0;
+    border-radius: var(--radius-s);
+    background: transparent;
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: 0.82rem;
+    text-align: left;
+    cursor: pointer;
 }
 
-.file-tree-controls .icon-btn:first-of-type {
-    margin-inline-start: 0;
+.file-tree-sort-menu-item:hover,
+.file-tree-sort-menu-item[aria-checked="true"] {
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    color: var(--text-primary);
 }
 
-.file-tree-controls .icon-btn {
-    justify-self: start;
+.file-tree-sort-menu-check {
+    width: 1rem;
+    height: 1rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--accent);
 }
 
 .file-item.selected {
@@ -708,29 +736,19 @@ body {
 }
 
 .preview-pane .frontmatter-summary-icon {
-    display: inline-block;
+    display: inline-flex;
     flex: 0 0 1rem;
     width: 1rem;
-    text-align: right;
     height: 1rem;
-    line-height: 1;
-    font-size: 1rem;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
     transform: rotate(0deg);
     transition: transform var(--duration) var(--ease);
 }
 
-.preview-pane .frontmatter-summary-icon::after {
-    content: "▼";
-    color: var(--text-secondary);
-    width: 1rem;
-    text-align: right;
-    font-size: 0.9rem;
-    line-height: 1;
-    display: inline-block;
-}
-
-.preview-pane .frontmatter-details[open] .frontmatter-summary-icon::after {
-    content: "▲";
+.preview-pane .frontmatter-details:not([open]) .frontmatter-summary-icon {
+    transform: rotate(-90deg);
 }
 
 .preview-pane .frontmatter-details > :not(summary) {
@@ -783,12 +801,10 @@ body {
     background: color-mix(in srgb, var(--text-primary) 7%, transparent);
 }
 
-/* 選択中: 淡い塗り＋左端のアクセント線（macOSの作法）。
-   キーボード選択(.keyboard-selected)とは別表現を維持する */
+/* 選択中: 淡い塗り＋文字色。キーボード選択(.keyboard-selected)とは別表現を維持する */
 .file-item.active {
     background: color-mix(in srgb, var(--accent) 14%, transparent);
     color: var(--text-primary);
-    box-shadow: inset 3px 0 0 0 var(--accent);
 }
 
 /* Keyboard navigation selection - use magenta to differentiate from active file */
@@ -869,7 +885,8 @@ body {
 }
 
 .toolbar {
-    padding: 0.5rem 1rem;
+    height: var(--header-h);
+    padding: 0 1rem;
     background: var(--bg-secondary);
     border-bottom: 1px solid var(--border);
     display: grid;
@@ -1486,8 +1503,8 @@ body {
     flex-direction: column;
 }
 
-.workspace-pane-slot[data-active="true"] > .workspace-pane-tabs {
-    box-shadow: inset 0 -2px 0 var(--accent);
+.workspace-pane-slot[data-active="false"] > .workspace-pane-tabs {
+    color: var(--text-secondary);
 }
 
 .workspace-split[data-split-direction="horizontal"] {
@@ -1561,10 +1578,10 @@ body {
     display: flex;
     flex-wrap: nowrap;
     align-items: center;
-    gap: 0.25rem;
+    gap: 0.5rem;
     min-height: 2rem;
     padding: 0.2rem 0.5rem;
-    overflow-x: auto;
+    overflow-x: hidden;
     overflow-y: hidden;
     background: var(--bg-secondary);
     border-bottom: 1px solid var(--border);
@@ -1575,14 +1592,56 @@ body {
 }
 
 .workspace-pane-tab-group {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 0.25rem;
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+}
+
+.workspace-pane-tab-list {
     display: inline-flex;
     flex-wrap: nowrap;
     align-items: center;
     gap: 0.25rem;
-    /* Keep tabs at content size so overflow scrolls the strip instead of crushing titles. */
-    min-width: max-content;
-    width: max-content;
-    max-width: none;
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+}
+
+.workspace-pane-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    flex: 0 0 auto;
+    margin-left: auto;
+}
+
+.workspace-pane-action {
+    width: 1.75rem;
+    height: 1.75rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-s);
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+.workspace-pane-action:hover {
+    background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+    color: var(--text-primary);
+}
+
+.workspace-pane-action.active {
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 .workspace-pane-tab {
@@ -1652,7 +1711,7 @@ body {
 
 .workspace-pane-tab[aria-selected="true"] {
     border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
-    box-shadow: inset 0 -2px 0 var(--accent);
+    background: var(--bg-primary);
 }
 
 .workspace-pane-tab-close:hover {
@@ -2084,6 +2143,12 @@ body {
 
 .sidebar-section-chevron {
     flex-shrink: 0;
+    display: inline-flex;
+    width: 1rem;
+    height: 1rem;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
     transition: transform var(--duration) var(--ease);
 }
 
@@ -2133,7 +2198,6 @@ button.outline-item {
 .outline-item.active {
     background: color-mix(in srgb, var(--accent) 16%, transparent);
     color: var(--accent);
-    box-shadow: inset 3px 0 0 var(--accent);
 }
 
 .outline-item.h1 { padding-left: 0.5rem; font-weight: 600; }
@@ -2244,7 +2308,7 @@ button.outline-item {
 }
 
 .backlink-item.unlinked {
-    border-left: 3px solid var(--text-muted);
+    color: var(--text-secondary);
 }
 
 .backlink-title {
@@ -2539,18 +2603,22 @@ details.callout > summary.callout-title::-webkit-details-marker {
 
 details.callout .callout-fold {
     margin-left: auto;
+    display: inline-flex;
+    width: 1rem;
+    height: 1rem;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    transform: rotate(0deg);
     transition: transform 0.15s ease;
 }
 
-details.callout .callout-fold::before {
-    content: "›";
-    display: inline-block;
-    font-size: 18px;
-    transform: rotate(90deg);
+details.callout .callout-fold {
+    transition: transform var(--duration) var(--ease);
 }
 
-details.callout:not([open]) .callout-fold::before {
-    transform: rotate(0deg);
+details.callout:not([open]) .callout-fold {
+    transform: rotate(-90deg);
 }
 
 .callout-icon {
@@ -4171,8 +4239,31 @@ details.callout:not([open]) .callout-fold::before {
 }
 
 .vault-search-help summary {
+    list-style: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
     cursor: pointer;
     color: var(--text-primary);
+}
+
+.vault-search-help summary::-webkit-details-marker {
+    display: none;
+}
+
+.details-chevron {
+    display: inline-flex;
+    width: 1rem;
+    height: 1rem;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    transition: transform var(--duration) var(--ease);
+}
+
+.vault-search-help:not([open]) .details-chevron {
+    transform: rotate(-90deg);
 }
 
 .vault-search-help ol {

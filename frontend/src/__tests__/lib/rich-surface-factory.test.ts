@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createRichSurface } from "../../lib/rich-surface-factory";
 
 const buttonNames = [
-  "Toggle Source",
   "Retry save",
   "Reload disk version",
   "Close document",

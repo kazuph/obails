@@ -12,8 +12,10 @@ describe("File Explorer sort persistence contract", () => {
   });
 
   it("keeps a release marker on the controls embedded in the production bundle", () => {
-    expect(indexSource).toContain("obails-v1.0.4-explorer-sort-persistence");
-    expect(indexSource).toContain("obails-v1.0.4-audio-majority-order");
+    expect(indexSource).toContain("obails-v1.1.0-explorer-sort-menu");
+    expect(indexSource).toContain("obails-v1.1.0-audio-majority-order");
     expect(indexSource).toContain('data-explorer-default-sort="name-descending"');
+    expect(indexSource).toContain('id="file-tree-sort-btn"');
+    expect(indexSource).toContain('id="file-tree-fold-toggle-btn"');
   });
 });

@@ -3,6 +3,7 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
+import { setupMockBindings } from "./helpers/mock-bindings";
 
 const vaultPath = path.resolve("e2e/fixtures/test-vault");
 const recoveryRoot = path.join(
@@ -15,6 +16,10 @@ const recoveryRoot = path.join(
 );
 const snapshotsRoot = path.join(recoveryRoot, "snapshots");
 const recentlyDeletedRoot = path.join(recoveryRoot, "recently-deleted");
+
+function activeEditor(page: import("@playwright/test").Page) {
+  return page.locator('.workspace-pane-slot[data-active="true"] textarea[aria-label^="Editor in pane"]').first();
+}
 
 async function prepareRecoveryFixture(): Promise<void> {
   await fs.rm(path.join(vaultPath, ".trash"), { recursive: true, force: true });
@@ -37,8 +42,9 @@ test.describe("P-072/P-073 File recovery", () => {
 
     await fs.writeFile(filePath, originalContent, "utf8");
     try {
+      await setupMockBindings(page);
       await page.goto("/");
-      await page.waitForLoadState("networkidle");
+      await page.locator("html[data-app-ready='true']").waitFor();
       const fileItem = page.locator(`.file-item[data-path="${basename}"]`);
       await expect(fileItem).toBeVisible();
 
@@ -56,7 +62,7 @@ test.describe("P-072/P-073 File recovery", () => {
       await page.getByRole("button", { name: "Done" }).click();
       await fileItem.click();
       await page.getByRole("button", { name: "Toggle Source" }).click();
-      await page.locator("#editor").fill(changedContent);
+      await activeEditor(page).fill(changedContent);
       await page.keyboard.press(process.platform === "darwin" ? "Meta+S" : "Control+S");
 
       await page.getByRole("button", { name: "Settings" }).click();
@@ -71,12 +77,12 @@ test.describe("P-072/P-073 File recovery", () => {
       await snapshots.getByRole("button", { name: "Close recovery snapshots" }).click();
       await page.getByRole("button", { name: "Done" }).click();
       await fileItem.click();
-      await expect(page.locator("#editor")).toHaveValue(originalContent);
+      await expect(activeEditor(page)).toHaveValue(originalContent);
 
       await fileItem.click({ button: "right" });
       await page.locator("#ctx-delete").click();
       const deleteDialog = page.getByRole("dialog", { name: "Delete Item?" });
-      await expect(deleteDialog).toContainText("vault's .trash folder");
+      await expect(deleteDialog).toContainText("system Trash");
       await deleteDialog.getByRole("button", { name: "Delete" }).click();
       await expect(fileItem).toBeHidden();
 

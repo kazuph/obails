@@ -1,5 +1,6 @@
 import { toHtml } from "@mizchi/markdown";
 import katex from "katex";
+import { renderIcon } from "./icons";
 
 const FRONT_MATTER_PATTERN =
   /^\uFEFF?---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
@@ -398,7 +399,7 @@ function protectCallouts(
     let html: string;
     if (fold) {
       const open = fold === "+" ? " open" : "";
-      html = `<details class="callout" data-callout="${type}"${open}><summary class="callout-title">${titleInner}<span class="callout-fold" aria-hidden="true"></span></summary>${bodyHtml}</details>`;
+      html = `<details class="callout" data-callout="${type}"${open}><summary class="callout-title">${titleInner}<span class="callout-fold" aria-hidden="true">${renderIcon("chevron-down")}</span></summary>${bodyHtml}</details>`;
     } else {
       html = `<div class="callout" data-callout="${type}"><div class="callout-title">${titleInner}</div>${bodyHtml}</div>`;
     }
@@ -480,7 +481,7 @@ export function parseMarkdown(content: string): string {
   const trimmedBody = body.replace(/^\r?\n+/, "");
   const { body: bodyWithoutFootnotes, footnotes } = extractFootnotes(trimmedBody);
   const frontMatterHtml = block
-    ? `<section class="frontmatter"><details class="frontmatter-details"><summary class="frontmatter-summary" aria-label="Toggle metadata"><span class="frontmatter-summary-label">Metadata</span><span class="frontmatter-summary-icon" aria-hidden="true"></span></summary>${renderFrontMatter(block)}</details></section>`
+    ? `<section class="frontmatter"><details class="frontmatter-details"><summary class="frontmatter-summary" aria-label="Toggle metadata"><span class="frontmatter-summary-label">Metadata</span><span class="frontmatter-summary-icon" aria-hidden="true">${renderIcon("chevron-down")}</span></summary>${renderFrontMatter(block)}</details></section>`
     : "";
 
   const store = newStore();

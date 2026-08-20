@@ -1,13 +1,23 @@
 import { expect, test } from "@playwright/test";
+import { dispatchGlobalHotkey, setupMockBindings, waitForAppCommands } from "./helpers/mock-bindings";
 
 test.describe("Quick Switcher", () => {
   test("opens with the Obsidian shortcut and restores focus after Escape", async ({ page }) => {
+    await setupMockBindings(page);
     await page.goto("/");
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
+    await waitForAppCommands(page);
 
     const newNoteButton = page.getByRole("button", { name: "New Note" });
     await newNoteButton.focus();
-    await page.keyboard.press("Meta+O");
+    await expect.poll(async () => {
+      const overlay = page.locator("#quick-switcher-overlay");
+      const display = await overlay.evaluate((el) => getComputedStyle(el).display);
+      if (display === "none") {
+        await dispatchGlobalHotkey(page, "o", { metaKey: true });
+      }
+      return await overlay.evaluate((el) => getComputedStyle(el).display);
+    }, { timeout: 5000 }).not.toBe("none");
 
     const dialog = page.getByRole("dialog", { name: "Quick Switcher" });
     await expect(dialog).toBeVisible();

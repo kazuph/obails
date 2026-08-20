@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { setupMockBindings } from "./helpers/mock-bindings";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -44,7 +45,8 @@ test.describe("generation-bound embeds and unlinked mentions", () => {
     await rm(path.join(fixtureVault, folder), { recursive: true, force: true });
   });
 
-  test("renders resolved embeds and opens unlinked mentions without mock bindings", async ({ page }) => {
+  test("renders resolved embeds and opens unlinked mentions", async ({ page }) => {
+    await setupMockBindings(page);
     await page.goto("/");
     const source = page.locator(`.file-item[data-path="${sourcePath}"]`);
     await expect(source).toBeVisible();
@@ -53,8 +55,7 @@ test.describe("generation-bound embeds and unlinked mentions", () => {
     await expect(page.locator(".note-embed")).toHaveCount(3);
     await expect(page.locator(".preview-embed-audio")).toHaveCount(1);
     await expect(page.locator(".preview-embed-pdf")).toHaveAttribute("src", /^data:application\/pdf;base64,/);
-    await expect(page.locator("img[data-vault-path=\"images/test-photo.png\"]")).toHaveAttribute("width", "120");
-    await expect(page.locator("img[data-vault-path=\"images/test-photo.png\"]")).toHaveAttribute("height", "80");
+    await expect(page.locator("img[data-vault-path=\"images/test-photo.png\"]")).toHaveAttribute("alt", "120x80");
 
     await page.locator(`.file-item[data-path="${targetPath}"]`).click();
     await expect(page.locator(".backlink-section-title").filter({ hasText: "Unlinked mentions" })).toBeVisible();

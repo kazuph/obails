@@ -2,6 +2,7 @@ import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
+import { setupMockBindings } from "./helpers/mock-bindings";
 
 const fixtureVaultPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "fixtures/test-vault");
 
@@ -29,23 +30,24 @@ test.describe("Internal link navigation", () => {
     ]);
 
     try {
+      await setupMockBindings(page);
       await page.goto("/");
-      await page.waitForLoadState("networkidle");
+      await page.waitForLoadState("domcontentloaded");
       await page.locator(`.file-item[data-path="${sourceName}"]`).click();
 
       await page.locator(`.wiki-link[data-link*="${wikiTargetName.replace(/\.md$/, "")}"]`).click();
-      await expect(page.locator("#editor")).toHaveValue(/Wiki target body/);
+      await expect(page.getByText("Wiki target body")).toBeVisible();
 
       await page.locator(`.file-item[data-path="${sourceName}"]`).click();
-      await page.getByRole("link", { name: "Markdown heading" }).click();
-      await expect(page.locator("#editor")).toHaveValue(/Markdown target body/);
+      await page.getByLabel("Document pane main").getByRole("link", { name: "Markdown heading" }).click();
+      await expect(page.getByText("Markdown target body")).toBeVisible();
 
       await page.locator(`.file-item[data-path="${sourceName}"]`).click();
-      await page.getByRole("link", { name: "Missing note" }).click();
+      await page.getByLabel("Document pane main").getByRole("link", { name: "Missing note" }).click();
       const dialog = page.getByRole("dialog", { name: "Create linked note?" });
       await expect(dialog).toBeVisible();
       await dialog.getByRole("button", { name: "Create note" }).click();
-      await expect(page.locator("#editor-title")).toHaveText(missingTargetName);
+      await expect(page.getByRole("button", { name: `Tab ${missingTargetName}` })).toHaveAttribute("aria-pressed", "true");
     } finally {
       await Promise.all([
         rm(sourcePath, { force: true }),

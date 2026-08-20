@@ -47,9 +47,12 @@ function backendFor(initial: WorkspaceStateSnapshot) {
     }),
     closeWorkspaceTab: async (paneId, path) => (current = {
       ...current,
-      paneTabs: (current.paneTabs ?? []).map((pane) => pane.paneId === paneId
-        ? { ...pane, tabs: (pane.tabs ?? []).filter((entry) => entry.path !== path), activeTabPath: "" }
-        : pane),
+      paneTabs: (current.paneTabs ?? []).map((pane) => {
+        if (pane.paneId !== paneId) return pane;
+        const tabs = (pane.tabs ?? []).filter((entry) => entry.path !== path);
+        const activeTabPath = pane.activeTabPath === path ? tabs.at(-1)?.path ?? "" : pane.activeTabPath;
+        return { ...pane, tabs, activeTabPath };
+      }),
     }),
     activateWorkspaceTabInPopout: async (paneId, _popoutId, path) => (current = {
       ...current,
@@ -106,6 +109,39 @@ function backendFor(initial: WorkspaceStateSnapshot) {
 }
 
 describe("WorkspaceRuntimeController", () => {
+  it("discards the unopened bootstrap runtime when persisted workspace pane IDs differ", async () => {
+    const factory = new DocumentRuntimeFactory(async () => {});
+    factory.forPane("main");
+    const backendState = backendFor(snapshot(["persisted"]));
+    const controller = new WorkspaceRuntimeController(factory, backendState.backend, () => {});
+
+    await controller.ensureWorkspace("main");
+
+    expect(factory.paneIds()).toEqual(["persisted"]);
+  });
+
+  it("removes persisted tabs whose files no longer exist before startup restore", async () => {
+    const factory = new DocumentRuntimeFactory(async () => {});
+    const initial = snapshot(["main"]);
+    initial.paneTabs = [{
+      paneId: "main",
+      tabs: [
+        { path: "workspace-right-deleted.md", fileType: "markdown" },
+        { path: "Welcome.md", fileType: "markdown" },
+      ],
+      activeTabPath: "workspace-right-deleted.md",
+    }];
+    const backendState = backendFor(initial);
+    const controller = new WorkspaceRuntimeController(factory, backendState.backend, () => {});
+    const ensured = await controller.ensureWorkspace("main");
+
+    const available = await controller.removeUnavailableTabs(ensured, async (path) => path === "Welcome.md");
+
+    expect(paneTabsFor(available, "main")?.tabs).toEqual([
+      { path: "Welcome.md", fileType: "markdown" },
+    ]);
+  });
+
   it("uses returned snapshots for ensure, open, split, activate, and close routing", async () => {
     const factory = new DocumentRuntimeFactory(async () => {});
     const backendState = backendFor(snapshot(["left"]));

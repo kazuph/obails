@@ -63,7 +63,30 @@ export class WorkspaceRuntimeController {
   }
 
   async ensureWorkspace(paneId: string): Promise<WorkspaceStateSnapshot> {
-    return this.enqueue(async () => this.commit(await this.backend.ensureWorkspace(paneId)));
+    return this.enqueue(async () => {
+      const snapshot = await this.backend.ensureWorkspace(paneId);
+      this.factory.discardUnopenedPanesExcept(leafPaneIds(snapshot.paneTree));
+      return this.commit(snapshot);
+    });
+  }
+
+  async removeUnavailableTabs(
+    snapshot: WorkspaceStateSnapshot,
+    pathExists: (path: string) => Promise<boolean>,
+  ): Promise<WorkspaceStateSnapshot> {
+    return this.enqueue(async () => {
+      let current = snapshot;
+      let changed = false;
+      for (const pane of snapshot.paneTabs ?? []) {
+        for (const tab of pane.tabs ?? []) {
+          if (await pathExists(tab.path)) continue;
+          if (!await this.factory.flushPane(pane.paneId)) return current;
+          current = await this.backend.closeWorkspaceTab(pane.paneId, tab.path);
+          changed = true;
+        }
+      }
+      return changed ? this.commit(current) : current;
+    });
   }
 
   async openTab(path: string, fileType: string, paneId = this.requireActivePane()): Promise<WorkspaceStateSnapshot | null> {

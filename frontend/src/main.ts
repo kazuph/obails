@@ -402,7 +402,6 @@ function ensurePaneSurface(paneId: string): RichSurface {
 }
 
 function setRichSurfaceIcons(surface: RichSurface) {
-    setButtonIcon(surface.sourceToggleButton, "code");
     setButtonIcon(surface.noteSearchPreviousButton, "page-single");
     setButtonIcon(surface.noteSearchNextButton, "page-continuous");
     setButtonIcon(surface.noteSearchCloseButton, "close");
@@ -653,12 +652,6 @@ function installRichSurfaceEditorListeners(surface: RichSurface, runtime: Primar
     richNoteSearchControllers.set(surface.paneId, { open: openSearch, close: closeSearch, refresh: refreshSearch });
     surface.root.addEventListener("pointerdown", () => {
         void activateWorkspacePaneFromUi(surface.paneId);
-    });
-    surface.sourceToggleButton.addEventListener("click", () => {
-        const hidden = surface.editorContainer.classList.toggle("source-hidden");
-        surface.sourceToggleButton.setAttribute("aria-pressed", hidden ? "false" : "true");
-        surface.sourceToggleButton.classList.toggle("active", !hidden);
-        if (!hidden) surface.editor.focus();
     });
     const renameCurrentNote = async () => {
         await activateWorkspacePaneFromUi(surface.paneId);
@@ -1052,8 +1045,6 @@ function applyWorkspaceSnapshot(snapshot: WorkspaceStateSnapshot) {
     renderActiveSharedSidebar();
     document.documentElement.dataset.activePaneId = activePaneId;
     if (legacyRichSurfaceRoot) legacyRichSurfaceRoot.dataset.active = legacySurfacePaneId === activePaneId ? "true" : "false";
-    splitPaneRightButton.disabled = Boolean(popoutRoute) || visiblePaneIds.length === 0;
-    splitPaneDownButton.disabled = Boolean(popoutRoute) || visiblePaneIds.length === 0;
     applyPopoutToolbarMode();
     if (nextActivePaneId && nextActivePaneId !== previousActivePaneId) {
         queueMicrotask(() => focusWorkspacePane(nextActivePaneId));
@@ -1061,8 +1052,6 @@ function applyWorkspaceSnapshot(snapshot: WorkspaceStateSnapshot) {
 }
 
 function applyPopoutToolbarMode() {
-    splitPaneRightButton.hidden = Boolean(popoutRoute);
-    splitPaneDownButton.hidden = Boolean(popoutRoute);
     popoutPaneButton.hidden = Boolean(popoutRoute);
     rejoinPopoutButton.hidden = !popoutRoute;
 }
@@ -1087,8 +1076,15 @@ function renderWorkspacePaneTabs(snapshot: WorkspaceStateSnapshot, visiblePaneCo
                 renameTab: (targetPaneId, path) => void renameWorkspaceTabFromUi(targetPaneId, path),
                 activatePane: (targetPaneId) => void activateWorkspacePaneFromUi(targetPaneId),
                 closePane: (targetPaneId) => void closeWorkspacePaneFromUi(targetPaneId),
+                toggleSource: (targetPaneId) => void toggleSourceEditorForPane(targetPaneId),
+                splitPaneRight: (targetPaneId) => void splitWorkspacePaneFromUi(targetPaneId, "horizontal"),
+                splitPaneDown: (targetPaneId) => void splitWorkspacePaneFromUi(targetPaneId, "vertical"),
             },
-            { paneClose },
+            {
+                paneClose,
+                sourceVisible: isSourceEditorVisibleForPane(paneId),
+                splitControls: popoutRoute ? "hidden" : "visible",
+            },
         );
         // Keep the visible × from createWorkspacePaneTabStrip; icon injection hid AX names.
         group.querySelectorAll<HTMLButtonElement>(".workspace-pane-tab-close").forEach((button) => {
@@ -1521,8 +1517,6 @@ const htmlPreview = document.getElementById("html-preview") as HTMLIFrameElement
 const htmlEditorTitle = document.getElementById("html-editor-title")!;
 const workspaceHost = document.getElementById("workspace-host") as HTMLElement;
 const workspacePaneTabs = document.getElementById("workspace-pane-tabs") as HTMLElement;
-const splitPaneRightButton = document.getElementById("split-pane-right-btn") as HTMLButtonElement;
-const splitPaneDownButton = document.getElementById("split-pane-down-btn") as HTMLButtonElement;
 const popoutPaneButton = document.getElementById("popout-pane-btn") as HTMLButtonElement;
 const rejoinPopoutButton = document.getElementById("rejoin-popout-btn") as HTMLButtonElement;
 
@@ -1590,7 +1584,6 @@ async function refreshCommandSnapshot() {
         "new-note": "new-note-btn",
         "toggle-graph-view": "graph-btn",
         "search-vault": "vault-search-btn",
-        "toggle-source-editor": "source-toggle-btn",
     };
     for (const command of commandSnapshot) {
         const target = document.getElementById(toolbarTargets[command.id]);
@@ -1775,10 +1768,9 @@ async function init() {
         appThemeFromConfig = normalizeThemeValue(config?.UI?.Theme || "");
         fileTreeAutoReveal = explorer.AutoReveal;
         fileTreeSort = resolveFileTreeSort(explorer.SortField, explorer.SortDirection);
-        (document.getElementById("file-tree-sort-field") as HTMLSelectElement).value = fileTreeSort.field;
-        (document.getElementById("file-tree-sort-direction") as HTMLSelectElement).value = fileTreeSort.direction;
         if (config?.Vault?.Path) {
-            const workspace = await workspaceController.ensureWorkspace(activePaneId);
+            let workspace = await workspaceController.ensureWorkspace(activePaneId);
+            workspace = await workspaceController.removeUnavailableTabs(workspace, (path) => FileService.FileExists(path));
             await restoreWorkspaceLeafTabs(workspace);
             await openActiveWorkspaceTab(workspace);
             await loadFileTree();
@@ -1788,8 +1780,13 @@ async function init() {
             if (lastFile) {
                 const resolvedType = resolveFileType(lastFile.fileType, lastFile.path);
                 try {
-                    await openFile(lastFile.path, resolvedType);
-                    lastSyncedOpenedFile = toStateKey(lastFile.path, resolvedType);
+                    if (await FileService.FileExists(lastFile.path)) {
+                        await openFile(lastFile.path, resolvedType);
+                        lastSyncedOpenedFile = toStateKey(lastFile.path, resolvedType);
+                    } else {
+                        await StateService.ClearLastOpenedFile();
+                        lastSyncedOpenedFile = "";
+                    }
                 } catch {
                     await StateService.ClearLastOpenedFile();
                     lastSyncedOpenedFile = "";
@@ -1811,6 +1808,7 @@ async function init() {
     setupToolbarIcons();
     setupWindowFocusBreathing();
     setupEventListeners();
+    document.documentElement.dataset.appReady = "true";
 }
 
 // ウィンドウが背面に回ったら、道具類が静かに沈む（macOSの作法）
@@ -1831,13 +1829,10 @@ function setupToolbarIcons() {
     setButtonIcon(document.getElementById("graph-btn")!, "graph");
     setButtonIcon(document.getElementById("vault-search-btn")!, "search");
     setButtonIcon(document.getElementById("refresh-btn")!, "refresh");
-    setButtonIcon(document.getElementById("source-toggle-btn")!, "code");
-    setButtonIcon(document.getElementById("split-pane-right-btn")!, "split-right");
-    setButtonIcon(document.getElementById("split-pane-down-btn")!, "split-down");
     setButtonIcon(document.getElementById("popout-pane-btn")!, "external-link");
     setButtonIconWithLabel(document.getElementById("rejoin-popout-btn")!, "external-link", "Rejoin");
-    setButtonIcon(document.getElementById("collapse-all-folders-btn")!, "folder-closed");
-    setButtonIcon(document.getElementById("expand-all-folders-btn")!, "folder-open");
+    setButtonIcon(document.getElementById("file-tree-sort-btn")!, "arrow-up-down");
+    updateFolderToggleButton();
     setButtonIcon(document.getElementById("mini-player-close")!, "close");
     setButtonIcon(document.getElementById("vault-search-close")!, "close");
     setButtonIcon(document.getElementById("recently-deleted-close")!, "close");
@@ -1847,6 +1842,9 @@ function setupToolbarIcons() {
     if (miniPlayerIcon) {
         miniPlayerIcon.innerHTML = renderIcon("music");
     }
+    document.querySelectorAll<HTMLElement>(".sidebar-section-chevron, .details-chevron").forEach((element) => {
+        element.innerHTML = renderIcon("chevron-down");
+    });
 
     const searchClearBtn = document.getElementById("file-search-clear");
     if (searchClearBtn) {
@@ -2058,17 +2056,46 @@ async function prefetchGraphData() {
     }
 }
 
-// Source editor visibility (default: preview only, < > toggles the source pane)
-function toggleSourceEditor() {
-    const hidden = editorContainer.classList.toggle("source-hidden");
-    const btn = document.getElementById("source-toggle-btn");
-    if (btn) {
-        btn.setAttribute("aria-pressed", hidden ? "false" : "true");
-        btn.classList.toggle("active", !hidden);
-    }
+function editorContainerForPane(paneId: string): HTMLElement | null {
+    if (paneId === legacySurfacePaneId) return editorContainer;
+    return paneSurfaces.get(paneId)?.editorContainer || null;
+}
+
+function editorElementForPane(paneId: string): HTMLTextAreaElement | null {
+    if (paneId === legacySurfacePaneId) return editor;
+    return paneSurfaces.get(paneId)?.editor || null;
+}
+
+function isSourceEditorVisibleForPane(paneId: string): boolean {
+    return !editorContainerForPane(paneId)?.classList.contains("source-hidden");
+}
+
+function syncPaneSourceToggleButton(paneId: string) {
+    const button = paneTabStrips.get(paneId)?.querySelector<HTMLButtonElement>("[data-pane-action='source-toggle']");
+    if (!button) return;
+    const visible = isSourceEditorVisibleForPane(paneId);
+    button.setAttribute("aria-pressed", visible ? "true" : "false");
+    button.classList.toggle("active", visible);
+}
+
+// Source editor visibility (default: preview only, < > toggles the active pane source)
+function toggleSourceEditorForPane(paneId: string) {
+    const container = editorContainerForPane(paneId);
+    if (!container) return;
+    const hidden = container.classList.toggle("source-hidden");
+    syncPaneSourceToggleButton(paneId);
     if (!hidden) {
-        editor.focus();
+        editorElementForPane(paneId)?.focus();
     }
+}
+
+function toggleSourceEditor() {
+    toggleSourceEditorForPane(activePaneId);
+}
+
+async function splitWorkspacePaneFromUi(paneId: string, direction: "horizontal" | "vertical") {
+    await activateWorkspacePaneFromUi(paneId);
+    await splitActiveWorkspacePane(direction);
 }
 
 // Event Listeners
@@ -2088,9 +2115,6 @@ function setupEventListeners() {
     document.getElementById("graph-btn")!.addEventListener("click", toggleGraphView);
     vaultSearchButton.addEventListener("click", showVaultSearch);
     document.getElementById("refresh-btn")!.addEventListener("click", refresh);
-    document.getElementById("source-toggle-btn")!.addEventListener("click", toggleSourceEditor);
-    splitPaneRightButton.addEventListener("click", () => void splitActiveWorkspacePane("horizontal"));
-    splitPaneDownButton.addEventListener("click", () => void splitActiveWorkspacePane("vertical"));
     popoutPaneButton.addEventListener("click", () => void createActivePanePopout());
     rejoinPopoutButton.addEventListener("click", () => void rejoinCurrentPopout());
     document.getElementById("graph-relayout")!.addEventListener("click", refreshGraphData);
@@ -2263,6 +2287,11 @@ function setupEventListeners() {
         if (event.target === event.currentTarget) hideCommandPalette();
     });
     document.addEventListener("keydown", (e) => {
+        if ((e.key === "?" || (e.key === "/" && e.shiftKey)) && !e.metaKey && !e.ctrlKey && !e.altKey && !suppressPrintableHotkeyInEditableTarget(e, e.target)) {
+            e.preventDefault();
+            toggleShortcutsHelp();
+            return;
+        }
         const command = !(suppressPrintableHotkeyInEditableTarget(e, e.target) || (e.key === "Escape" && fileTreeFocused))
             ? resolveHotkeyCommand(commandSnapshot, e, isMac, isNoteSearchContext(e.target))
             : undefined;
@@ -2406,34 +2435,81 @@ function setupFileTreeDropTarget() {
 }
 
 function setupFolderTreeControls() {
-    document.getElementById("collapse-all-folders-btn")!.addEventListener("click", () => {
-        setAllFoldersExpanded(false);
-    });
-    document.getElementById("expand-all-folders-btn")!.addEventListener("click", () => {
-        setAllFoldersExpanded(true);
+    document.getElementById("file-tree-fold-toggle-btn")!.addEventListener("click", () => {
+        setAllFoldersExpanded(hasExpandedFolders() ? false : true);
     });
 }
 
 function setupFileExplorerControls() {
-    const field = document.getElementById("file-tree-sort-field") as HTMLSelectElement;
-    const direction = document.getElementById("file-tree-sort-direction") as HTMLSelectElement;
-    field.value = fileTreeSort.field;
-    direction.value = fileTreeSort.direction;
-    const save = async () => {
-        const nextSort = parseFileTreeSort(field.value, direction.value);
+    const button = document.getElementById("file-tree-sort-btn") as HTMLButtonElement;
+    const menu = document.getElementById("file-tree-sort-menu") as HTMLElement;
+    const sortOptions: Array<{ sort: FileTreeSort; label: string }> = [
+        { sort: { field: "name", direction: "ascending" }, label: "Name A-Z" },
+        { sort: { field: "name", direction: "descending" }, label: "Name Z-A" },
+        { sort: { field: "modified", direction: "descending" }, label: "Modified newest first" },
+        { sort: { field: "modified", direction: "ascending" }, label: "Modified oldest first" },
+        { sort: { field: "created", direction: "descending" }, label: "Created newest first" },
+        { sort: { field: "created", direction: "ascending" }, label: "Created oldest first" },
+    ];
+    const currentLabel = () => sortOptions.find(({ sort }) => sort.field === fileTreeSort.field && sort.direction === fileTreeSort.direction)?.label || "Sort files";
+    const closeMenu = () => {
+        menu.hidden = true;
+        button.setAttribute("aria-expanded", "false");
+    };
+    const renderMenu = () => {
+        menu.replaceChildren();
+        for (const option of sortOptions) {
+            const item = document.createElement("button");
+            item.type = "button";
+            item.className = "file-tree-sort-menu-item";
+            item.setAttribute("role", "menuitemradio");
+            const active = option.sort.field === fileTreeSort.field && option.sort.direction === fileTreeSort.direction;
+            item.setAttribute("aria-checked", active ? "true" : "false");
+            const check = document.createElement("span");
+            check.className = "file-tree-sort-menu-check";
+            check.innerHTML = active ? renderIcon("check") : "";
+            const label = document.createElement("span");
+            label.textContent = option.label;
+            item.append(check, label);
+            item.addEventListener("click", () => {
+                void saveSort(option.sort);
+            });
+            menu.append(item);
+        }
+    };
+    const saveSort = async (nextSort: FileTreeSort) => {
         if (!nextSort) return;
         try {
             await ConfigService.SetFileExplorerSort(nextSort.field, nextSort.direction);
             fileTreeSort = nextSort;
+            button.title = currentLabel();
+            button.setAttribute("aria-label", `Sort files: ${currentLabel()}`);
+            renderMenu();
+            closeMenu();
             await loadFileTree({ revealActiveFile: false });
         } catch (err) {
             console.error("Failed to save file explorer sort:", err);
-            field.value = fileTreeSort.field;
-            direction.value = fileTreeSort.direction;
+            renderMenu();
         }
     };
-    field.addEventListener("change", () => void save());
-    direction.addEventListener("change", () => void save());
+    button.title = currentLabel();
+    button.setAttribute("aria-label", `Sort files: ${currentLabel()}`);
+    renderMenu();
+    button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        if (menu.hidden) {
+            renderMenu();
+            menu.hidden = false;
+            button.setAttribute("aria-expanded", "true");
+        } else {
+            closeMenu();
+        }
+    });
+    menu.addEventListener("click", (event) => event.stopPropagation());
+    document.addEventListener("click", closeMenu);
+    document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") closeMenu();
+    });
 }
 
 function setFolderExpanded(folderItem: HTMLElement, expanded: boolean) {
@@ -2450,12 +2526,28 @@ function setFolderExpanded(folderItem: HTMLElement, expanded: boolean) {
         childrenEl.style.display = expanded ? "block" : "none";
     }
     if (!applyingExplorerExpansion) queueExpandedPathsSave();
+    updateFolderToggleButton();
+}
+
+function hasExpandedFolders(): boolean {
+    return fileTree.querySelector(".file-item.folder.expanded") !== null;
+}
+
+function updateFolderToggleButton() {
+    const button = document.getElementById("file-tree-fold-toggle-btn") as HTMLButtonElement | null;
+    if (!button) return;
+    const expanded = hasExpandedFolders();
+    const label = expanded ? "Collapse all folders" : "Expand all folders";
+    button.title = label;
+    button.setAttribute("aria-label", label);
+    setButtonIcon(button, expanded ? "chevrons-down-up" : "chevrons-up-down");
 }
 
 function setAllFoldersExpanded(expanded: boolean) {
     fileTree.querySelectorAll(".file-item.folder").forEach((folder) => {
         setFolderExpanded(folder as HTMLElement, expanded);
     });
+    updateFolderToggleButton();
 }
 
 async function handleFileTreeDrop(e: DragEvent, targetFolder: string) {
@@ -3417,7 +3509,7 @@ function getVisibleFileItems(): HTMLElement[] {
     return items;
 }
 
-function updateKeyboardSelection(newIndex: number) {
+function updateKeyboardSelection(newIndex: number, reveal = true) {
     const visibleItems = getVisibleFileItems();
     if (visibleItems.length === 0) return;
 
@@ -3436,7 +3528,9 @@ function updateKeyboardSelection(newIndex: number) {
         selectedItem.classList.add("keyboard-selected");
         selectedItem.tabIndex = 0;
         selectedItem.focus();
-        selectedItem.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        if (reveal) {
+            selectedItem.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }
     }
 }
 
@@ -4627,7 +4721,7 @@ function setupDeleteConfirmDialog() {
     const cancelButton = document.getElementById("delete-confirm-cancel")!;
     const confirmButton = document.getElementById("delete-confirm-submit")!;
 
-    cancelButton.addEventListener("click", hideDeleteConfirmDialog);
+    cancelButton.addEventListener("click", () => hideDeleteConfirmDialog());
     confirmButton.addEventListener("click", () => {
         hideDeleteConfirmDialog(true);
     });
@@ -4775,6 +4869,15 @@ function setupThemeMenu() {
 
     Events.On("obails:files-dropped", (event) => {
         const data = event.data as { files?: string[]; targetFolder?: string; targetKind?: string; notePath?: string } | null;
+        const files = Array.isArray(data?.files) ? data.files : [];
+        if (data?.targetKind === "markdown-editor") {
+            void attachExternalFilesToCurrentNote(files, data.notePath || "");
+            return;
+        }
+        void importExternalFiles(files, data?.targetFolder || "");
+    });
+    window.addEventListener("obails:files-dropped", (event) => {
+        const data = (event as CustomEvent<{ files?: string[]; targetFolder?: string; targetKind?: string; notePath?: string } | null>).detail;
         const files = Array.isArray(data?.files) ? data.files : [];
         if (data?.targetKind === "markdown-editor") {
             void attachExternalFilesToCurrentNote(files, data.notePath || "");
@@ -6507,7 +6610,9 @@ function updateFileTreeSelection(path: string, options: FileTreeSelectionOptions
         fileItem.classList.add("active");
         // Delay scroll to ensure folder expansion is complete
         setTimeout(() => {
-            fileItem.scrollIntoView({ behavior: "smooth", block: "nearest" });
+            if (!isContextMenuVisible()) {
+                fileItem.scrollIntoView({ behavior: "auto", block: "nearest" });
+            }
         }, 50);
     }
 }
@@ -6614,7 +6719,7 @@ function createFileElement(file: FileInfo, level: number): HTMLElement {
         fileTreeFocused = true;
         fileTree.classList.add("keyboard-focused");
         const index = getVisibleFileItems().indexOf(el);
-        if (index >= 0) updateKeyboardSelection(index);
+        if (index >= 0) updateKeyboardSelection(index, false);
     });
 
     el.draggable = true;
@@ -8382,6 +8487,7 @@ function setupRightSidebarResizeHandle(
             },
         };
         applyRightSidebarLayout();
+        saveRightSidebarLayout();
     });
 
     document.addEventListener("mouseup", () => {

@@ -1,4 +1,5 @@
 import type { WorkspacePaneTabsSnapshot } from "./workspace-snapshot";
+import { renderIcon } from "./icons";
 import {
   CLOSE_PANE_LABEL,
   EMPTY_PANE_TAB_LABEL,
@@ -13,11 +14,31 @@ export type WorkspacePaneTabActions = {
   renameTab: (paneId: string, path: string) => void;
   activatePane?: (paneId: string) => void;
   closePane?: (paneId: string) => void;
+  toggleSource?: (paneId: string) => void;
+  splitPaneRight?: (paneId: string) => void;
+  splitPaneDown?: (paneId: string) => void;
 };
 
 export type WorkspacePaneTabStripOptions = {
   paneClose?: PaneCloseAffordance;
+  sourceVisible?: boolean;
+  splitControls?: "visible" | "hidden";
 };
+
+function paneActionButton(
+  documentRef: Document,
+  className: string,
+  icon: "code" | "split-right" | "split-down",
+  label: string,
+): HTMLButtonElement {
+  const button = documentRef.createElement("button");
+  button.type = "button";
+  button.className = `workspace-pane-action ${className}`;
+  button.setAttribute("aria-label", label);
+  button.title = label;
+  button.innerHTML = renderIcon(icon);
+  return button;
+}
 
 export function createWorkspacePaneTabStrip(
   documentRef: Document,
@@ -38,6 +59,8 @@ export function createWorkspacePaneTabStrip(
   strip.addEventListener("pointerdown", () => {
     actions.activatePane?.(paneId);
   });
+  const tabList = documentRef.createElement("div");
+  tabList.className = "workspace-pane-tab-list";
   for (const tab of pane?.tabs ?? []) {
     const selected = paneId === activePaneId && pane?.activeTabPath === tab.path;
     const tabChrome = documentRef.createElement("div");
@@ -86,7 +109,7 @@ export function createWorkspacePaneTabStrip(
     });
 
     tabChrome.append(title, closeButton);
-    strip.append(tabChrome);
+    tabList.append(tabChrome);
   }
   if (!pane?.tabs.length) {
     const selected = paneId === activePaneId;
@@ -134,7 +157,37 @@ export function createWorkspacePaneTabStrip(
       });
       tabChrome.append(closeButton);
     }
-    strip.append(tabChrome);
+    tabList.append(tabChrome);
   }
+  const actionCluster = documentRef.createElement("div");
+  actionCluster.className = "workspace-pane-actions";
+  const sourceToggle = paneActionButton(documentRef, "workspace-pane-source-toggle", "code", "Toggle Source");
+  sourceToggle.dataset.paneAction = "source-toggle";
+  sourceToggle.setAttribute("aria-pressed", options.sourceVisible ? "true" : "false");
+  sourceToggle.classList.toggle("active", Boolean(options.sourceVisible));
+  sourceToggle.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    actions.toggleSource?.(paneId);
+  });
+  actionCluster.append(sourceToggle);
+  if (options.splitControls !== "hidden") {
+    const splitRight = paneActionButton(documentRef, "workspace-pane-split-right", "split-right", "Split pane right");
+    splitRight.dataset.paneAction = "split-right";
+    splitRight.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      actions.splitPaneRight?.(paneId);
+    });
+    const splitDown = paneActionButton(documentRef, "workspace-pane-split-down", "split-down", "Split pane down");
+    splitDown.dataset.paneAction = "split-down";
+    splitDown.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      actions.splitPaneDown?.(paneId);
+    });
+    actionCluster.append(splitRight, splitDown);
+  }
+  strip.append(tabList, actionCluster);
   return strip;
 }

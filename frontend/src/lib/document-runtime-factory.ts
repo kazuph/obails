@@ -50,6 +50,14 @@ export class DocumentRuntimeFactory {
     return [...this.runtimes.keys()];
   }
 
+  discardUnopenedPanesExcept(paneIds: Iterable<string>): void {
+    const retained = new Set(paneIds);
+    for (const [paneId, runtime] of this.runtimes) {
+      if (retained.has(paneId) || runtime.currentFilePath || runtime.activeEditableDocument || this.isPaneClosing(paneId)) continue;
+      this.runtimes.delete(paneId);
+    }
+  }
+
   canPublishLocal(paneId: string, runtime: PrimaryDocumentRuntime, generation: number): boolean {
     return this.runtimes.get(paneId) === runtime
       && runtime.isCurrentGeneration(generation);

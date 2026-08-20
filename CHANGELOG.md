@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.1.0 - 2026-08-20
+
+Obails v1.1 UI Polishとして、ツールバーの情報設計、タブ境界線、Explorer上部コントロール、開閉インジケーターを整理したリリースです。Claude Code plugin `ob` の版は `0.1.2` のままです。
+
+### 修正
+
+- ソース表示切替とペイン分割をグローバルツールバーから各ペインのタブストリップ右端へ移す
+- 左サイドバーとメインツールバーの上部バー高さを `--header-h` で揃える
+- タブとアクティブペインのアクセント下線を廃止し、水平線をタブストリップの1px境界だけにする
+- Explorerの検索行にsortメニューとfoldトグルを統合し、旧select 2個と展開/折り畳み2ボタンを撤去する
+- File Explorer、Outline、Backlinksの左帯装飾を廃止し、選択状態は淡い塗りと文字色で表す
+- 右サイドバー、frontmatter、callout、Vault Searchヘルプの開閉インジケーターを同一chevron SVGへ統一する
+
 ## 1.0.4 - 2026-08-20
 
 File Explorerの新規・未設定環境で、名前降順を最初から選ぶパッチです。Claude Code plugin `ob` の版は `0.1.2` のままです。

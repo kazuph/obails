@@ -16,8 +16,8 @@ describe("Wave D static UI contract", () => {
 
     expect(tree?.getAttribute("role")).toBe("tree");
     expect(tree?.getAttribute("aria-label")).toBe("File tree");
-    expect(documentRef.getElementById("file-tree-sort-field")?.querySelectorAll("option").length).toBe(3);
-    expect(documentRef.getElementById("file-tree-sort-direction")?.querySelectorAll("option").length).toBe(2);
+    expect(documentRef.getElementById("file-tree-sort-btn")?.getAttribute("aria-haspopup")).toBe("true");
+    expect(documentRef.getElementById("file-tree-sort-menu")?.getAttribute("role")).toBe("menu");
   });
 
   it("exposes searchable move-to-folder dialog controls", () => {
@@ -37,10 +37,8 @@ describe("Wave D static UI contract", () => {
   it("exposes persisted Explorer sort and auto-reveal settings", () => {
     const documentRef = parseIndexHtml();
 
-    expect(documentRef.getElementById("file-tree-sort-field")?.getAttribute("aria-label")).toBe("Sort files by");
-    expect(Array.from(documentRef.getElementById("file-tree-sort-field")?.querySelectorAll("option") ?? [])
-      .map((option) => option.getAttribute("value"))).toEqual(["name", "modified", "created"]);
-    expect(documentRef.getElementById("file-tree-sort-direction")?.getAttribute("aria-label")).toBe("Sort direction");
+    expect(documentRef.getElementById("file-tree-sort-btn")?.getAttribute("aria-label")).toBe("Sort files");
+    expect(documentRef.getElementById("file-tree-fold-toggle-btn")?.getAttribute("aria-label")).toBe("Collapse all folders");
     expect(documentRef.getElementById("file-tree-auto-reveal")?.getAttribute("type")).toBe("checkbox");
     expect(documentRef.getElementById("file-tree-auto-reveal")?.closest("label")?.textContent)
       .toContain("Reveal the active file");
@@ -57,6 +55,6 @@ describe("Wave D static UI contract", () => {
     expect(distHtml).toContain("Reveal the active file");
     expect(documentRef.getElementById("move-to-folder-results")?.getAttribute("role")).toBe("listbox");
     expect(documentRef.getElementById("file-tree-auto-reveal")?.getAttribute("type")).toBe("checkbox");
-    expect(documentRef.getElementById("file-tree-sort-field")?.getAttribute("aria-label")).toBe("Sort files by");
+    expect(documentRef.getElementById("file-tree-sort-btn")?.getAttribute("aria-haspopup")).toBe("true");
   });
 });

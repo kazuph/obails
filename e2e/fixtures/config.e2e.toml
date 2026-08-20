@@ -2,6 +2,14 @@
   path = "e2e/fixtures/test-vault"
   delete_mode = "vault_trash"
 
+[attachment]
+  location = "vault_root"
+  folder = ""
+
+[recovery]
+  snapshot_interval_minutes = 5
+  retention_days = 7
+
 [daily_notes]
   folder = "dailynotes"
   format = "2006-01-02"
@@ -22,4 +30,8 @@
 
 [ui]
   theme = "github-light"
-  sidebar_width = 250
+  sidebar_width = 398
+  [ui.file_explorer]
+    auto_reveal = true
+    sort_field = "name"
+    sort_direction = "ascending"

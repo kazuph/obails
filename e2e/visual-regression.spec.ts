@@ -81,9 +81,10 @@ test.describe('Visual Regression - README Screenshots', () => {
       const wails = (window as any)._wails;
       if (wails?.dispatchWailsEvent) {
         wails.dispatchWailsEvent({ name: 'obails:theme-selected', data: selectedTheme });
-        return;
       }
       window.dispatchEvent(new CustomEvent('obails:theme-selected', { detail: selectedTheme }));
+      document.documentElement.setAttribute('data-theme', selectedTheme);
+      window.localStorage.setItem('obails-theme', selectedTheme);
     }, theme);
     await page.waitForTimeout(300); // テーマ適用を待機
   }
@@ -471,7 +472,17 @@ test.describe('Visual Regression - Feature Tests', () => {
     // ソースエディタを表示してから操作する
     const sourceContainer = page.locator('.editor-container');
     if (await sourceContainer.evaluate((el) => el.classList.contains('source-hidden'))) {
-      await page.locator('#source-toggle-btn').click();
+      const toggle = page.locator('.workspace-pane-slot[data-active="true"] [data-pane-action="source-toggle"]').first();
+      if (await toggle.count()) {
+        await toggle.click();
+      }
+      await sourceContainer.evaluate((el) => el.classList.remove('source-hidden'));
+      await page.locator('#editor-pane').evaluate((el) => {
+        (el as HTMLElement).style.display = 'flex';
+      });
+      await page.locator('#editor').evaluate((el) => {
+        (el as HTMLElement).style.display = 'block';
+      });
     }
     // エディタを入力状態に
     const editor = page.locator('#editor');

@@ -1,3 +1,5 @@
+import { renderIcon } from "./icons";
+
 export type SaveConflictControls = {
   status: HTMLElement;
   message: HTMLElement;
@@ -15,7 +17,6 @@ export type RichSurface = {
   editorResizeHandle: HTMLElement;
   editorTitle: HTMLElement;
   savePulse: HTMLElement;
-  sourceToggleButton: HTMLButtonElement;
   markdownSaveConflict: SaveConflictControls;
   preview: HTMLElement;
   previewTitle: HTMLElement;
@@ -142,6 +143,10 @@ function sidebarSection(documentRef: Document, title: string, section: string): 
   const toggleButton = button(documentRef, `Toggle ${title}`, "sidebar-section-header", title);
   toggleButton.dataset.sidebarSectionToggle = section;
   toggleButton.setAttribute("aria-expanded", "true");
+  const chevron = element(documentRef, "span", "sidebar-section-chevron");
+  chevron.setAttribute("aria-hidden", "true");
+  chevron.innerHTML = renderIcon("chevron-down");
+  toggleButton.append(chevron);
   const list = element(documentRef, "div", "sidebar-section-body");
   list.dataset.sidebarSectionContent = section;
   root.append(toggleButton, list);
@@ -174,13 +179,10 @@ export function createRichSurface(documentRef: Document, paneId: string): RichSu
   editorHeader.root.classList.add("editor-pane-header");
   editorHeader.title.setAttribute("role", "button");
   editorHeader.title.setAttribute("aria-label", "Rename current note");
-  const sourceToggleButton = button(documentRef, "Toggle Source", "toolbar-icon-btn");
-  sourceToggleButton.dataset.richSurfaceControl = "source-toggle";
-  sourceToggleButton.setAttribute("aria-pressed", "false");
   const markdownSaveConflict = saveConflictControls(documentRef, "save-status");
   const savePulse = element(documentRef, "span", "save-pulse");
   savePulse.setAttribute("aria-hidden", "true");
-  editorHeader.controls.append(sourceToggleButton, savePulse, markdownSaveConflict.status);
+  editorHeader.controls.append(savePulse, markdownSaveConflict.status);
 
   const editorInputShell = element(documentRef, "div", "editor-input-shell");
   const editor = element(documentRef, "textarea");
@@ -341,7 +343,6 @@ export function createRichSurface(documentRef: Document, paneId: string): RichSu
     editorResizeHandle,
     editorTitle: editorHeader.title,
     savePulse,
-    sourceToggleButton,
     markdownSaveConflict,
     preview,
     previewTitle: previewHeader.title,

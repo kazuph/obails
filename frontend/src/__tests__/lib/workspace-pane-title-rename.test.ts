@@ -80,7 +80,7 @@ describe("workspace pane note title and rename identity", () => {
     expect(surface.markdownSaveConflict.status.getAttribute("role")).toBe("status");
     expect(surface.savePulse.classList.contains("save-pulse")).toBe(true);
     expect(surface.noteSearchInput.getAttribute("aria-label")).toBe("Find in note");
-    expect(surface.sourceToggleButton.getAttribute("aria-label")).toBe("Toggle Source");
+    expect(factoryStrip.querySelector("[data-pane-action='source-toggle']")?.getAttribute("aria-label")).toBe("Toggle Source");
     factorySlot.remove();
 
     const { slot: legacySlot, root: legacyRoot } = mountIndexedLegacyEditor("Daily");

@@ -20,6 +20,11 @@ const ACTION_ICONS: IconName[] = [
   "page-continuous",
   "split-right",
   "split-down",
+  "chevron-down",
+  "arrow-up-down",
+  "chevrons-down-up",
+  "chevrons-up-down",
+  "check",
 ];
 
 describe("icons", () => {

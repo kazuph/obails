@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { setupMockBindings } from "./helpers/mock-bindings";
 
 test.describe("Static accessibility semantics", () => {
   test("keeps every visible toolbar control inside a non-overlapping row", async ({ page }) => {
@@ -34,8 +35,10 @@ test.describe("Static accessibility semantics", () => {
   });
 
   test("exposes named file, input, dialog, button, and menu semantics in the real Wails fixture", async ({ page }) => {
+    await setupMockBindings(page);
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await expect(page.locator("#app")).toBeVisible();
+    await expect(page.locator(".file-item").first()).toBeVisible({ timeout: 15000 });
 
     await expect(page.getByRole("tree", { name: "File tree" })).toBeVisible();
     await expect(page.getByLabel("Search files", { exact: true })).toHaveCount(1);
@@ -63,8 +66,6 @@ test.describe("Static accessibility semantics", () => {
     }
 
     const namedButtons = [
-      ["split-pane-right-btn", "Split pane right"],
-      ["split-pane-down-btn", "Split pane down"],
       ["popout-pane-btn", "Pop out pane"],
       ["image-fullscreen", "View image fullscreen"],
       ["image-fs-close", "Close fullscreen image"],
@@ -95,18 +96,11 @@ test.describe("Static accessibility semantics", () => {
       await expect(button).toHaveAttribute("title", /\S/);
     }
 
-    const workspaceToolbarButtons = [
-      ["split-pane-right-btn", "Split pane right", "Split pane right"],
-      ["split-pane-down-btn", "Split pane down", "Split pane down"],
-      ["popout-pane-btn", "Pop out pane", "Pop out active pane into a new window"],
-    ] as const;
-
-    for (const [id, ariaLabel, title] of workspaceToolbarButtons) {
-      const button = page.locator(`#${id}`);
-      await expect(button).toHaveAttribute("aria-label", ariaLabel);
-      await expect(button).toHaveAttribute("title", title);
-      await expect(button).toHaveText("");
-    }
+    await expect(page.locator("[data-pane-action='source-toggle']").first()).toBeVisible();
+    await expect(page.locator("[data-pane-action='source-toggle']").first()).toHaveAttribute("aria-label", "Toggle Source");
+    await expect(page.locator("[data-pane-action='split-right']").first()).toHaveAttribute("aria-label", "Split pane right");
+    await expect(page.locator("[data-pane-action='split-down']").first()).toHaveAttribute("aria-label", "Split pane down");
+    await expect(page.locator("#popout-pane-btn")).toHaveAttribute("title", "Pop out active pane into a new window");
 
     await expect(page.locator("#close-pane-btn")).toHaveCount(0);
 
@@ -133,11 +127,12 @@ test.describe("Static accessibility semantics", () => {
       await expect(item).toHaveAttribute("tabindex", "-1");
     }
 
-    await expect(page.locator("#collapse-all-folders-btn svg")).toHaveCount(1);
-    await expect(page.locator("#expand-all-folders-btn svg")).toHaveCount(1);
+    await expect(page.locator("#file-tree-sort-btn svg")).toHaveCount(1);
+    await expect(page.locator("#file-tree-fold-toggle-btn svg")).toHaveCount(1);
   });
 
   test("keeps document and sidebars in independent scroll regions with padded previews and left-aligned sorting", async ({ page }) => {
+    await setupMockBindings(page);
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await expect(page.locator("#app")).toBeVisible();
 
@@ -146,9 +141,9 @@ test.describe("Static accessibility semantics", () => {
       const preview = document.getElementById("preview")!;
       const fileTree = document.getElementById("file-tree")!;
       const outline = document.getElementById("outline-list")!;
-      const sortField = document.getElementById("file-tree-sort-field")!;
-      const sortDirection = document.getElementById("file-tree-sort-direction")!;
-      const collapse = document.getElementById("collapse-all-folders-btn")!;
+      const search = document.getElementById("file-search-input")!;
+      const sort = document.getElementById("file-tree-sort-btn")!;
+      const fold = document.getElementById("file-tree-fold-toggle-btn")!;
       const previewStyle = getComputedStyle(preview);
       return {
         windowScrollY: window.scrollY,
@@ -161,16 +156,18 @@ test.describe("Static accessibility semantics", () => {
         previewOverflowY: previewStyle.overflowY,
         fileTreeOverflowY: getComputedStyle(fileTree).overflowY,
         outlineOverflowY: getComputedStyle(outline).overflowY,
-        sortFieldLeft: sortField.getBoundingClientRect().left,
-        sortFieldTop: sortField.getBoundingClientRect().top,
-        sortFieldRight: sortField.getBoundingClientRect().right,
-        sortDirectionLeft: sortDirection.getBoundingClientRect().left,
-        sortDirectionRight: sortDirection.getBoundingClientRect().right,
-        collapseLeft: collapse.getBoundingClientRect().left,
-        collapseTop: collapse.getBoundingClientRect().top,
-        collapseWidth: collapse.getBoundingClientRect().width,
-        expandLeft: document.getElementById("expand-all-folders-btn")!.getBoundingClientRect().left,
-        expandTop: document.getElementById("expand-all-folders-btn")!.getBoundingClientRect().top,
+        searchLeft: search.getBoundingClientRect().left,
+        searchRight: search.getBoundingClientRect().right,
+        searchTop: search.getBoundingClientRect().top,
+        searchCenterY: search.getBoundingClientRect().top + search.getBoundingClientRect().height / 2,
+        sortLeft: sort.getBoundingClientRect().left,
+        sortTop: sort.getBoundingClientRect().top,
+        sortCenterY: sort.getBoundingClientRect().top + sort.getBoundingClientRect().height / 2,
+        sortWidth: sort.getBoundingClientRect().width,
+        foldLeft: fold.getBoundingClientRect().left,
+        foldTop: fold.getBoundingClientRect().top,
+        foldCenterY: fold.getBoundingClientRect().top + fold.getBoundingClientRect().height / 2,
+        foldWidth: fold.getBoundingClientRect().width,
       };
     });
 
@@ -183,12 +180,12 @@ test.describe("Static accessibility semantics", () => {
     expect(layout.previewOverflowY).toMatch(/auto|scroll/);
     expect(layout.fileTreeOverflowY).toMatch(/auto|scroll/);
     expect(layout.outlineOverflowY).toMatch(/auto|scroll/);
-    expect(layout.sortFieldLeft).toBeLessThan(layout.sortDirectionLeft);
-    expect(layout.sortFieldRight).toBeLessThanOrEqual(layout.sortDirectionLeft);
-    expect(layout.collapseTop).toBeGreaterThan(layout.sortFieldTop);
-    expect(layout.collapseLeft).toBeLessThanOrEqual(layout.sortFieldLeft + 1);
-    expect(layout.collapseWidth).toBeGreaterThan(0);
-    expect(layout.expandTop).toBe(layout.collapseTop);
-    expect(layout.expandLeft).toBeGreaterThan(layout.collapseLeft);
+    expect(layout.searchLeft).toBeLessThan(layout.sortLeft);
+    expect(layout.searchRight).toBeLessThanOrEqual(layout.sortLeft);
+    expect(layout.sortLeft).toBeLessThan(layout.foldLeft);
+    expect(Math.abs(layout.sortCenterY - layout.searchCenterY)).toBeLessThan(2);
+    expect(Math.abs(layout.foldCenterY - layout.searchCenterY)).toBeLessThan(2);
+    expect(layout.sortWidth).toBeGreaterThan(0);
+    expect(layout.foldWidth).toBeGreaterThan(0);
   });
 });

@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { describeTreeItem, moveMenuIndex } from "../../lib/accessibility-recovery";
 
 const indexHtml = readFileSync(resolve(__dirname, "../../../index.html"), "utf8");
+const tabStripSource = readFileSync(resolve(__dirname, "../../lib/workspace-pane-tab-strip.ts"), "utf8");
 const distIndexPath = resolve(__dirname, "../../../dist/index.html");
 
 function parseIndexHtml(source = indexHtml): Document {
@@ -34,10 +35,10 @@ describe("Wave F static UI contract", () => {
   it("exposes workspace split, save/restore, and popout controls (P-079)", () => {
     const documentRef = parseIndexHtml();
 
-    expect(documentRef.getElementById("split-pane-right-btn")?.getAttribute("aria-label")).toBe("Split pane right");
-    expect(documentRef.getElementById("split-pane-right-btn")?.getAttribute("title")).toBe("Split pane right");
-    expect(documentRef.getElementById("split-pane-down-btn")?.getAttribute("aria-label")).toBe("Split pane down");
-    expect(documentRef.getElementById("split-pane-down-btn")?.getAttribute("title")).toBe("Split pane down");
+    expect(documentRef.getElementById("split-pane-right-btn")).toBeNull();
+    expect(documentRef.getElementById("split-pane-down-btn")).toBeNull();
+    expect(tabStripSource).toContain("workspace-pane-split-right");
+    expect(tabStripSource).toContain("workspace-pane-split-down");
     expect(documentRef.getElementById("close-pane-btn")).toBeNull();
     expect(documentRef.getElementById("workspace-name")).toBeNull();
     expect(documentRef.getElementById("save-workspace-btn")).toBeNull();
@@ -69,8 +70,8 @@ describe("Wave F static UI contract", () => {
 
     expect(documentRef.getElementById("sidebar-resize")?.classList.contains("resize-handle")).toBe(true);
     expect(documentRef.getElementById("right-sidebar-resize")?.classList.contains("resize-handle")).toBe(true);
-    expect(documentRef.getElementById("file-tree-sort-field")?.getAttribute("aria-label")).toBe("Sort files by");
-    expect(documentRef.getElementById("file-tree-sort-direction")?.getAttribute("aria-label")).toBe("Sort direction");
+    expect(documentRef.getElementById("file-tree-sort-btn")?.getAttribute("aria-label")).toBe("Sort files");
+    expect(documentRef.getElementById("file-tree-fold-toggle-btn")?.getAttribute("aria-label")).toBe("Collapse all folders");
     expect(documentRef.getElementById("file-tree-auto-reveal")?.getAttribute("type")).toBe("checkbox");
     expect(documentRef.getElementById("settings-sidebar-width")?.getAttribute("min")).toBe("150");
     expect(documentRef.getElementById("settings-sidebar-width")?.getAttribute("max")).toBe("500");
@@ -294,8 +295,8 @@ describe("Wave F static UI contract", () => {
 
     const iconsStart = source.indexOf("function setupToolbarIcons");
     const iconsFn = source.slice(iconsStart, source.indexOf("function toStateKey"));
-    expect(iconsFn).toContain('"split-right"');
-    expect(iconsFn).toContain('"split-down"');
+    expect(tabStripSource).toContain('"split-right"');
+    expect(tabStripSource).toContain('"split-down"');
     expect(iconsFn).not.toContain("close-pane-btn");
     expect(iconsFn).not.toMatch(/split-pane-right-btn.*page-single/);
   });

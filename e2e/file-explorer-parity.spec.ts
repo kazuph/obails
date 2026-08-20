@@ -1,21 +1,27 @@
 import { expect, test } from "@playwright/test";
+import { setupMockBindings } from "./helpers/mock-bindings";
 
 test.describe("File Explorer parity controls", () => {
   test("exposes deterministic sorting, searchable moves, and auto-reveal settings", async ({ page }) => {
+    await setupMockBindings(page);
     await page.goto("/");
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
 
     await expect(page.getByRole("tree", { name: "File tree" })).toBeAttached();
-    await expect(page.getByLabel("Sort files by")).toHaveValue("name");
-    await expect(page.getByLabel("Sort files by").locator("option")).toHaveText([
-      "Name",
-      "Modified",
-      "Created",
+    const sortButton = page.getByRole("button", { name: /Sort files:/ });
+    await expect(sortButton).toBeVisible();
+    await sortButton.click();
+    const sortMenu = page.getByRole("menu", { name: "Sort files" });
+    await expect(sortMenu.getByRole("menuitemradio")).toHaveText([
+      "Name A-Z",
+      "Name Z-A",
+      "Modified newest first",
+      "Modified oldest first",
+      "Created newest first",
+      "Created oldest first",
     ]);
-    await expect(page.getByLabel("Sort direction").locator("option")).toHaveText([
-      "Ascending",
-      "Descending",
-    ]);
+    await expect(sortMenu.getByRole("menuitemradio", { checked: true })).toHaveText("Name A-Z");
+    await expect(page.getByRole("button", { name: /folders$/i })).toBeVisible();
 
     const moveDialog = page.getByRole("dialog", { name: "Move to folder", includeHidden: true });
     await expect(moveDialog).toBeAttached();

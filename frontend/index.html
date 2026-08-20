@@ -12,23 +12,14 @@
             <div class="sidebar-header">
                 <button id="settings-btn" class="icon-btn" title="Settings" aria-label="Settings"></button>
             </div>
-            <div class="file-search">
+            <div class="file-search" data-explorer-sort-persistence="obails-v1.1.0-explorer-sort-menu" data-explorer-audio-order="obails-v1.1.0-audio-majority-order" data-explorer-default-sort="name-descending">
                 <input type="text" id="file-search-input" placeholder="Search files..." autocomplete="off" aria-label="Search files">
                 <button id="file-search-clear" class="search-clear-btn" style="display: none;" aria-label="Clear search"></button>
-            </div>
-            <div class="file-tree-controls" data-explorer-sort-persistence="obails-v1.0.4-explorer-sort-persistence" data-explorer-audio-order="obails-v1.0.4-audio-majority-order" data-explorer-default-sort="name-descending">
-                <label class="sr-only" for="file-tree-sort-field">Sort files</label>
-                <select id="file-tree-sort-field" aria-label="Sort files by">
-                    <option value="name">Name</option>
-                    <option value="modified">Modified</option>
-                    <option value="created">Created</option>
-                </select>
-                <select id="file-tree-sort-direction" aria-label="Sort direction">
-                    <option value="ascending">Ascending</option>
-                    <option value="descending">Descending</option>
-                </select>
-                <button id="collapse-all-folders-btn" class="icon-btn" title="Collapse all folders" aria-label="Collapse all folders"></button>
-                <button id="expand-all-folders-btn" class="icon-btn" title="Expand all folders" aria-label="Expand all folders"></button>
+                <div class="file-search-actions">
+                    <button id="file-tree-sort-btn" class="icon-btn" type="button" title="Sort files" aria-label="Sort files" aria-haspopup="true" aria-expanded="false"></button>
+                    <div id="file-tree-sort-menu" class="file-tree-sort-menu" role="menu" aria-label="Sort files" hidden></div>
+                    <button id="file-tree-fold-toggle-btn" class="icon-btn" type="button" title="Collapse all folders" aria-label="Collapse all folders"></button>
+                </div>
             </div>
             <div class="file-tree" id="file-tree" data-file-drop-target data-path="" role="tree" aria-label="File tree">
                 <!-- File tree will be rendered here -->
@@ -53,9 +44,6 @@
                     <button id="graph-btn" class="toolbar-icon-btn" title="Graph View" aria-label="Graph View"></button>
                     <button id="vault-search-btn" class="toolbar-icon-btn" type="button" title="Search vault (⌘F outside note; Find in Note while editing)" aria-label="Search vault" aria-haspopup="dialog" aria-expanded="false"></button>
                     <button id="refresh-btn" class="toolbar-icon-btn" title="Refresh" aria-label="Refresh"></button>
-                    <button id="source-toggle-btn" class="toolbar-icon-btn" title="Toggle Source" aria-label="Toggle Source" aria-pressed="false"></button>
-                    <button id="split-pane-right-btn" class="toolbar-icon-btn" type="button" title="Split pane right" aria-label="Split pane right"></button>
-                    <button id="split-pane-down-btn" class="toolbar-icon-btn" type="button" title="Split pane down" aria-label="Split pane down"></button>
                 </div>
                 <div class="toolbar-center">
                     <div class="mini-player" id="mini-player" style="display: none;">
@@ -206,7 +194,7 @@
             <div class="outline-panel sidebar-section" id="outline-panel" data-sidebar-section="outline">
                 <button class="sidebar-section-header" type="button" data-sidebar-section-toggle="outline" aria-expanded="true" aria-controls="outline-list">
                     <span>Outline</span>
-                    <span class="sidebar-section-chevron" aria-hidden="true">▾</span>
+                    <span class="sidebar-section-chevron" aria-hidden="true"></span>
                 </button>
                 <div id="outline-list" class="sidebar-section-body" role="list" aria-label="Outline headings">
                     <!-- Outline will be rendered here -->
@@ -216,7 +204,7 @@
             <div class="outgoing-links-panel sidebar-section" id="outgoing-links-panel" data-sidebar-section="outgoing">
                 <button class="sidebar-section-header" type="button" data-sidebar-section-toggle="outgoing" aria-expanded="true" aria-controls="outgoing-links-list">
                     <span>Outgoing Links</span>
-                    <span class="sidebar-section-chevron" aria-hidden="true">▾</span>
+                    <span class="sidebar-section-chevron" aria-hidden="true"></span>
                 </button>
                 <div id="outgoing-links-list" class="sidebar-section-body">
                     <!-- Outgoing links will be rendered here -->
@@ -226,7 +214,7 @@
             <div class="backlinks-panel sidebar-section" id="backlinks-panel" data-sidebar-section="backlinks">
                 <button class="sidebar-section-header" type="button" data-sidebar-section-toggle="backlinks" aria-expanded="true" aria-controls="backlinks-list">
                     <span>Backlinks</span>
-                    <span class="sidebar-section-chevron" aria-hidden="true">▾</span>
+                    <span class="sidebar-section-chevron" aria-hidden="true"></span>
                 </button>
                 <div id="backlinks-list" class="sidebar-section-body">
                     <!-- Backlinks will be rendered here -->
@@ -443,7 +431,7 @@
             <ul id="vault-search-results" class="vault-search-results" role="listbox" aria-label="Vault search results"></ul>
             <p class="vault-search-keyboard-help"><kbd>↑</kbd><kbd>↓</kbd> select · <kbd>Enter</kbd> open the result at its matching line · <kbd>Esc</kbd> close</p>
             <details id="vault-search-help" class="vault-search-help" open>
-                <summary>Search operators (20 supported syntax families)</summary>
+                <summary><span>Search operators (20 supported syntax families)</span><span class="details-chevron" aria-hidden="true"></span></summary>
                 <ol>
                     <li><code>meeting</code> — Plain term</li>
                     <li><code>"project plan"</code> — Exact phrase</li>
