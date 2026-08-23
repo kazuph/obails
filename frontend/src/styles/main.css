@@ -1702,13 +1702,17 @@ body {
     display: inline-flex;
     flex-wrap: nowrap;
     align-items: flex-end;
-    gap: 0;
+    gap: 2px;
     flex: 1 1 auto;
     min-width: 0;
     padding-left: 2px;
-    margin-bottom: -1px;
     overflow-x: auto;
     overflow-y: hidden;
+    scrollbar-width: none;
+}
+
+.workspace-pane-tab-list::-webkit-scrollbar {
+    display: none;
 }
 
 .workspace-pane-actions {
@@ -1775,10 +1779,6 @@ body {
     padding: 0 0.2rem 0 0.45rem;
     background: color-mix(in srgb, var(--bg-tertiary) 55%, transparent);
     color: var(--text-secondary);
-}
-
-.workspace-pane-tab + .workspace-pane-tab {
-    margin-left: -1px;
 }
 
 .workspace-pane-tab-title,

@@ -288,8 +288,12 @@ describe("createWorkspacePaneTabStrip", () => {
     expect(mainCss).toContain("height: var(--content-header-h);");
     expect(mainCss).toContain("padding: 0.2rem 0 0;");
     expect(mainCss).toContain("padding-left: 2px;");
-    expect(mainCss).toContain("margin-bottom: -1px;");
-    expect(mainCss).toContain(".workspace-pane-tab + .workspace-pane-tab");
+    expect(mainCss).toContain("gap: 2px;");
+    expect(mainCss).not.toContain("margin-bottom: -1px;");
+    expect(mainCss).toContain("scrollbar-width: none;");
+    expect(mainCss).toContain(".workspace-pane-tab-list::-webkit-scrollbar");
+    expect(mainCss).toContain("display: none;");
+    expect(mainCss).not.toContain(".workspace-pane-tab + .workspace-pane-tab");
     expect(mainCss).toContain(".editor-pane-header:not(:has(.save-status:not([hidden])))");
     expect(mainCss).toContain("height: 0;");
     expect(mainCss).toContain("border-bottom: 0;");

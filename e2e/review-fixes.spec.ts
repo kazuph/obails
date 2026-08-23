@@ -58,6 +58,7 @@ test("rosepine-dawn keeps both sidebar boundaries gapless and shows recursive fo
     const fileSearch = rect(".file-search");
     const firstTab = rect('.workspace-pane-tab[data-path="Welcome.md"]');
     const firstTabStyle = style('.workspace-pane-tab[data-path="Welcome.md"]');
+    const activeTabsStyle = style('.workspace-pane-slot[data-active="true"] > .workspace-pane-tabs');
     const previewContent = rect('.workspace-pane-slot[data-active="true"] .preview-content');
     const sidebarHandleStyle = style("#sidebar-resize");
     const horizontalHandleStyle = style("#outline-resize");
@@ -78,7 +79,7 @@ test("rosepine-dawn keeps both sidebar boundaries gapless and shows recursive fo
       tabPaneLeftDelta: firstTab.left - activePane.left,
       contentHeaderHeightDelta: fileSearch.height - activeTabs.height,
       contentHeaderBottomDelta: fileSearch.bottom - activeTabs.bottom,
-      tabBottomGap: activeTabs.bottom - firstTab.bottom,
+      tabBottomGap: activeTabs.bottom - Number.parseFloat(activeTabsStyle.borderBottomWidth) - firstTab.bottom,
       tabBottomLeftRadius: firstTabStyle.borderBottomLeftRadius,
       tabBottomRightRadius: firstTabStyle.borderBottomRightRadius,
       tabBottomBorderWidth: firstTabStyle.borderBottomWidth,
@@ -120,21 +121,38 @@ test("rosepine-dawn keeps both sidebar boundaries gapless and shows recursive fo
       return clone;
     });
     const secondTab = probes[0];
+    const strip = tabList.closest<HTMLElement>(".workspace-pane-tabs")!;
+    const stripStyle = getComputedStyle(strip);
+    const stripBorderBottom = Number.parseFloat(stripStyle.borderBottomWidth);
+    const overflowingTab = firstTab.getBoundingClientRect();
+    const overflowingStrip = strip.getBoundingClientRect();
     const initial = firstTab.getBoundingClientRect().left - tabList.getBoundingClientRect().left;
-    const adjacentBoundaryOverlap = firstTab.getBoundingClientRect().right - secondTab.getBoundingClientRect().left;
+    const adjacentBoundaryGap = secondTab.getBoundingClientRect().left - firstTab.getBoundingClientRect().right;
     tabList.scrollLeft = 2;
     const scrolled = firstTab.getBoundingClientRect().left - tabList.getBoundingClientRect().left;
     tabList.scrollLeft = tabList.scrollWidth;
     const rightEndGap = tabList.getBoundingClientRect().right - probes.at(-1)!.getBoundingClientRect().right;
     tabList.scrollLeft = 0;
+    const result = {
+      initial,
+      scrolled,
+      adjacentBoundaryGap,
+      rightEndGap,
+      topInset: overflowingTab.top - overflowingStrip.top,
+      bottomGapBeforeRule: overflowingStrip.bottom - stripBorderBottom - overflowingTab.bottom,
+      scrollbarLayoutHeight: tabList.offsetHeight - tabList.clientHeight,
+    };
     probes.forEach((probe) => probe.remove());
-    return { initial, scrolled, adjacentBoundaryOverlap, rightEndGap };
+    return result;
   });
   expect(tabScrollInsets.initial).toBe(2);
   expect(tabScrollInsets.scrolled).toBe(0);
-  expect(tabScrollInsets.adjacentBoundaryOverlap).toBe(1);
+  expect(tabScrollInsets.adjacentBoundaryGap).toBe(2);
   expect(tabScrollInsets.rightEndGap).toBeLessThanOrEqual(0);
   expect(tabScrollInsets.rightEndGap).toBeGreaterThanOrEqual(-1);
+  expect(tabScrollInsets.topInset).toBeGreaterThanOrEqual(0);
+  expect(tabScrollInsets.bottomGapBeforeRule).toBe(0);
+  expect(tabScrollInsets.scrollbarLayoutHeight).toBe(0);
 
   const paneActions = page.locator('.workspace-pane-slot[data-active="true"] > .rich-surface > .workspace-pane-actions');
   await expect(paneActions).toHaveCSS("opacity", "0");
@@ -184,7 +202,7 @@ test("rosepine-dawn keeps both sidebar boundaries gapless and shows recursive fo
     }
     await writeFile(
       path.join(artifactDir, "geometry.json"),
-      `${JSON.stringify({ ...geometry, splitBoundary }, null, 2)}\n`,
+      `${JSON.stringify({ ...geometry, tabScrollInsets, splitBoundary }, null, 2)}\n`,
       "utf8",
     );
   }
