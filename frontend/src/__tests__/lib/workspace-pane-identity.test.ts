@@ -11,6 +11,7 @@ import {
   otherPaneTabsUnchanged,
   paneCloseAffordance,
   shouldClearLegacyEditor,
+  shouldClosePaneWithLastTab,
 } from "../../lib/workspace-pane-identity";
 
 describe("workspace pane identity", () => {
@@ -68,5 +69,12 @@ describe("workspace pane identity", () => {
     expect(paneCloseAffordance({ isPopout: false, visibleMainPaneCount: 1 })).toBe("disabled");
     expect(paneCloseAffordance({ isPopout: false, visibleMainPaneCount: 0 })).toBe("disabled");
     expect(paneCloseAffordance({ isPopout: false, visibleMainPaneCount: 2 })).toBe("enabled");
+  });
+
+  it("closes a split pane with its last tab but keeps the final main pane", () => {
+    expect(shouldClosePaneWithLastTab(["right.md"], "right.md", 2)).toBe(true);
+    expect(shouldClosePaneWithLastTab(["right.md"], "right.md", 1)).toBe(false);
+    expect(shouldClosePaneWithLastTab(["left.md", "right.md"], "right.md", 2)).toBe(false);
+    expect(shouldClosePaneWithLastTab(["right.md"], "other.md", 2)).toBe(false);
   });
 });

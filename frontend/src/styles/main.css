@@ -403,6 +403,7 @@
     --duration: 0.18s;
     --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
     --header-h: 44px;
+    --content-header-h: 2rem;
     /* フォーカスリングは accent 由来の1種のみ */
     --focus-ring: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent);
 }
@@ -556,7 +557,9 @@ body {
 /* File Search */
 .file-search {
     position: relative;
-    padding: 0.5rem;
+    height: var(--content-header-h);
+    flex: 0 0 var(--content-header-h);
+    padding: 0.2rem 0.5rem;
     border-bottom: 1px solid var(--border);
     display: flex;
     align-items: center;
@@ -565,7 +568,9 @@ body {
 
 #file-search-input {
     flex: 1;
-    padding: 0.4rem 0.6rem;
+    min-width: 0;
+    height: 1.5rem;
+    padding: 0 0.6rem;
     border: 1px solid var(--border);
     border-radius: var(--radius-s);
     background: var(--bg-primary);
@@ -603,6 +608,12 @@ body {
     align-items: center;
     gap: 0.25rem;
     flex: 0 0 auto;
+}
+
+.file-search .icon-btn {
+    width: 1.5rem;
+    height: 1.5rem;
+    padding: 0.2rem;
 }
 
 .file-tree-sort-menu {
@@ -1339,6 +1350,25 @@ body {
     display: none;
 }
 
+/* The source title also lives in the tab strip. Keep this header only when a
+   save conflict needs an inline recovery message. */
+#editor-header:not(:has(#save-status:not([hidden]))),
+.editor-pane-header:not(:has(.save-status:not([hidden]))) {
+    position: relative;
+    height: 0;
+    padding: 0;
+    overflow: visible;
+    border: 0;
+}
+
+#editor-header:not(:has(#save-status:not([hidden]))) .save-pulse,
+.editor-pane-header:not(:has(.save-status:not([hidden]))) .save-pulse {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 1;
+}
+
 .note-search {
     margin-left: auto;
     display: flex;
@@ -1641,8 +1671,9 @@ body {
     flex-wrap: nowrap;
     align-items: flex-end;
     gap: 0.5rem;
-    min-height: 2rem;
-    padding: 0.2rem 1rem 0 2px;
+    height: var(--content-header-h);
+    flex: 0 0 var(--content-header-h);
+    padding: 0.2rem 0 0;
     overflow-x: hidden;
     overflow-y: hidden;
     background: var(--bg-secondary);
@@ -1670,10 +1701,12 @@ body {
 .workspace-pane-tab-list {
     display: inline-flex;
     flex-wrap: nowrap;
-    align-items: center;
-    gap: 0.25rem;
+    align-items: flex-end;
+    gap: 0;
     flex: 1 1 auto;
     min-width: 0;
+    padding-left: 2px;
+    margin-bottom: -1px;
     overflow-x: auto;
     overflow-y: hidden;
 }
@@ -1727,6 +1760,7 @@ body {
 }
 
 .workspace-pane-tab {
+    position: relative;
     display: inline-flex;
     align-items: center;
     gap: 0.25rem;
@@ -1741,6 +1775,10 @@ body {
     padding: 0 0.2rem 0 0.45rem;
     background: color-mix(in srgb, var(--bg-tertiary) 55%, transparent);
     color: var(--text-secondary);
+}
+
+.workspace-pane-tab + .workspace-pane-tab {
+    margin-left: -1px;
 }
 
 .workspace-pane-tab-title,
@@ -1794,6 +1832,7 @@ body {
 }
 
 .workspace-pane-tab[aria-selected="true"] {
+    z-index: 1;
     border-color: var(--workspace-active-border);
     background: var(--bg-primary);
 }

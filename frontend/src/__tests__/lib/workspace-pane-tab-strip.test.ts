@@ -284,7 +284,14 @@ describe("createWorkspacePaneTabStrip", () => {
     expect(strip.querySelectorAll(".workspace-pane-tab").length).toBe(2);
 
     expect(mainCss).toContain('.workspace-pane-slot[data-active="false"] > .workspace-pane-tabs');
-    expect(mainCss).toContain("padding: 0.2rem 1rem 0 2px;");
+    expect(mainCss).toContain("--content-header-h: 2rem;");
+    expect(mainCss).toContain("height: var(--content-header-h);");
+    expect(mainCss).toContain("padding: 0.2rem 0 0;");
+    expect(mainCss).toContain("padding-left: 2px;");
+    expect(mainCss).toContain("margin-bottom: -1px;");
+    expect(mainCss).toContain(".workspace-pane-tab + .workspace-pane-tab");
+    expect(mainCss).toContain(".editor-pane-header:not(:has(.save-status:not([hidden])))");
+    expect(mainCss).toContain("height: 0;");
     expect(mainCss).toContain("border-bottom: 0;");
     expect(mainCss).toContain("border-radius: var(--radius-s) var(--radius-s) 0 0;");
     expect(mainCss).toContain("border-bottom-color: var(--workspace-active-border);");

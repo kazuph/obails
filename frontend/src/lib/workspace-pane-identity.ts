@@ -18,6 +18,14 @@ export function paneCloseAffordance(options: {
   return "enabled";
 }
 
+export function shouldClosePaneWithLastTab(
+  tabPaths: ReadonlyArray<string>,
+  targetPath: string,
+  visibleMainPaneCount: number,
+): boolean {
+  return visibleMainPaneCount > 1 && tabPaths.length === 1 && tabPaths[0] === targetPath;
+}
+
 export function bindLegacyPaneId(options: {
   assigned: boolean;
   currentLegacyPaneId: string;

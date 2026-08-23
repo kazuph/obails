@@ -56,7 +56,7 @@ import {
   visibleLeafPaneIds,
 } from "./lib/workspace-runtime-controller";
 import { splitWeightsFromPointer, withoutWorkspacePanes, workspaceLayoutTree, type WorkspaceLayoutNode } from "./lib/workspace-layout";
-import { bindLegacyPaneId, capturedClosePaneId, factorySurfacePaneIds, LAST_VISIBLE_PANE_CLOSE_REASON, paneCloseAffordance, shouldClearLegacyEditor } from "./lib/workspace-pane-identity";
+import { bindLegacyPaneId, capturedClosePaneId, factorySurfacePaneIds, LAST_VISIBLE_PANE_CLOSE_REASON, paneCloseAffordance, shouldClearLegacyEditor, shouldClosePaneWithLastTab } from "./lib/workspace-pane-identity";
 import { createEmptyPaneBody } from "./lib/workspace-pane-empty-body";
 import { WorkspaceRefreshCoordinator } from "./lib/workspace-refresh";
 import { resolveWindowDimensions } from "./lib/workspace-state";
@@ -1140,6 +1140,14 @@ async function activateWorkspaceTabFromUi(paneId: string, path: string) {
 async function closeWorkspaceTabFromUi(paneId: string, path: string) {
     if (popoutRoute && paneId !== popoutRoute.paneId) return;
     try {
+        if (!popoutRoute && workspaceSnapshot) {
+            const pane = paneTabsFor(workspaceSnapshot, paneId);
+            const visiblePaneCount = visibleLeafPaneIds(workspaceSnapshot.paneTree, workspaceSnapshot.popoutWindows).length;
+            if (shouldClosePaneWithLastTab(pane?.tabs.map((tab) => tab.path) ?? [], path, visiblePaneCount)) {
+                await closeWorkspacePaneFromUi(paneId);
+                return;
+            }
+        }
         if (!await validatePopoutPaneAction(paneId)) return;
         const snapshot = popoutRoute
             ? await workspaceController.closeTabInRoutedPopout(paneId, popoutRoute.popoutId, path)
