@@ -141,7 +141,7 @@ func TestBuildApplicationMenuIncludesWorkspaceAndSelectedTheme(t *testing.T) {
 	if app == nil {
 		app = application.New(application.Options{DisableDefaultSignalHandler: true})
 	}
-	menu := buildApplicationMenu(app, "nord", []string{"Writing"}, "Writing", nil)
+	menu := buildApplicationMenu(app, "nord", []string{"Writing"}, "Writing", nil, nil)
 	workspace := menu.FindByLabel("Workspace")
 	if workspace == nil || workspace.GetSubmenu() == nil {
 		t.Fatal("expected a Workspace submenu on the application menu")

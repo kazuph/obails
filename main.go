@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/kazuph/obails/services"
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -118,7 +119,7 @@ func windowVisualsForTheme(theme string) services.WindowVisuals {
 	}
 }
 
-func buildApplicationMenu(app *application.App, selectedTheme string, savedWorkspaceNames []string, activeNamedWorkspace string, onThemeSelected func(string)) *application.Menu {
+func buildApplicationMenu(app *application.App, selectedTheme string, savedWorkspaceNames []string, activeNamedWorkspace string, onThemeSelected func(string), onCloseNote func()) *application.Menu {
 	menu := application.NewMenu()
 	menu.AddRole(application.AppMenu)
 	// Custom File menu: stock FileMenu binds Cmd+O to native Open and steals Quick Switcher.
@@ -128,6 +129,13 @@ func buildApplicationMenu(app *application.App, selectedTheme string, savedWorks
 	})
 	fileMenu.Add("New Note").SetAccelerator("CmdOrCtrl+N").OnClick(func(*application.Context) {
 		emitApplicationEvent(app, "obails:new-note", true)
+	})
+	// Cmd+W closes the active note tab instead of the native window. Defining the
+	// accelerator on the File menu (before the Window menu role) wins the key.
+	fileMenu.Add("Close Note").SetAccelerator("CmdOrCtrl+W").OnClick(func(*application.Context) {
+		if onCloseNote != nil {
+			onCloseNote()
+		}
 	})
 	menu.AddRole(application.EditMenu)
 	menu.AddRole(application.ViewMenu)
@@ -266,8 +274,29 @@ func main() {
 	windowService := services.NewWindowService(app, stateService, windowVisuals)
 	app.RegisterService(application.NewService(windowService))
 	app.OnShutdown(windowService.BeginShutdown)
+	var activeWindowMu sync.RWMutex
+	var activeWindow application.Window
+	app.Window.OnCreate(func(window application.Window) {
+		setActiveWindow := func() {
+			activeWindowMu.Lock()
+			activeWindow = window
+			activeWindowMu.Unlock()
+		}
+		setActiveWindow()
+		window.OnWindowEvent(events.Common.WindowFocus, func(*application.WindowEvent) {
+			setActiveWindow()
+		})
+	})
+	closeActiveNote := func() {
+		activeWindowMu.RLock()
+		window := activeWindow
+		activeWindowMu.RUnlock()
+		if window != nil {
+			window.ExecJS(`window.dispatchEvent(new CustomEvent("obails:close-note"))`)
+		}
+	}
 	services.SetApplicationMenuApplier(selectedTheme, func(theme string, names []string, active string) {
-		app.Menu.SetApplicationMenu(buildApplicationMenu(app, theme, names, active, windowService.SetMenuTheme))
+		app.Menu.SetApplicationMenu(buildApplicationMenu(app, theme, names, active, windowService.SetMenuTheme, closeActiveNote))
 	})
 	// Before App.Run the platform impl is nil, so SetApplicationMenu only stores
 	// the menu for Wails to apply on the AppKit main thread during Run.

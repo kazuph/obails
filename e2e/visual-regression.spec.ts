@@ -474,6 +474,7 @@ test.describe('Visual Regression - Feature Tests', () => {
     if (await sourceContainer.evaluate((el) => el.classList.contains('source-hidden'))) {
       const toggle = page.locator('.workspace-pane-slot[data-active="true"] [data-pane-action="source-toggle"]').first();
       if (await toggle.count()) {
+        await page.locator('.workspace-pane-slot[data-active="true"] .rich-surface').first().hover();
         await toggle.click();
       }
       await sourceContainer.evaluate((el) => el.classList.remove('source-hidden'));

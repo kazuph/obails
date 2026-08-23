@@ -272,7 +272,7 @@ describe("createWorkspacePaneTabStrip", () => {
     expect(getComputedStyle(strip).width).toBe("100%");
     expect(tabStyle.flexShrink).toBe("0");
     expect(titleStyle.minWidth).toBe("10ch");
-    expect(titleStyle.maxWidth).toBe("28ch");
+    expect(titleStyle.maxWidth).toBe("none");
     expect(titleStyle.overflow).toBe("hidden");
     expect(titleStyle.textOverflow).toBe("ellipsis");
     expect(title.title).toBe(longTitle);
@@ -284,6 +284,16 @@ describe("createWorkspacePaneTabStrip", () => {
     expect(strip.querySelectorAll(".workspace-pane-tab").length).toBe(2);
 
     expect(mainCss).toContain('.workspace-pane-slot[data-active="false"] > .workspace-pane-tabs');
+    expect(mainCss).toContain("padding: 0.2rem 1rem 0 2px;");
+    expect(mainCss).toContain("border-bottom: 0;");
+    expect(mainCss).toContain("border-radius: var(--radius-s) var(--radius-s) 0 0;");
+    expect(mainCss).toContain("border-bottom-color: var(--workspace-active-border);");
+    expect(mainCss).toContain("border-color: var(--workspace-active-border);");
+    expect(mainCss).toContain(".workspace-split-resize::before");
+    expect(mainCss).toContain("background: var(--border);");
+    expect(mainCss).toContain(".preview-pane-header:has(.note-search[hidden])");
+    expect(mainCss).toContain(".rich-surface:hover > .workspace-pane-actions");
+    expect(mainCss).toContain("pointer-events: none;");
     expect(mainCss).not.toContain("inset 0 -2px 0 var(--accent)");
     expect(mainCss).toContain(".workspace-pane-empty-body");
     expect(mainCss).not.toContain(".workspace-pane-empty {");

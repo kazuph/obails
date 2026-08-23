@@ -40,6 +40,7 @@ async function showSourceEditor(page: Page) {
   if (!(await editor.isVisible())) {
     const toggle = page.locator('.workspace-pane-slot[data-active="true"] [data-pane-action="source-toggle"]').first();
     if (await toggle.count()) {
+      await page.locator('.workspace-pane-slot[data-active="true"] .rich-surface').first().hover();
       await toggle.click();
     }
     if (!(await editor.isVisible())) {

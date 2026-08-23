@@ -236,6 +236,8 @@ test.describe.serial("workspace startup popout recovery", () => {
       }
       await expect(child.locator("#close-pane-btn")).toHaveCount(0);
       await expect(child.locator("#rejoin-popout-btn")).toBeVisible();
+      // Popout windows are note-only: the file explorer stays in the main window.
+      await expect(child.locator("#sidebar")).toBeHidden();
       await expect(child.locator("#rejoin-popout-btn")).toContainText("Rejoin");
     } finally {
       if (!child.isClosed()) {
@@ -389,7 +391,9 @@ test.describe.serial("workspace pane split focus close", () => {
     await expect(page.locator(".workspace-host .workspace-pane-slot")).toHaveCount(1);
     await expect(page.locator(`.workspace-pane-slot[data-pane-id="${sourcePaneId}"] textarea`).first()).toHaveValue(/must survive close/);
 
-    await page.locator(".workspace-pane-slot[data-active='true'] [data-pane-action='split-right']").click();
+    const activePane = page.locator(".workspace-pane-slot[data-active='true']");
+    await activePane.locator(".rich-surface").hover();
+    await activePane.locator("[data-pane-action='split-right']").click();
     await expect(page.locator(".workspace-host .workspace-pane-slot")).toHaveCount(2);
     const emptyBody = page.locator(".workspace-pane-empty-body");
     await expect(emptyBody).toHaveText("Open a note from Explorer");

@@ -56,6 +56,7 @@ function generateFileInfos(): any[] {
   const addDir = (dir: string, prefix: string = '') => {
     const entries = fs.readdirSync(dir, { withFileTypes: true });
     for (const entry of entries) {
+      if (entry.name.startsWith('.')) continue;
       const fullPath = path.join(dir, entry.name);
       const relativePath = prefix ? `${prefix}/${entry.name}` : entry.name;
       if (entry.isDirectory()) {
@@ -219,7 +220,8 @@ function createMockCommandDescriptors() {
     { id: 'toggle-source-editor', title: 'Toggle Source', hotkey: 'Cmd+E' },
     { id: 'split-pane-right', title: 'Split Pane Right', hotkey: 'Cmd+\\' },
     { id: 'split-pane-down', title: 'Split Pane Down', hotkey: 'Cmd+Shift+\\' },
-    { id: 'close-active-pane', title: 'Close Active Pane', hotkey: 'Cmd+W' },
+    { id: 'close-active-tab', title: 'Close Note', hotkey: 'Cmd+W' },
+    { id: 'close-active-pane', title: 'Close Active Pane', hotkey: '' },
     { id: 'open-settings', title: 'Settings', hotkey: 'Cmd+,' },
     { id: 'show-shortcuts-help', title: 'Show Shortcuts Help', hotkey: '?' },
     { id: 'toggle-file-tree-focus', title: 'Focus File Tree', hotkey: 'Cmd+Shift+E' },
@@ -896,6 +898,17 @@ export async function setupMockBindings(page: Page, options: MockBindingOptions 
         value = workspaceState;
         break;
       }
+      // WindowService.ClosePopout
+      case 2980208097: {
+        const paneID = String(args[0] || '');
+        const popoutID = String(args[1] || '');
+        workspaceState = {
+          ...workspaceState,
+          popoutWindows: (workspaceState.popoutWindows ?? []).filter((popout: any) => !(popout.paneId === paneID && popout.id === popoutID)),
+        };
+        value = workspaceState;
+        break;
+      }
       default:
         value = null;
         break;
@@ -993,7 +1006,8 @@ export async function setupMockBindings(page: Page, options: MockBindingOptions 
                 { id: 'toggle-source-editor', title: 'Toggle Source', hotkey: 'Cmd+E' },
                 { id: 'split-pane-right', title: 'Split Pane Right', hotkey: 'Cmd+\\' },
                 { id: 'split-pane-down', title: 'Split Pane Down', hotkey: 'Cmd+Shift+\\' },
-                { id: 'close-active-pane', title: 'Close Active Pane', hotkey: 'Cmd+W' },
+                { id: 'close-active-tab', title: 'Close Note', hotkey: 'Cmd+W' },
+                { id: 'close-active-pane', title: 'Close Active Pane', hotkey: '' },
                 { id: 'open-settings', title: 'Settings', hotkey: 'Cmd+,' },
                 { id: 'show-shortcuts-help', title: 'Show Shortcuts Help', hotkey: '?' },
                 { id: 'toggle-file-tree-focus', title: 'Focus File Tree', hotkey: 'Cmd+Shift+E' },

@@ -61,6 +61,7 @@ test.describe("P-072/P-073 File recovery", () => {
       await snapshots.getByRole("button", { name: "Close recovery snapshots" }).click();
       await page.getByRole("button", { name: "Done" }).click();
       await fileItem.click();
+      await page.locator('.workspace-pane-slot[data-active="true"] .rich-surface').first().hover();
       await page.getByRole("button", { name: "Toggle Source" }).click();
       await activeEditor(page).fill(changedContent);
       await page.keyboard.press(process.platform === "darwin" ? "Meta+S" : "Control+S");

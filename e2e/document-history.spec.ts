@@ -46,6 +46,7 @@ test("keeps a note's undo and redo history after ordinary navigation", async ({ 
     await page.locator(`.file-item[data-path="${firstName}"]`).click();
     const editor = activeMarkdownEditor(page);
     if (await editor.isHidden()) {
+      await page.locator('.workspace-pane-slot[data-active="true"] .rich-surface').first().hover();
       await page.getByRole("button", { name: "Toggle Source" }).click();
     }
     await replaceActiveMarkdownContent(page, "first edit");

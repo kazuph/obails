@@ -147,7 +147,7 @@ import {
   type ItemKind,
 } from "./lib/file-tree-ops";
 import { renderIcon, setButtonIcon, setButtonIconWithLabel, type IconName } from "./lib/icons";
-import { appendFileTreeItemContent } from "./lib/file-tree-view";
+import { appendFileTreeItemContent, countMarkdownNotes } from "./lib/file-tree-view";
 import { describeTreeItem, moveMenuIndex } from "./lib/accessibility-recovery";
 import {
   getQuickSwitcherResults,
@@ -363,6 +363,7 @@ let workspaceSnapshot: WorkspaceStateSnapshot | null = null;
 const workspaceRefreshCoordinator = new WorkspaceRefreshCoordinator();
 const paneSurfaces = new Map<string, RichSurface>();
 const paneTabStrips = new Map<string, HTMLElement>();
+const paneActionClusters = new Map<string, HTMLElement>();
 type RichNoteSearchController = { open: () => void; close: () => void; refresh: () => void };
 const richNoteSearchControllers = new Map<string, RichNoteSearchController>();
 let legacySurfacePaneId = activePaneId;
@@ -463,7 +464,12 @@ function renderWorkspaceLayout(snapshot: WorkspaceStateSnapshot) {
             const tabStrip = paneTabStrips.get(node.paneId);
             if (tabStrip) slot.append(tabStrip);
             const root = roots.get(node.paneId);
-            if (root) slot.append(root);
+            if (root) {
+                root.querySelector(":scope > .workspace-pane-actions")?.remove();
+                const actionCluster = paneActionClusters.get(node.paneId);
+                if (actionCluster) root.prepend(actionCluster);
+                slot.append(root);
+            }
             return slot;
         }
         const split = document.createElement("section");
@@ -511,7 +517,12 @@ function renderWorkspaceLayout(snapshot: WorkspaceStateSnapshot) {
         slot.dataset.active = popoutRoute.paneId === activePaneId ? "true" : "false";
         const tabStrip = paneTabStrips.get(popoutRoute.paneId);
         if (tabStrip) slot.append(tabStrip);
-        if (root) slot.append(root);
+        if (root) {
+            root.querySelector(":scope > .workspace-pane-actions")?.remove();
+            const actionCluster = paneActionClusters.get(popoutRoute.paneId);
+            if (actionCluster) root.prepend(actionCluster);
+            slot.append(root);
+        }
         workspaceHost.replaceChildren(slot);
         return;
     }
@@ -1054,12 +1065,15 @@ function applyWorkspaceSnapshot(snapshot: WorkspaceStateSnapshot) {
 function applyPopoutToolbarMode() {
     popoutPaneButton.hidden = Boolean(popoutRoute);
     rejoinPopoutButton.hidden = !popoutRoute;
+    // Popout windows show only the note surface; the file explorer stays in the main window.
+    document.body.classList.toggle("popout-window", Boolean(popoutRoute));
 }
 
 function renderWorkspacePaneTabs(snapshot: WorkspaceStateSnapshot, visiblePaneCount: number) {
     workspacePaneTabs.replaceChildren();
     workspacePaneTabs.hidden = true;
     paneTabStrips.clear();
+    paneActionClusters.clear();
     const paneClose = paneCloseAffordance({ isPopout: Boolean(popoutRoute), visibleMainPaneCount: visiblePaneCount });
     for (const paneId of leafPaneIds(snapshot.paneTree)) {
         if (popoutRoute && paneId !== popoutRoute.paneId) continue;
@@ -1093,6 +1107,9 @@ function renderWorkspacePaneTabs(snapshot: WorkspaceStateSnapshot, visiblePaneCo
             button.setAttribute("aria-label", label);
             button.title = label;
         });
+        const actionCluster = group.querySelector<HTMLElement>(".workspace-pane-actions");
+        actionCluster?.remove();
+        if (actionCluster) paneActionClusters.set(paneId, actionCluster);
         paneTabStrips.set(paneId, group);
     }
 }
@@ -1128,6 +1145,10 @@ async function closeWorkspaceTabFromUi(paneId: string, path: string) {
             ? await workspaceController.closeTabInRoutedPopout(paneId, popoutRoute.popoutId, path)
             : await workspaceController.closeTab(paneId, path);
         if (!snapshot) return;
+        if (popoutRoute && (paneTabsFor(snapshot, paneId)?.tabs.length ?? 0) === 0) {
+            await WindowService.ClosePopout(popoutRoute.paneId, popoutRoute.popoutId);
+            return;
+        }
         if (paneId === activePaneId) await openActiveWorkspaceTab(snapshot);
     } catch (error) {
         announceOperation(`Could not close this tab: ${describeOperationError(error)}.`);
@@ -1196,6 +1217,15 @@ async function closeWorkspacePaneFromUi(paneId: string) {
     } catch (error) {
         announceOperation(`Could not close this pane: ${describeHumanOperationError(error, "the pane could not be closed")}.`);
     }
+}
+
+async function closeActiveWorkspaceTab() {
+    const paneId = popoutRoute?.paneId
+        || capturedClosePaneId(document.documentElement.dataset.activePaneId || "", activePaneId);
+    const pane = workspaceSnapshot ? paneTabsFor(workspaceSnapshot, paneId) : undefined;
+    const path = pane?.activeTabPath;
+    if (!path) return;
+    await closeWorkspaceTabFromUi(paneId, path);
 }
 
 async function closeActiveWorkspacePane() {
@@ -1707,6 +1737,7 @@ async function executeCommand(id: string) {
     if (id === "toggle-source-editor") return toggleSourceEditor();
     if (id === "split-pane-right") return void splitActiveWorkspacePane("horizontal");
     if (id === "split-pane-down") return void splitActiveWorkspacePane("vertical");
+    if (id === "close-active-tab") return void closeActiveWorkspaceTab();
     if (id === "close-active-pane") return void closeActiveWorkspacePane();
     if (id === "open-settings") return void openSettings();
     if (id === "show-shortcuts-help") return toggleShortcutsHelp();
@@ -1835,6 +1866,7 @@ function setupToolbarIcons() {
     updateFolderToggleButton();
     setButtonIcon(document.getElementById("mini-player-close")!, "close");
     setButtonIcon(document.getElementById("vault-search-close")!, "close");
+    setButtonIcon(document.getElementById("vault-search-submit")!, "search");
     setButtonIcon(document.getElementById("recently-deleted-close")!, "close");
     setButtonIcon(document.getElementById("recovery-snapshots-close")!, "close");
 
@@ -2071,7 +2103,7 @@ function isSourceEditorVisibleForPane(paneId: string): boolean {
 }
 
 function syncPaneSourceToggleButton(paneId: string) {
-    const button = paneTabStrips.get(paneId)?.querySelector<HTMLButtonElement>("[data-pane-action='source-toggle']");
+    const button = paneActionClusters.get(paneId)?.querySelector<HTMLButtonElement>("[data-pane-action='source-toggle']");
     if (!button) return;
     const visible = isSourceEditorVisibleForPane(paneId);
     button.setAttribute("aria-pressed", visible ? "true" : "false");
@@ -4854,6 +4886,10 @@ function setupThemeMenu() {
     const runWorkspaceMenuCommand = (action: NamedWorkspaceAction) => {
         void runNamedWorkspaceAction(action);
     };
+    window.addEventListener("obails:close-note", () => {
+        void executeCommand("close-active-tab");
+    });
+
     Events.On("obails:workspace-save-as", () => runWorkspaceMenuCommand({ type: "save-as" }));
     window.addEventListener("obails:workspace-save-as", () => runWorkspaceMenuCommand({ type: "save-as" }));
     Events.On("obails:workspace-save-current", () => runWorkspaceMenuCommand({ type: "save-current" }));
@@ -6715,6 +6751,13 @@ function createFileElement(file: FileInfo, level: number): HTMLElement {
         !file.isDir && resolveFileType(file.fileType || "", file.path) === "audio",
     );
 
+    if (file.isDir) {
+        const noteCount = document.createElement("span");
+        noteCount.className = "folder-note-count";
+        noteCount.textContent = String(countMarkdownNotes(file));
+        el.appendChild(noteCount);
+    }
+
     el.addEventListener("focus", () => {
         fileTreeFocused = true;
         fileTree.classList.add("keyboard-focused");
@@ -8344,7 +8387,10 @@ function setupResizeHandles() {
         if (isResizingRightSidebar) {
             const width = window.innerWidth - e.clientX;
             if (width >= MIN_SIDEBAR_WIDTH && width <= MAX_SIDEBAR_WIDTH) {
+                // .right-sidebar sizes from flex-basis via --backlinks-width, so
+                // updating style.width alone never moves it. Update the variable.
                 rightSidebar.style.width = `${width}px`;
+                document.documentElement.style.setProperty("--backlinks-width", `${width}px`);
             }
         }
         if (isResizingEditor) {

@@ -202,6 +202,7 @@ export function createRichSurface(documentRef: Document, paneId: string): RichSu
   const editorResizeHandle = resizeHandle(documentRef, "vertical", "Resize editor");
   const previewPane = element(documentRef, "div", "preview-pane");
   const previewHeader = header(documentRef, "Preview");
+  previewHeader.root.classList.add("preview-pane-header");
   hideStandaloneWorkspaceNoteTitles(editorHeader.title, previewHeader.title);
   const noteSearch = element(documentRef, "div", "note-search");
   noteSearch.hidden = true;

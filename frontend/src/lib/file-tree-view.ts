@@ -1,5 +1,26 @@
 import { getDisplayName, type ItemKind } from "./file-tree-ops";
 
+export type NoteCountTreeNode = {
+  isDir: boolean;
+  fileType?: string;
+  path?: string;
+  children?: NoteCountTreeNode[] | null;
+};
+
+function hasHiddenPathSegment(path: string): boolean {
+  return path.replaceAll("\\", "/").split("/").some((segment) => segment.startsWith(".") && segment.length > 1);
+}
+
+/** Counts only visible Markdown notes below a file-tree node. */
+export function countMarkdownNotes(node: NoteCountTreeNode): number {
+  if (hasHiddenPathSegment(node.path || "")) return 0;
+  if (!node.isDir) {
+    if ((node.fileType || "").toLowerCase() === "markdown") return 1;
+    return (node.path || "").toLowerCase().endsWith(".md") ? 1 : 0;
+  }
+  return (node.children ?? []).reduce((total, child) => total + countMarkdownNotes(child), 0);
+}
+
 export function appendFileTreeItemContent(
   item: HTMLElement,
   iconMarkup: string,

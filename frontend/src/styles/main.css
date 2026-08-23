@@ -458,22 +458,38 @@ body {
     overflow: hidden;
 }
 
-/* Resize Handle */
+/* Resize Handle: レイアウト実幅0のオーバーレイ。
+   実体幅を持たせると隣接面の間に背景色の帯が見えるため、
+   負マージンで境界線上に浮かせる。可視境界は隣接面の1px borderだけ。 */
 .resize-handle {
-    width: 4px;
+    position: relative;
+    z-index: 30;
+    width: 8px;
+    margin-inline: -4px;
     background: transparent;
     cursor: col-resize;
     flex-shrink: 0;
+}
+
+.resize-handle::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    width: 2px;
+    transform: translateX(-50%);
+    background: transparent;
     transition: background var(--duration) var(--ease);
 }
 
-.resize-handle:hover,
-.resize-handle.dragging {
+.resize-handle:hover::before,
+.resize-handle.dragging::before {
     background: var(--accent);
 }
 
 .resize-handle.vertical {
-    width: 4px;
+    width: 8px;
 }
 
 /* Sidebar */
@@ -1316,6 +1332,13 @@ body {
     gap: 8px;
 }
 
+/* The tab strip owns the document chrome. Keep the legacy preview header only
+   while its in-note search controls are actually visible. */
+#preview-header:has(.note-search[hidden]),
+.preview-pane-header:has(.note-search[hidden]) {
+    display: none;
+}
+
 .note-search {
     margin-left: auto;
     display: flex;
@@ -1515,6 +1538,43 @@ body {
     flex-direction: column;
 }
 
+/* Split handles overlay the layout boundary; the centered 1px rule is the
+   only visible separation between adjacent document panes. */
+.workspace-split-resize::before {
+    width: 1px;
+    background: var(--border);
+}
+
+.workspace-split-resize:hover::before,
+.workspace-split-resize.dragging::before {
+    width: 2px;
+    background: var(--accent);
+}
+
+.workspace-split-resize.horizontal {
+    width: auto;
+    height: 8px;
+    margin-inline: 0;
+    margin-block: -4px;
+    cursor: ns-resize;
+}
+
+.workspace-split-resize.horizontal::before {
+    top: 50%;
+    bottom: auto;
+    left: 0;
+    right: 0;
+    width: auto;
+    height: 1px;
+    transform: translateY(-50%);
+}
+
+.workspace-split-resize.horizontal:hover::before,
+.workspace-split-resize.horizontal.dragging::before {
+    width: auto;
+    height: 2px;
+}
+
 .workspace-pane-slot > .rich-surface {
     flex: 1 1 0;
 }
@@ -1528,6 +1588,7 @@ body {
 }
 
 .rich-surface {
+    position: relative;
     display: flex;
     flex: 1 1 0;
     flex-direction: column;
@@ -1575,16 +1636,21 @@ body {
 }
 
 .workspace-pane-tabs {
+    --workspace-active-border: color-mix(in srgb, var(--accent) 55%, var(--border));
     display: flex;
     flex-wrap: nowrap;
-    align-items: center;
+    align-items: flex-end;
     gap: 0.5rem;
     min-height: 2rem;
-    padding: 0.2rem 0.5rem;
+    padding: 0.2rem 1rem 0 2px;
     overflow-x: hidden;
     overflow-y: hidden;
     background: var(--bg-secondary);
     border-bottom: 1px solid var(--border);
+}
+
+.workspace-pane-slot[data-active="true"] > .workspace-pane-tabs {
+    border-bottom-color: var(--workspace-active-border);
 }
 
 .workspace-pane-tabs:empty {
@@ -1594,7 +1660,7 @@ body {
 .workspace-pane-tab-group {
     display: flex;
     flex-wrap: nowrap;
-    align-items: center;
+    align-items: flex-end;
     gap: 0.25rem;
     min-width: 0;
     width: 100%;
@@ -1616,8 +1682,24 @@ body {
     display: inline-flex;
     align-items: center;
     gap: 0.2rem;
-    flex: 0 0 auto;
-    margin-left: auto;
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    z-index: 20;
+    padding: 0.15rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-s);
+    background: var(--bg-secondary);
+    box-shadow: var(--shadow-1);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--duration) var(--ease);
+}
+
+.rich-surface:hover > .workspace-pane-actions,
+.rich-surface:focus-within > .workspace-pane-actions {
+    opacity: 1;
+    pointer-events: auto;
 }
 
 .workspace-pane-action {
@@ -1654,7 +1736,8 @@ body {
     max-width: none;
     min-height: 1.75rem;
     border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
-    border-radius: var(--radius-s);
+    border-bottom: 0;
+    border-radius: var(--radius-s) var(--radius-s) 0 0;
     padding: 0 0.2rem 0 0.45rem;
     background: color-mix(in srgb, var(--bg-tertiary) 55%, transparent);
     color: var(--text-secondary);
@@ -1679,7 +1762,8 @@ body {
     flex: 0 1 auto;
     justify-content: flex-start;
     min-width: 10ch;
-    max-width: 28ch;
+    /* スペースがある限り全文表示。混雑時だけflex収縮で省略される */
+    max-width: none;
     min-height: 1.5rem;
     padding: 0 0.15rem;
     overflow: hidden;
@@ -1710,7 +1794,7 @@ body {
 }
 
 .workspace-pane-tab[aria-selected="true"] {
-    border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+    border-color: var(--workspace-active-border);
     background: var(--bg-primary);
 }
 
@@ -2202,24 +2286,39 @@ button.outline-item {
 
 .outline-item.h1 { padding-left: 0.5rem; font-weight: 600; }
 .outline-item.h2 { padding-left: 1.5rem; }
-.outline-item.h3 { padding-left: 2.5rem; font-size: 0.8rem; }
-.outline-item.h4 { padding-left: 3.5rem; font-size: 0.8rem; color: var(--text-secondary); }
-.outline-item.h5 { padding-left: 4.5rem; font-size: 0.75rem; color: var(--text-muted); }
-.outline-item.h6 { padding-left: 5.5rem; font-size: 0.75rem; color: var(--text-muted); }
+/* 階層はインデントだけで表現する。文字サイズを縮めると深い見出しが読みにくい */
+.outline-item.h3 { padding-left: 2.5rem; }
+.outline-item.h4 { padding-left: 3.5rem; color: var(--text-secondary); }
+.outline-item.h5 { padding-left: 4.5rem; color: var(--text-secondary); }
+.outline-item.h6 { padding-left: 5.5rem; color: var(--text-secondary); }
 
-/* Right Sidebar Resize Handle */
+/* Right Sidebar Resize Handle: 縦ハンドルと同じくレイアウト実幅0のオーバーレイ */
 .right-sidebar .resize-handle.horizontal {
-    height: 6px;
+    width: auto;
+    height: 8px;
+    margin-inline: 0;
+    margin-block: -4px;
     cursor: ns-resize;
-    background: var(--border);
+    background: transparent;
     flex-shrink: 0;
+}
+
+.right-sidebar .resize-handle.horizontal::before {
+    top: 50%;
+    bottom: auto;
+    left: 0;
+    right: 0;
+    width: auto;
+    height: 2px;
+    transform: translateY(-50%);
 }
 
 .right-sidebar .resize-handle.horizontal.hidden {
     display: none;
 }
 
-.right-sidebar .resize-handle.horizontal:hover {
+.right-sidebar .resize-handle.horizontal:hover::before,
+.right-sidebar .resize-handle.horizontal.dragging::before {
     background: var(--accent);
 }
 
@@ -4511,4 +4610,66 @@ details.callout:not([open]) .callout-fold {
     font-family: inherit;
     font-size: 0.75rem;
     color: var(--text-primary);
+}
+
+/* ========== v1.1.1 REVIEW FIXES ========== */
+
+/* フォルダ行の配下ノート数（再帰）。控えめな数字で右端に */
+.folder-note-count {
+    flex: 0 0 auto;
+    margin-left: auto;
+    padding-left: 0.4rem;
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.file-item.active .folder-note-count {
+    color: var(--text-secondary);
+}
+
+/* ポップアウトウィンドウはノート専用。ファイラーは出さない */
+body.popout-window .sidebar,
+body.popout-window #sidebar-resize {
+    display: none !important;
+}
+
+/* Vault検索: 入力欄の真横に虫眼鏡の実行ボタン */
+.vault-search-input-row {
+    display: flex;
+    align-items: stretch;
+    gap: 8px;
+}
+
+.vault-search-input-row #vault-search-input {
+    flex: 1;
+    min-width: 0;
+}
+
+.vault-search-submit {
+    flex: 0 0 auto;
+    width: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: none;
+    border-radius: var(--radius-s);
+    background: var(--accent);
+    color: #fff;
+    cursor: pointer;
+}
+
+.vault-search-submit:hover {
+    background: var(--accent-hover);
+}
+
+.vault-search-controls {
+    font-size: 0.85rem;
+}
+
+.vault-search-help > summary {
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
 }

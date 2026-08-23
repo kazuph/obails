@@ -407,8 +407,11 @@
                 <button id="vault-search-close" type="button" class="icon-btn" aria-label="Close vault search" title="Close vault search"></button>
             </div>
             <form id="vault-search-form">
-                <label for="vault-search-input">Search expression</label>
-                <input id="vault-search-input" type="search" autocomplete="off" placeholder="Try: tag:#work -draft" aria-describedby="vault-search-help vault-search-error" aria-controls="vault-search-results" />
+                <label for="vault-search-input" class="sr-only">Search expression</label>
+                <div class="vault-search-input-row">
+                    <input id="vault-search-input" type="search" autocomplete="off" placeholder="Try: tag:#work -draft" aria-describedby="vault-search-help vault-search-error" aria-controls="vault-search-results" />
+                    <button id="vault-search-submit" type="submit" class="vault-search-submit" title="Search" aria-label="Search"></button>
+                </div>
                 <div class="vault-search-controls">
                     <label><input id="vault-search-match-case" type="checkbox" /> Match case</label>
                     <label for="vault-search-sort">Sort
@@ -419,18 +422,17 @@
                             <option value="modified-oldest">Modified (oldest first)</option>
                         </select>
                     </label>
-                    <label for="vault-search-context">Context characters
+                    <label for="vault-search-context" title="0 keeps the complete matching line">Context characters
                         <input id="vault-search-context" type="number" inputmode="numeric" min="0" step="1" value="0" aria-describedby="vault-search-context-help" />
                     </label>
-                    <span id="vault-search-context-help">0 keeps the complete matching line.</span>
-                    <button type="submit" class="primary-btn">Search</button>
+                    <span id="vault-search-context-help" class="sr-only">0 keeps the complete matching line.</span>
                 </div>
             </form>
             <p id="vault-search-error" class="vault-search-error" role="alert" hidden></p>
             <p id="vault-search-status" class="vault-search-status" role="status">Enter an expression, then press Search.</p>
             <ul id="vault-search-results" class="vault-search-results" role="listbox" aria-label="Vault search results"></ul>
             <p class="vault-search-keyboard-help"><kbd>↑</kbd><kbd>↓</kbd> select · <kbd>Enter</kbd> open the result at its matching line · <kbd>Esc</kbd> close</p>
-            <details id="vault-search-help" class="vault-search-help" open>
+            <details id="vault-search-help" class="vault-search-help">
                 <summary><span>Search operators (20 supported syntax families)</span><span class="details-chevron" aria-hidden="true"></span></summary>
                 <ol>
                     <li><code>meeting</code> — Plain term</li>

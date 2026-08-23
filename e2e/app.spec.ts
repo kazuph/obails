@@ -38,6 +38,7 @@ async function showSourceEditor(page: Page): Promise<void> {
   if (await container.evaluate((el) => el.classList.contains('source-hidden'))) {
     const paneToggle = activePane.locator('[data-pane-action="source-toggle"]').first();
     if (await paneToggle.count()) {
+      await activePane.locator('.rich-surface').hover();
       await paneToggle.click();
     } else {
       await page.keyboard.press('Meta+e');
@@ -808,12 +809,14 @@ test.describe('Obails App', () => {
     await expect(sourceToggle).toHaveAttribute('aria-pressed', 'false');
 
     // < > トグルでソース表示
+    await activePane.locator('.rich-surface').hover();
     await sourceToggle.click();
     await expect(activePane.locator('.editor-pane').first()).toBeVisible();
     await expect(activePane.locator('textarea').first()).toHaveValue(/Welcome/);
     await expect(sourceToggle).toHaveAttribute('aria-pressed', 'true');
 
     // もう一度押すと非表示に戻る
+    await activePane.locator('.rich-surface').hover();
     await sourceToggle.click();
     await expect(activePane.locator('.editor-pane').first()).toBeHidden();
     await expect(activePane.locator('.preview-pane').first()).toBeVisible();

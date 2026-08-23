@@ -53,6 +53,10 @@ func TestConfigService_CommandDescriptorsAndHotkeysPersist(t *testing.T) {
 			t.Fatalf("workspace command %q descriptor = %#v", commandID, command)
 		}
 	}
+	closeTab := workspaceCommands[models.CommandCloseActiveTab]
+	if closeTab.Title != "Close Note" || closeTab.DefaultHotkey != "Cmd+W" || closeTab.Hotkey != "Cmd+W" {
+		t.Fatalf("close note descriptor = %#v", closeTab)
+	}
 	if workspaceCommands[models.CommandWorkspaceSaveAs].Title != "Save Current Workspace As…" {
 		t.Fatalf("save-as title = %#v", workspaceCommands[models.CommandWorkspaceSaveAs])
 	}

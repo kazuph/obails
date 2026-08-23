@@ -126,6 +126,7 @@ const (
 	CommandSplitPaneRight       = "split-pane-right"
 	CommandSplitPaneDown        = "split-pane-down"
 	CommandCloseActivePane      = "close-active-pane"
+	CommandCloseActiveTab       = "close-active-tab"
 	CommandWorkspaceSaveAs      = "workspace-save-as"
 	CommandWorkspaceSaveCurrent = "workspace-save-current"
 	CommandWorkspaceManage      = "workspace-manage"
@@ -162,6 +163,7 @@ func CommandDescriptors() []CommandDescriptor {
 		{ID: CommandToggleSource, Title: "Toggle Source Editor", Category: "View", Scope: CommandScopeGlobal, DefaultHotkey: "Cmd+E", Hotkey: "Cmd+E"},
 		{ID: CommandSplitPaneRight, Title: "Split Pane Right", Category: "Workspace", Scope: CommandScopeGlobal},
 		{ID: CommandSplitPaneDown, Title: "Split Pane Down", Category: "Workspace", Scope: CommandScopeGlobal},
+		{ID: CommandCloseActiveTab, Title: "Close Note", Category: "Workspace", Scope: CommandScopeGlobal, DefaultHotkey: "Cmd+W", Hotkey: "Cmd+W"},
 		{ID: CommandCloseActivePane, Title: "Close Active Pane", Category: "Workspace", Scope: CommandScopeGlobal},
 		{ID: CommandWorkspaceSaveAs, Title: "Save Current Workspace As…", Category: "Workspace", Scope: CommandScopeGlobal},
 		{ID: CommandWorkspaceSaveCurrent, Title: "Save Current Workspace", Category: "Workspace", Scope: CommandScopeGlobal},
