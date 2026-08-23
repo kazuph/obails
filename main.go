@@ -15,7 +15,7 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
-const applicationVersion = "1.1.0"
+const applicationVersion = "1.1.1"
 
 // applicationMenuMainThreadFixMarker stays reachable so production binaries
 // contain a strings-searchable proof of the v1.0.1 setMainMenu thread fix.
