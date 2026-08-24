@@ -13,7 +13,7 @@ import { Clipboard, Events } from "@wailsio/runtime";
 import mermaid from "mermaid";
 import hljs from "highlight.js";
 import "highlight.js/styles/github-dark.css";
-import { codeElementToPng, copyPngToClipboard, imageElementToPng, svgElementToPng } from "./lib/image-clipboard";
+import { codeBlockLanguage, copyCodeImage, copyPngToClipboard, imageElementToPng, svgElementToPng } from "./lib/image-clipboard";
 import "katex/dist/katex.min.css";
 import ForceGraph from "force-graph";
 import { clampEditorViewState } from "./lib/editor-view-state";
@@ -7683,7 +7683,7 @@ function enhanceCodeBlocks(previewTarget: HTMLElement = preview) {
         actions.className = "preview-copy-actions";
         actions.append(
             createTextCopyButton("Copy code", code.textContent || ""),
-            createImageCopyButton("Copy code as image", async () => codeElementToPng(pre)),
+            createImageCopyButton("Copy code as image", async () => copyCodeImage(code.textContent || "", codeBlockLanguage(code))),
         );
         pre.appendChild(actions);
     });
@@ -7714,7 +7714,7 @@ function createTextCopyButton(title: string, text: string): HTMLButtonElement {
     return button;
 }
 
-function createImageCopyButton(title: string, createPng: () => Promise<Blob>): HTMLButtonElement {
+function createImageCopyButton(title: string, copyImage: () => Promise<void>): HTMLButtonElement {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "image-copy-btn";
@@ -7727,7 +7727,7 @@ function createImageCopyButton(title: string, createPng: () => Promise<Blob>): H
         button.disabled = true;
         button.classList.remove("copy-failed");
         try {
-            await copyPngToClipboard(await createPng());
+            await copyImage();
             button.classList.add("copied");
             button.title = "Image copied";
             window.setTimeout(() => {
@@ -7751,7 +7751,7 @@ function enhanceImageCopyButtons(previewTarget: HTMLElement = preview) {
         const host = document.createElement("span");
         host.className = "preview-image-copy-host";
         image.replaceWith(host);
-        host.append(image, createImageCopyButton("Copy image", async () => imageElementToPng(image)));
+        host.append(image, createImageCopyButton("Copy image", async () => copyPngToClipboard(await imageElementToPng(image))));
     });
 }
 
@@ -9446,7 +9446,7 @@ async function initMermaidDiagrams(previewEl: HTMLElement | null = document.getE
                 createImageCopyButton("Copy diagram as image", async () => {
                     const renderedSvg = mermaidDiv.querySelector("svg");
                     if (!renderedSvg) throw new Error("The diagram is not ready.");
-                    return svgElementToPng(renderedSvg, mermaidDiv);
+                    await copyPngToClipboard(await svgElementToPng(renderedSvg, mermaidDiv));
                 }),
             );
             container.append(mermaidDiv, actions);

@@ -36,6 +36,21 @@ tasks:
       - mkdir -p "{{.BIN_DIR}}"
       - swiftc -O build/darwin/transcribe/main.swift -o "{{.BIN_DIR}}/obails-transcribe"
 
+  build:freeze:
+    summary: Builds the code-card renderer (obails-freeze)
+    internal: true
+    sources:
+      - go.mod
+      - go.sum
+    generates:
+      - '{{.BIN_DIR}}/obails-freeze'
+    cmds:
+      - mkdir -p "{{.BIN_DIR}}"
+      - go build -trimpath -ldflags="-w -s" -o "{{.BIN_DIR}}/obails-freeze" github.com/charmbracelet/freeze
+    env:
+      GOOS: darwin
+      GOARCH: '{{.ARCH | default ARCH}}'
+
   build:native:
     summary: Builds the application natively on macOS
     internal: true
@@ -49,6 +64,7 @@ tasks:
             ref: .DEV
       - task: common:generate:icons
       - task: build:transcriber
+      - task: build:freeze
     cmds:
       - go build {{.BUILD_FLAGS}} -o {{.OUTPUT}}
     vars:
@@ -154,8 +170,10 @@ tasks:
       - mkdir -p "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/Resources"
       - cp build/darwin/icons.icns "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/Resources"
       - cp build/darwin/icons.icns "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/Resources/icons"
+      - cp build/darwin/freeze-LICENSE "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/Resources"
       - cp "{{.BIN_DIR}}/{{.APP_NAME}}" "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS"
       - cp "{{.BIN_DIR}}/obails-transcribe" "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS"
+      - cp "{{.BIN_DIR}}/obails-freeze" "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS"
       - cp build/darwin/Info.plist "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents"
       - task: '{{if eq OS "darwin"}}codesign:adhoc{{else}}codesign:skip{{end}}'
 
@@ -188,8 +206,10 @@ tasks:
       - mkdir -p "{{.BIN_DIR}}/{{.APP_NAME}}.dev.app/Contents/Resources"
       - cp build/darwin/icons.dev.icns "{{.BIN_DIR}}/{{.APP_NAME}}.dev.app/Contents/Resources/icons.icns"
       - cp build/darwin/icons.dev.icns "{{.BIN_DIR}}/{{.APP_NAME}}.dev.app/Contents/Resources/icons"
+      - cp build/darwin/freeze-LICENSE "{{.BIN_DIR}}/{{.APP_NAME}}.dev.app/Contents/Resources"
       - cp "{{.BIN_DIR}}/{{.APP_NAME}}" "{{.BIN_DIR}}/{{.APP_NAME}}.dev.app/Contents/MacOS"
       - cp "{{.BIN_DIR}}/obails-transcribe" "{{.BIN_DIR}}/{{.APP_NAME}}.dev.app/Contents/MacOS"
+      - cp "{{.BIN_DIR}}/obails-freeze" "{{.BIN_DIR}}/{{.APP_NAME}}.dev.app/Contents/MacOS"
       - cp "build/darwin/Info.dev.plist" "{{.BIN_DIR}}/{{.APP_NAME}}.dev.app/Contents/Info.plist"
       - codesign --force --deep --sign - "{{.BIN_DIR}}/{{.APP_NAME}}.dev.app"
 
