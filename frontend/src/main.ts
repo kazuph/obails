@@ -13,6 +13,7 @@ import { Clipboard, Events } from "@wailsio/runtime";
 import mermaid from "mermaid";
 import hljs from "highlight.js";
 import "highlight.js/styles/github-dark.css";
+import { codeElementToPng, copyPngToClipboard, imageElementToPng, svgElementToPng } from "./lib/image-clipboard";
 import "katex/dist/katex.min.css";
 import ForceGraph from "force-graph";
 import { clampEditorViewState } from "./lib/editor-view-state";
@@ -7414,6 +7415,7 @@ async function resolvePreviewImages(previewTarget: HTMLElement = preview, notePa
             img.style.opacity = "0.5";
         }
     }
+    enhanceImageCopyButtons(previewTarget);
 }
 
 function setupPreviewInteractions(previewTarget: HTMLElement = preview, activatePane: () => Promise<void> = async () => {}) {
@@ -7672,33 +7674,84 @@ async function createBrokenLinkTarget() {
 function enhanceCodeBlocks(previewTarget: HTMLElement = preview) {
     previewTarget.querySelectorAll<HTMLPreElement>("pre").forEach((pre) => {
         const code = pre.querySelector("code");
-        if (!code || pre.querySelector(":scope > .code-copy-btn")) {
+        if (!code || pre.querySelector(".code-copy-btn")) {
             return;
         }
 
         pre.classList.add("code-block");
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "code-copy-btn";
-        button.title = "Copy code";
-        button.setAttribute("aria-label", "Copy code");
-        button.innerHTML = renderIcon("copy");
-        button.addEventListener("click", async (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            try {
-                await Clipboard.SetText(code.textContent || "");
-                button.classList.add("copied");
-                button.title = "Copied";
-                window.setTimeout(() => {
-                    button.classList.remove("copied");
-                    button.title = "Copy code";
-                }, 1200);
-            } catch (err) {
-                console.error("Failed to copy code:", err);
-            }
-        });
-        pre.appendChild(button);
+        const actions = document.createElement("div");
+        actions.className = "preview-copy-actions";
+        actions.append(
+            createTextCopyButton("Copy code", code.textContent || ""),
+            createImageCopyButton("Copy code as image", async () => codeElementToPng(pre)),
+        );
+        pre.appendChild(actions);
+    });
+}
+
+function createTextCopyButton(title: string, text: string): HTMLButtonElement {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "code-copy-btn";
+    button.title = title;
+    button.setAttribute("aria-label", title);
+    button.innerHTML = renderIcon("copy");
+    button.addEventListener("click", async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        try {
+            await Clipboard.SetText(text);
+            button.classList.add("copied");
+            button.title = "Copied";
+            window.setTimeout(() => {
+                button.classList.remove("copied");
+                button.title = title;
+            }, 1200);
+        } catch (err) {
+            console.error("Failed to copy code:", err);
+        }
+    });
+    return button;
+}
+
+function createImageCopyButton(title: string, createPng: () => Promise<Blob>): HTMLButtonElement {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "image-copy-btn";
+    button.title = title;
+    button.setAttribute("aria-label", title);
+    button.innerHTML = renderIcon("file-image");
+    button.addEventListener("click", async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        button.disabled = true;
+        button.classList.remove("copy-failed");
+        try {
+            await copyPngToClipboard(await createPng());
+            button.classList.add("copied");
+            button.title = "Image copied";
+            window.setTimeout(() => {
+                button.classList.remove("copied");
+                button.title = title;
+            }, 1200);
+        } catch (err) {
+            button.classList.add("copy-failed");
+            button.title = err instanceof Error ? err.message : "Image copy failed";
+            console.error("Failed to copy image:", err);
+        } finally {
+            button.disabled = false;
+        }
+    });
+    return button;
+}
+
+function enhanceImageCopyButtons(previewTarget: HTMLElement = preview) {
+    previewTarget.querySelectorAll<HTMLImageElement>("img").forEach((image) => {
+        if (image.closest(".preview-image-copy-host") || image.closest(".mermaid-container")) return;
+        const host = document.createElement("span");
+        host.className = "preview-image-copy-host";
+        image.replaceWith(host);
+        host.append(image, createImageCopyButton("Copy image", async () => imageElementToPng(image)));
     });
 }
 
@@ -9386,7 +9439,17 @@ async function initMermaidDiagrams(previewEl: HTMLElement | null = document.getE
             mermaidDiv.title = "Click to view fullscreen";
 
             container.addEventListener("click", () => openMermaidFullscreen(mermaidDiv));
-            container.appendChild(mermaidDiv);
+            const actions = document.createElement("div");
+            actions.className = "preview-copy-actions";
+            actions.append(
+                createTextCopyButton("Copy Mermaid code", text),
+                createImageCopyButton("Copy diagram as image", async () => {
+                    const renderedSvg = mermaidDiv.querySelector("svg");
+                    if (!renderedSvg) throw new Error("The diagram is not ready.");
+                    return svgElementToPng(renderedSvg, mermaidDiv);
+                }),
+            );
+            container.append(mermaidDiv, actions);
         } catch (err: unknown) {
             // Show error inline below the code block (copyable)
             const errorDiv = document.createElement("div");

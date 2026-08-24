@@ -2610,10 +2610,17 @@ button.outline-item {
     position: relative;
 }
 
-.code-copy-btn {
+.preview-copy-actions {
     position: absolute;
     top: 8px;
     right: 8px;
+    z-index: 1;
+    display: flex;
+    gap: 6px;
+}
+
+.code-copy-btn,
+.image-copy-btn {
     width: 28px;
     height: 28px;
     display: inline-flex;
@@ -2629,15 +2636,42 @@ button.outline-item {
 }
 
 .preview-pane pre.code-block:hover .code-copy-btn,
+.preview-pane pre.code-block:hover .image-copy-btn,
+.preview-image-copy-host:hover .image-copy-btn,
+.mermaid-container:hover .code-copy-btn,
+.mermaid-container:hover .image-copy-btn,
 .code-copy-btn:focus-visible,
-.code-copy-btn.copied {
+.image-copy-btn:focus-visible,
+.code-copy-btn.copied,
+.image-copy-btn.copied,
+.image-copy-btn.copy-failed {
     opacity: 1;
 }
 
 .code-copy-btn:hover,
-.code-copy-btn.copied {
+.code-copy-btn.copied,
+.image-copy-btn:hover,
+.image-copy-btn.copied {
     color: var(--accent);
     background: var(--bg-secondary);
+}
+
+.image-copy-btn.copy-failed {
+    color: var(--danger, #dc2626);
+}
+
+.preview-image-copy-host {
+    position: relative;
+    display: block;
+    width: fit-content;
+    max-width: 100%;
+    margin-inline: auto;
+}
+
+.preview-image-copy-host > .image-copy-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
 }
 
 .note-search-match {

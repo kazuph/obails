@@ -269,6 +269,7 @@ export async function setupMockBindings(page: Page, options: MockBindingOptions 
   const readBinaryCalls: string[] = [];
   const openWithDefaultAppCalls: string[] = [];
   const clipboardTexts: string[] = [];
+  const clipboardImages: string[] = [];
   const snapshots = new Map<string, Map<string, string>>();
   const recentlyDeleted = new Map<string, { id: string; path: string; isDir: boolean; deletedAt: string; deleteMode: string; content: string }>();
   const deletedPaths = new Set<string>();
@@ -352,6 +353,7 @@ export async function setupMockBindings(page: Page, options: MockBindingOptions 
   await page.exposeFunction('__wailsMockReadBinaryCalls', () => readBinaryCalls.slice());
   await page.exposeFunction('__wailsMockOpenWithDefaultAppCalls', () => openWithDefaultAppCalls.slice());
   await page.exposeFunction('__wailsMockClipboardTexts', () => clipboardTexts.slice());
+  await page.exposeFunction('__wailsMockClipboardImages', () => clipboardImages.slice());
 
   // 本番の file_service.go は http.ServeContent + "Accept-Ranges: bytes" で
   // Range リクエストに対応している。シーク（頭出し）は Range が無いとブラウザが
@@ -418,6 +420,10 @@ export async function setupMockBindings(page: Page, options: MockBindingOptions 
 
     let value: any = null;
     switch (methodID) {
+      // ImageClipboardService.SetPNG
+      case 2701085494:
+        clipboardImages.push(String(args[0] || ''));
+        break;
       // ConfigService.GetConfig
       case 1692681084:
         value = {

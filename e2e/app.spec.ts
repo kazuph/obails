@@ -71,6 +71,34 @@ function activeOutlineItems(page: Page) {
   return page.locator('[data-sidebar-section-content="outline"] .outline-item, #outline-list .outline-item');
 }
 
+async function latestCopiedPng(page: Page, marker?: [number, number, number]) {
+  return page.evaluate(async (expectedMarker) => {
+    const images = await (window as any).__wailsMockClipboardImages();
+    const base64 = images.at(-1);
+    if (!base64) throw new Error('No PNG image was sent to the native clipboard service.');
+    const blob = await (await fetch(`data:image/png;base64,${base64}`)).blob();
+    const bitmap = await createImageBitmap(blob);
+    let hasMarker = false;
+    if (expectedMarker) {
+      const canvas = document.createElement('canvas');
+      canvas.width = bitmap.width;
+      canvas.height = bitmap.height;
+      const context = canvas.getContext('2d')!;
+      context.drawImage(bitmap, 0, 0);
+      const pixels = context.getImageData(0, 0, bitmap.width, bitmap.height).data;
+      for (let index = 0; index < pixels.length; index += 4) {
+        if (pixels[index] === expectedMarker[0]
+          && pixels[index + 1] === expectedMarker[1]
+          && pixels[index + 2] === expectedMarker[2]) {
+          hasMarker = true;
+          break;
+        }
+      }
+    }
+    return { width: bitmap.width, height: bitmap.height, size: blob.size, hasMarker };
+  }, marker);
+}
+
 async function openFileContextMenu(page: Page, path: string, itemId?: string) {
   await page.locator("html[data-app-ready='true']").waitFor();
   const file = page.locator(`.file-item[data-path="${path}"]`);
@@ -782,6 +810,58 @@ test.describe('Obails App', () => {
     expect(copiedTexts.at(-1)).toContain('interface Note');
   });
 
+  test('should copy highlighted code, preview images, and Mermaid diagrams as PNG images', async ({ page }) => {
+    await setupMockBindings(page);
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+
+    await page.locator('.file-item[data-path="Code Examples.md"]').click();
+    const codeBlock = page.locator('#preview pre.code-block').first();
+    const highlightedKeyword = codeBlock.locator('.hljs-keyword').first();
+    await expect(highlightedKeyword).toBeAttached();
+    await highlightedKeyword.evaluate((element) => {
+      (element as HTMLElement).style.backgroundColor = 'rgb(1, 254, 3)';
+    });
+    const codeMetrics = await codeBlock.evaluate((element) => ({
+      width: Math.ceil(Math.max(element.scrollWidth, element.getBoundingClientRect().width) * window.devicePixelRatio),
+      height: Math.ceil(Math.max(element.scrollHeight, element.getBoundingClientRect().height) * window.devicePixelRatio),
+    }));
+    await codeBlock.getByRole('button', { name: 'Copy code as image' }).click({ force: true });
+    await expect(codeBlock.getByRole('button', { name: 'Copy code as image' })).toHaveClass(/copied/);
+    const codePng = await latestCopiedPng(page, [1, 254, 3]);
+    expect(codePng).toMatchObject({ ...codeMetrics, hasMarker: true });
+    expect(codePng.size).toBeGreaterThan(0);
+
+    await page.locator('.file-item[data-path="Image Test.md"]').click();
+    const imageHost = page.locator('#preview .preview-image-copy-host').first();
+    await expect(imageHost.locator('img')).toHaveAttribute('src', /^data:image\/png;base64,/);
+    await imageHost.getByRole('button', { name: 'Copy image' }).click({ force: true });
+    await expect(imageHost.getByRole('button', { name: 'Copy image' })).toHaveClass(/copied/);
+    const copiedImageSize = await latestCopiedPng(page);
+    const sourceImageSize = await imageHost.locator('img').evaluate((image: HTMLImageElement) => ({
+      width: image.naturalWidth,
+      height: image.naturalHeight,
+    }));
+    expect(copiedImageSize).toMatchObject(sourceImageSize);
+    expect(copiedImageSize.size).toBeGreaterThan(0);
+
+    await page.locator('.file-item[data-path="Mermaid Demo.md"]').click();
+    const diagram = page.locator('#preview .mermaid-container').first();
+    await expect(diagram.locator('.mermaid > svg')).toBeVisible({ timeout: 10000 });
+    await diagram.getByRole('button', { name: 'Copy Mermaid code' }).click({ force: true });
+    const copiedTexts = await page.evaluate(() => (window as any).__wailsMockClipboardTexts());
+    expect(copiedTexts.at(-1)).toContain('flowchart TD');
+    const diagramMetrics = await diagram.locator('.mermaid').evaluate((element) => ({
+      width: Math.ceil(Math.max(element.scrollWidth, element.getBoundingClientRect().width) * window.devicePixelRatio),
+      height: Math.ceil(Math.max(element.scrollHeight, element.getBoundingClientRect().height) * window.devicePixelRatio),
+    }));
+    await diagram.getByRole('button', { name: 'Copy diagram as image' }).click({ force: true });
+    await expect(diagram.getByRole('button', { name: 'Copy diagram as image' })).toHaveClass(/copied/);
+    const diagramPng = await latestCopiedPng(page);
+    expect(diagramPng).toMatchObject(diagramMetrics);
+    expect(diagramPng.size).toBeGreaterThan(0);
+  });
+
   test('should jump to another note when clicking a wiki link', async ({ page }) => {
     await setupMockBindings(page);
     await page.goto('/');
@@ -1306,7 +1386,7 @@ test.describe('Mermaid', () => {
 
     await page.locator('.file-item[data-path="Mermaid Demo.md"]').click();
     const diagram = page.locator('#preview .mermaid-container').last();
-    await expect(diagram.locator('svg')).toBeVisible({ timeout: 10000 });
+    await expect(diagram.locator('.mermaid > svg')).toBeVisible({ timeout: 10000 });
 
     await diagram.scrollIntoViewIfNeeded();
     await diagram.click();
