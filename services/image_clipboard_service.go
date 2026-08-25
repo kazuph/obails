@@ -20,6 +20,13 @@ set imageData to read imageFile as «class PNGf»
 set the clipboard to imageData
 end run`
 
+var codeCardGradient = [4]color.RGBA{
+	{R: 0x2d, G: 0x1b, B: 0x69, A: 0xff},
+	{R: 0x0b, G: 0x3b, B: 0x5a, A: 0xff},
+	{R: 0x4f, G: 0x20, B: 0x59, A: 0xff},
+	{R: 0x0c, G: 0x2d, B: 0x45, A: 0xff},
+}
+
 // ImageClipboardService renders code cards and writes PNG images to the native macOS pasteboard.
 type ImageClipboardService struct {
 	freezePath string
@@ -66,7 +73,7 @@ func (s *ImageClipboardService) renderCodePNG(code, language string) ([]byte, er
 	defer os.RemoveAll(tempDir)
 
 	outputPath := filepath.Join(tempDir, "code-card.png")
-	args := []string{"-c", "full", "--output", outputPath}
+	args := []string{"-c", "full", "--theme", "dracula", "--output", outputPath}
 	if language = strings.TrimSpace(language); language != "" {
 		args = append(args, "--language", language)
 	}
@@ -81,7 +88,7 @@ func (s *ImageClipboardService) renderCodePNG(code, language string) ([]byte, er
 	if err != nil {
 		return nil, fmt.Errorf("read code card PNG: %w", err)
 	}
-	return flattenFreezeBackground(data)
+	return composeCodeCardBackground(data)
 }
 
 func (s *ImageClipboardService) freezeHelperPath() (string, error) {
@@ -97,14 +104,13 @@ func (s *ImageClipboardService) freezeHelperPath() (string, error) {
 	return "", fmt.Errorf("obails-freeze helper not found; rebuild Obails")
 }
 
-func flattenFreezeBackground(data []byte) ([]byte, error) {
+func composeCodeCardBackground(data []byte) ([]byte, error) {
 	source, err := png.Decode(bytes.NewReader(data))
 	if err != nil {
 		return nil, fmt.Errorf("decode code card PNG: %w", err)
 	}
 	canvas := image.NewRGBA(source.Bounds())
-	// Freeze's full template defines #171717 as its background.
-	draw.Draw(canvas, canvas.Bounds(), &image.Uniform{C: color.RGBA{R: 0x17, G: 0x17, B: 0x17, A: 0xff}}, image.Point{}, draw.Src)
+	drawCodeCardGradient(canvas)
 	draw.Draw(canvas, canvas.Bounds(), source, source.Bounds().Min, draw.Over)
 
 	var encoded bytes.Buffer
@@ -112,6 +118,34 @@ func flattenFreezeBackground(data []byte) ([]byte, error) {
 		return nil, fmt.Errorf("encode code card PNG: %w", err)
 	}
 	return encoded.Bytes(), nil
+}
+
+func drawCodeCardGradient(canvas *image.RGBA) {
+	bounds := canvas.Bounds()
+	maxX := bounds.Dx() - 1
+	maxY := bounds.Dy() - 1
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		left := blendRGBA(codeCardGradient[0], codeCardGradient[2], y-bounds.Min.Y, maxY)
+		right := blendRGBA(codeCardGradient[1], codeCardGradient[3], y-bounds.Min.Y, maxY)
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			canvas.SetRGBA(x, y, blendRGBA(left, right, x-bounds.Min.X, maxX))
+		}
+	}
+}
+
+func blendRGBA(start, end color.RGBA, position, maximum int) color.RGBA {
+	if maximum <= 0 {
+		return start
+	}
+	blend := func(a, b uint8) uint8 {
+		return uint8((int(a)*(maximum-position) + int(b)*position) / maximum)
+	}
+	return color.RGBA{
+		R: blend(start.R, end.R),
+		G: blend(start.G, end.G),
+		B: blend(start.B, end.B),
+		A: blend(start.A, end.A),
+	}
 }
 
 func setPNGClipboard(data []byte) error {
