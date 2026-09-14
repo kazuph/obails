@@ -2334,7 +2334,7 @@ function setupEventListeners() {
             toggleShortcutsHelp();
             return;
         }
-        if (primaryDocumentRuntime.activeEditableDocument?.kind === "markdown") {
+        if (isModKey(e) && primaryDocumentRuntime.activeEditableDocument?.kind === "markdown") {
             const notePreview = activeRichSurface()?.preview || preview;
             if (selectNoteText(e, notePreview)) return;
         }
