@@ -4898,6 +4898,10 @@ function setupThemeMenu() {
         showNewNoteForm();
     });
     window.addEventListener("obails:select-all", () => {
+        if (document.activeElement instanceof HTMLIFrameElement && document.activeElement.contentDocument) {
+            document.activeElement.contentDocument.execCommand("selectAll");
+            return;
+        }
         const event = new KeyboardEvent("keydown", { key: "a", metaKey: isMac, ctrlKey: !isMac, bubbles: true, cancelable: true });
         (document.activeElement || document.body).dispatchEvent(event);
         if (!event.defaultPrevented) document.execCommand("selectAll");

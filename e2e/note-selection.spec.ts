@@ -10,11 +10,10 @@ test("select all stays inside the active note and preserves input selection", as
   await preview.click();
   await page.keyboard.press("Meta+a");
   expect(await preview.evaluate((element) => {
-    const selection = window.getSelection()!;
-    return { text: selection.toString(), expected: element.textContent, contained: element.contains(selection.getRangeAt(0).commonAncestorContainer) };
-  })).toEqual(expect.objectContaining({ contained: true }));
-  const selected = await preview.evaluate((element) => ({ actual: window.getSelection()?.toString(), expected: element.textContent }));
-  expect(selected.actual).toBe(selected.expected);
+    const range = window.getSelection()!.getRangeAt(0);
+    return range.startContainer === element && range.startOffset === 0
+      && range.endContainer === element && range.endOffset === element.childNodes.length;
+  })).toBe(true);
   await page.screenshot({ path: testInfo.outputPath("note-selection.png") });
   await pane.getByRole("button", { name: "Toggle Source" }).click();
   const editor = pane.locator("textarea[aria-label^='Editor in pane']");
