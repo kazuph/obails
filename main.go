@@ -138,6 +138,13 @@ func buildApplicationMenu(app *application.App, selectedTheme string, savedWorks
 		}
 	})
 	menu.AddRole(application.EditMenu)
+	// Route the native accelerator through the note selection handler instead of
+	// WKWebView's page-wide selectAll: responder action.
+	menu.FindByRole(application.SelectAll).SetRole(application.NoRole).OnClick(func(*application.Context) {
+		if window := app.Window.Current(); window != nil {
+			window.ExecJS(`window.dispatchEvent(new CustomEvent("obails:select-all"))`)
+		}
+	})
 	menu.AddRole(application.ViewMenu)
 	appendWorkspaceMenu(menu, app, savedWorkspaceNames, activeNamedWorkspace)
 	menu.AddRole(application.WindowMenu)

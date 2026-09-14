@@ -4897,6 +4897,11 @@ function setupThemeMenu() {
     window.addEventListener("obails:new-note", () => {
         showNewNoteForm();
     });
+    window.addEventListener("obails:select-all", () => {
+        const event = new KeyboardEvent("keydown", { key: "a", metaKey: isMac, ctrlKey: !isMac, bubbles: true, cancelable: true });
+        (document.activeElement || document.body).dispatchEvent(event);
+        if (!event.defaultPrevented) document.execCommand("selectAll");
+    });
     const runWorkspaceMenuCommand = (action: NamedWorkspaceAction) => {
         void runNamedWorkspaceAction(action);
     };

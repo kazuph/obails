@@ -142,6 +142,9 @@ func TestBuildApplicationMenuIncludesWorkspaceAndSelectedTheme(t *testing.T) {
 		app = application.New(application.Options{DisableDefaultSignalHandler: true})
 	}
 	menu := buildApplicationMenu(app, "nord", []string{"Writing"}, "Writing", nil, nil)
+	if menu.FindByRole(application.SelectAll) != nil || menu.FindByLabel("Select All") == nil {
+		t.Fatal("Select All must use the note-aware callback, not the native page-wide role")
+	}
 	workspace := menu.FindByLabel("Workspace")
 	if workspace == nil || workspace.GetSubmenu() == nil {
 		t.Fatal("expected a Workspace submenu on the application menu")
