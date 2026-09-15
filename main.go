@@ -247,6 +247,7 @@ func main() {
 
 	// Create the application
 	app := application.New(application.Options{
+		Transport:   applicationTransport(),
 		Name:        applicationName,
 		Description: "A lightweight Obsidian alternative " + applicationVersion,
 		Icon:        appIcon,
