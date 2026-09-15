@@ -246,8 +246,11 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ## Signed macOS releases
 
-The `Release macOS` GitHub Actions workflow builds, tests, signs, notarizes, and
-staples the Apple Silicon app before publishing a versioned ZIP. The workflow
+Merging into `main` starts the `Release macOS` GitHub Actions workflow. When
+the version in `package.json` has not been published, it builds, tests, signs,
+notarizes, and staples the Apple Silicon app before publishing a versioned ZIP
+and a tag pointing to that exact merge commit. An already published version
+is left unchanged; bump the version in a release PR to publish another version. The workflow
 uses the following **kazuph/obails repository secrets**:
 
 - `OBAILS_SIGNING_CERTIFICATE_BASE64`: Developer ID Application identity exported as PKCS#12, then base64 encoded
@@ -258,5 +261,6 @@ uses the following **kazuph/obails repository secrets**:
 CI imports the signing identity into a temporary keychain and removes the
 keychain and decoded credentials after the job. Secrets are never embedded in
 the app or uploaded as release assets. Sagasu's repository and secrets are not
-used. Release tags must match the version in `package.json`; update the Homebrew
-Cask version and SHA256 only after the notarized ZIP has been published.
+used. The workflow creates the release tag only after all checks succeed;
+update the Homebrew Cask version and SHA256 only after the notarized ZIP has
+been published.

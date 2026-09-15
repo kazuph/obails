@@ -2,14 +2,41 @@ name: Release macOS
 
 on:
   push:
-    tags: ['v*']
+    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: release-macos
+  cancel-in-progress: false
+
 jobs:
+  plan:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      publish: ${{ steps.version.outputs.publish }}
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check whether this version is already published
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="v$(node -p "require('./package.json').version")"
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases" --jq '.[].tag_name' > "$RUNNER_TEMP/released-tags"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          if grep -Fxq "$tag" "$RUNNER_TEMP/released-tags"; then
+            echo 'publish=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'publish=true' >> "$GITHUB_OUTPUT"
+          fi
   release:
+    needs: plan
+    if: needs.plan.outputs.publish == 'true'
     runs-on: macos-26
     permissions:
       contents: write
@@ -26,13 +53,11 @@ jobs:
           version: '10.18.3'
       - name: Validate release version and architecture
         env:
-          RELEASE_REF: ${{ github.ref }}
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ needs.plan.outputs.tag }}
         run: |
           test "$(uname -m)" = arm64
-          if [[ "$RELEASE_REF" == refs/tags/* ]]; then
-            test "$RELEASE_TAG" = "v$(node -p "require('./package.json').version")"
-          fi
+          test "$RELEASE_TAG" = "v$(node -p "require('./package.json').version")"
+          test -z "$(git ls-remote origin "refs/tags/$RELEASE_TAG")"
       - name: Install locked dependencies and matching Wails CLI
         run: |
           pnpm install --frozen-lockfile
@@ -50,7 +75,8 @@ jobs:
           go test ./... -v
           go test -tags cli ./cmd/cli/... -v
           pnpm --dir frontend test
-          pnpm test
+          pnpm exec playwright test --retries=0
+          pnpm exec playwright test --config playwright.real.config.ts --retries=0
       - name: Sign, notarize, staple, and validate
         env:
           OBAILS_SIGNING_CERTIFICATE_BASE64: ${{ secrets.OBAILS_SIGNING_CERTIFICATE_BASE64 }}
@@ -68,8 +94,7 @@ jobs:
             bin/obails-*-macos-arm64.zip.sha256
           if-no-files-found: error
       - name: Publish release
-        if: startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.ref_name }}
-        run: gh release create "$RELEASE_TAG" bin/obails-*-macos-arm64.zip bin/obails-*-macos-arm64.zip.sha256 --verify-tag --generate-notes
+          RELEASE_TAG: ${{ needs.plan.outputs.tag }}
+        run: gh release create "$RELEASE_TAG" bin/obails-*-macos-arm64.zip bin/obails-*-macos-arm64.zip.sha256 --target "$GITHUB_SHA" --generate-notes

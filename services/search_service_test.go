@@ -2,6 +2,7 @@ package services
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/kazuph/obails/models"
@@ -115,4 +116,30 @@ func sameStrings(got, want []string) bool {
 		}
 	}
 	return true
+}
+
+func TestSearchDoesNotReadSymlinksOutsideVault(t *testing.T) {
+	cs, tmpDir := newTestConfigService(t)
+	defer os.RemoveAll(tmpDir)
+	outside := filepath.Join(t.TempDir(), "private.md")
+	if err := os.WriteFile(outside, []byte("outside-secret-sentinel"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(cs.GetVaultPath(), "linked.md")); err != nil {
+		t.Fatal(err)
+	}
+	results, err := NewSearchService(cs).Search(models.SearchOptions{Query: "outside-secret-sentinel"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 0 {
+		t.Fatal("vault search returned external symlink content")
+	}
+	legacy, err := NewFileService(cs).SearchFileContents("outside-secret-sentinel", 0, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(legacy) != 0 {
+		t.Fatal("legacy search returned external symlink content")
+	}
 }

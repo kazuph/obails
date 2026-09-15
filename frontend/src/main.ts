@@ -110,6 +110,7 @@ import {
 import {
   GRAPH_DEPTH_OPTIONS,
   buildGraphOptions,
+  createGraphTooltip,
   canOpenGraphNode,
   getGraphDirection,
   hasActiveGraphFilters,
@@ -9290,7 +9291,7 @@ function renderGraph(
         .height(height)
         .graphData({ nodes, links })
         .nodeId("id")
-        .nodeLabel("label")
+        .nodeLabel((node: GraphNodeData) => createGraphTooltip(node.label))
         .nodeColor(() => nodeColor)
         .nodeVal((node: GraphNodeData) => getNodeRadius(node))
         .nodeCanvasObjectMode(() => "replace")

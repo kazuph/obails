@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   GRAPH_DEPTH_OPTIONS,
   buildGraphOptions,
+  createGraphTooltip,
   canOpenGraphNode,
   getGraphDirection,
   hasActiveGraphFilters,
@@ -98,4 +99,12 @@ describe("graph direction", () => {
     expect(resolveGraphEdgeNavigation(graph, "selected.md", "ArrowRight")).toBe("out.md");
     expect(resolveGraphEdgeNavigation(graph, "in.md", "ArrowLeft")).toBeNull();
   });
+});
+
+
+it("renders untrusted graph labels as text instead of executable HTML", () => {
+  const label = '<img src=x onerror="alert(1)">';
+  const tooltip = createGraphTooltip(label);
+  expect(tooltip.textContent).toBe(label);
+  expect(tooltip.querySelector("img")).toBeNull();
 });

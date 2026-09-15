@@ -48,7 +48,7 @@ func (s *SearchService) Search(options models.SearchOptions) ([]models.VaultSear
 			}
 			return nil
 		}
-		if strings.HasPrefix(info.Name(), ".") || !isSearchableMarkdown(info.Name()) {
+		if info.Mode()&os.ModeSymlink != 0 || strings.HasPrefix(info.Name(), ".") || !isSearchableMarkdown(info.Name()) {
 			return nil
 		}
 

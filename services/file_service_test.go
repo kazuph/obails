@@ -1696,3 +1696,27 @@ func TestFileService_GetAbsolutePath(t *testing.T) {
 		}
 	})
 }
+
+func TestFileService_ImportExternalFolderRejectsExternalSymlink(t *testing.T) {
+	cs, tmpDir := newTestConfigService(t)
+	defer os.RemoveAll(tmpDir)
+	source := filepath.Join(t.TempDir(), "source")
+	if err := os.MkdirAll(source, 0755); err != nil {
+		t.Fatal(err)
+	}
+	outside := filepath.Join(t.TempDir(), "private.md")
+	if err := os.WriteFile(outside, []byte("external-private-content"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(source, "linked.md")); err != nil {
+		t.Fatal(err)
+	}
+	fs := NewFileService(cs)
+	_, err := fs.ImportExternalFolder(source, "")
+	if !errors.Is(err, ErrInvalidPath) {
+		t.Fatalf("expected rejected symbolic link, got %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(cs.GetVaultPath(), "source", "linked.md")); !os.IsNotExist(err) {
+		t.Fatalf("external content was imported: %v", err)
+	}
+}
