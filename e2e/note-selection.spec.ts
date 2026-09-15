@@ -25,9 +25,20 @@ test("select all stays inside the active note and preserves input selection", as
   await page.screenshot({ path: testInfo.outputPath("note-selection.png") });
   await pane.getByRole("button", { name: "Split pane right" }).click();
   await expect(page.locator(".workspace-pane-slot")).toHaveCount(2);
+  await page.locator('.file-item[data-path="Welcome.md"]').click();
+  const restoredPaneId = await pane.getAttribute("data-pane-id");
   await page.reload();
   await page.locator("html[data-app-ready='true']").waitFor();
+  await expect(page.locator(".workspace-pane-slot")).toHaveCount(2);
+  await expect(pane).toHaveAttribute("data-pane-id", restoredPaneId!);
   await expect(page.locator("#timeline-submit")).toHaveCount(1);
+  await pane.locator(".preview-content").click();
+  await page.keyboard.press(selectAll);
+  expect(await pane.locator(".preview-content").evaluate(element => {
+    const range = window.getSelection()!.getRangeAt(0);
+    return range.startContainer === element && range.startOffset === 0
+      && range.endContainer === element && range.endOffset === element.childNodes.length;
+  })).toBe(true);
   const left = page.locator(".workspace-pane-slot").first();
   await left.locator(".preview-content").click();
   await page.keyboard.press(selectAll);
