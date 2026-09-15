@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.1.1-blue" alt="Version">
+  <img src="https://img.shields.io/badge/version-1.1.2-blue" alt="Version">
   <img src="https://img.shields.io/badge/platform-macOS-blue" alt="Platform">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
   <img src="https://img.shields.io/badge/wails-v3.0.0--alpha.60-orange" alt="Wails">
@@ -90,16 +90,38 @@
 
 ## Installation
 
-### Option 1: Download Pre-built Binary (macOS)
+### Option 1: Homebrew (Apple Silicon, macOS 26 or later)
+
+```bash
+brew install --cask kazuph/tap/obails
+```
+
+Update an installed copy:
+
+```bash
+brew update
+brew upgrade --cask obails
+```
+
+This Cask installs `obails.app` in `/Applications`. Notes and settings remain in
+place when updating or uninstalling. The bundled speech helper requires macOS 26.
+The app is ad-hoc signed, not Apple-notarized; macOS may require approval in
+System Settings → Privacy & Security on first launch.
+
+If you already installed Obails manually, quit it and move only
+`/Applications/obails.app` to the Trash before running the install command.
+Do not remove your vault or `~/.config/obails`.
+
+### Option 2: Download Pre-built Binary (macOS)
 
 1. Download the latest release from [GitHub Releases](https://github.com/kazuph/obails/releases)
-2. Unzip `obails-macos.zip`
+2. Unzip the macOS archive from the release
 3. Move `obails.app` to `/Applications`
 4. **First launch**: Right-click → "Open" (required for unsigned apps)
 
 > **Note**: This app is not signed with an Apple Developer certificate. macOS will show a security warning on first launch.
 
-### Option 2: Build from Source
+### Option 3: Build from Source
 
 **Requirements:**
 - Go 1.21+
@@ -197,7 +219,7 @@ The capture script used by the frontend contract tests is tracked at
 
 ## Changelog
 
-See [CHANGELOG.md](CHANGELOG.md) for the latest `v1.1.1` UI polish fixes and earlier release notes.
+See [CHANGELOG.md](CHANGELOG.md) for the latest `v1.1.2` Homebrew distribution and note-selection fixes and earlier release notes.
 
 ## Roadmap
 
