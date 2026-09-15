@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.1.2-blue" alt="Version">
+  <img src="https://img.shields.io/badge/version-1.1.3-blue" alt="Version">
   <img src="https://img.shields.io/badge/platform-macOS-blue" alt="Platform">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
   <img src="https://img.shields.io/badge/wails-v3.0.0--alpha.60-orange" alt="Wails">
@@ -105,8 +105,7 @@ brew upgrade --cask obails
 
 This Cask installs `obails.app` in `/Applications`. Notes and settings remain in
 place when updating or uninstalling. The bundled speech helper requires macOS 26.
-The app is ad-hoc signed, not Apple-notarized; macOS may require approval in
-System Settings → Privacy & Security on first launch.
+Release 1.1.3 and later are signed with Developer ID and notarized by Apple.
 
 If you already installed Obails manually, quit it and move only
 `/Applications/obails.app` to the Trash before running the install command.
@@ -117,9 +116,7 @@ Do not remove your vault or `~/.config/obails`.
 1. Download the latest release from [GitHub Releases](https://github.com/kazuph/obails/releases)
 2. Unzip the macOS archive from the release
 3. Move `obails.app` to `/Applications`
-4. **First launch**: Right-click → "Open" (required for unsigned apps)
-
-> **Note**: This app is not signed with an Apple Developer certificate. macOS will show a security warning on first launch.
+4. Open `obails.app` normally. macOS may ask you to confirm opening a downloaded app.
 
 ### Option 3: Build from Source
 
@@ -219,7 +216,7 @@ The capture script used by the frontend contract tests is tracked at
 
 ## Changelog
 
-See [CHANGELOG.md](CHANGELOG.md) for the latest `v1.1.2` Homebrew distribution and note-selection fixes and earlier release notes.
+See [CHANGELOG.md](CHANGELOG.md) for the latest `v1.1.3` signed and notarized Homebrew distribution and earlier release notes.
 
 ## Roadmap
 
@@ -246,3 +243,20 @@ MIT License - see [LICENSE](LICENSE) for details.
 <p align="center">
   Made with love by <a href="https://github.com/kazuph">@kazuph</a>
 </p>
+
+## Signed macOS releases
+
+The `Release macOS` GitHub Actions workflow builds, tests, signs, notarizes, and
+staples the Apple Silicon app before publishing a versioned ZIP. The workflow
+uses the following **kazuph/obails repository secrets**:
+
+- `OBAILS_SIGNING_CERTIFICATE_BASE64`: Developer ID Application identity exported as PKCS#12, then base64 encoded
+- `OBAILS_SIGNING_CERTIFICATE_PASSWORD`: password protecting that export
+- `OBAILS_NOTARY_KEY_BASE64`: base64 encoded App Store Connect team API private key
+- `OBAILS_NOTARY_KEY_ID` and `OBAILS_NOTARY_ISSUER_ID`: identifiers for that key
+
+CI imports the signing identity into a temporary keychain and removes the
+keychain and decoded credentials after the job. Secrets are never embedded in
+the app or uploaded as release assets. Sagasu's repository and secrets are not
+used. Release tags must match the version in `package.json`; update the Homebrew
+Cask version and SHA256 only after the notarized ZIP has been published.

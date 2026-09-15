@@ -1,0 +1,75 @@
+name: Release macOS
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: macos-26
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '10.18.3'
+      - name: Validate release version and architecture
+        env:
+          RELEASE_REF: ${{ github.ref }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          test "$(uname -m)" = arm64
+          if [[ "$RELEASE_REF" == refs/tags/* ]]; then
+            test "$RELEASE_TAG" = "v$(node -p "require('./package.json').version")"
+          fi
+      - name: Install locked dependencies and matching Wails CLI
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --dir frontend install --frozen-lockfile
+          go install "github.com/wailsapp/wails/v3/cmd/wails3@$(go list -m -f '{{.Version}}' github.com/wailsapp/wails/v3)"
+      - name: Build a fresh production bundle
+        run: |
+          rm -rf frontend/dist
+          pnpm --dir frontend run build
+          wails3 task darwin:package
+      - name: Test backend, CLI, frontend, and real browser
+        env:
+          PLAYWRIGHT_HTML_OPEN: never
+        run: |
+          go test ./... -v
+          go test -tags cli ./cmd/cli/... -v
+          pnpm --dir frontend test
+          pnpm test
+      - name: Sign, notarize, staple, and validate
+        env:
+          OBAILS_SIGNING_CERTIFICATE_BASE64: ${{ secrets.OBAILS_SIGNING_CERTIFICATE_BASE64 }}
+          OBAILS_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.OBAILS_SIGNING_CERTIFICATE_PASSWORD }}
+          OBAILS_NOTARY_KEY_BASE64: ${{ secrets.OBAILS_NOTARY_KEY_BASE64 }}
+          OBAILS_NOTARY_KEY_ID: ${{ secrets.OBAILS_NOTARY_KEY_ID }}
+          OBAILS_NOTARY_ISSUER_ID: ${{ secrets.OBAILS_NOTARY_ISSUER_ID }}
+        run: bash scripts/release-macos-ci.sh
+      - name: Upload verified distribution
+        uses: actions/upload-artifact@v4
+        with:
+          name: obails-notarized-macos-arm64
+          path: |
+            bin/obails-*-macos-arm64.zip
+            bin/obails-*-macos-arm64.zip.sha256
+          if-no-files-found: error
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: gh release create "$RELEASE_TAG" bin/obails-*-macos-arm64.zip bin/obails-*-macos-arm64.zip.sha256 --verify-tag --generate-notes

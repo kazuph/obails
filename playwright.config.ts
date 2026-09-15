@@ -15,6 +15,8 @@ export default defineConfig({
   use: {
     baseURL: 'http://127.0.0.1:9245',
     trace: 'on-first-retry',
+    // GitHub's macOS image already includes Chrome; do not download a browser.
+    channel: process.env.CI ? 'chrome' : undefined,
     screenshot: 'only-on-failure',
   },
   projects: [
