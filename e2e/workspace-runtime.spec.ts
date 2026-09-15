@@ -241,7 +241,13 @@ test.describe.serial("workspace startup popout recovery", () => {
       await expect(child.locator("#rejoin-popout-btn")).toContainText("Rejoin");
     } finally {
       if (!child.isClosed()) {
+        const rejoined = child.waitForResponse(response => {
+          const request = response.request();
+          return request.method() === "POST" && request.url().endsWith("/wails/runtime")
+            && request.postDataJSON()?.args?.methodID === 1428287752;
+        });
         await child.locator("#rejoin-popout-btn").click();
+        expect((await rejoined).ok()).toBe(true);
         await child.close();
       }
     }
