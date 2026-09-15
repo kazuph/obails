@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 test.describe("Delete destination settings", () => {
   test("defines every deletion destination and marks permanent deletion as irreversible", async ({ page }) => {
     await page.goto("/");
-    await page.locator("html[data-app-ready='true']").waitFor();
+    await page.waitForLoadState("networkidle");
 
     const contract = await page.locator("#settings-overlay").evaluate((dialog) => ({
       role: dialog.getAttribute("role"),

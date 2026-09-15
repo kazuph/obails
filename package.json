@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "build:frontend": "pnpm --dir frontend run build",
-    "test": "playwright test",
+    "test": "playwright test && playwright test --config playwright.real.config.ts",
     "test:native": "playwright test --config playwright.native.config.ts",
     "test:ui": "playwright test --ui",
     "test:headed": "playwright test --headed",

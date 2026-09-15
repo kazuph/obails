@@ -1,13 +1,9 @@
 import { defineConfig, devices } from '@playwright/test';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   testDir: './e2e',
-  testIgnore: ['**/native-wails.spec.ts'],
-  // The real Wails backend and fixture vault are shared, so mutations must be serialized.
+  testIgnore: ['**/native-wails.spec.ts', '**/note-selection.spec.ts'],
+  // Keep fixture mutations serialized across the existing browser suite.
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
@@ -28,7 +24,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: `node ${path.join(__dirname, 'e2e/start-server.mjs')} 9245`,
+    command: 'pnpm --dir frontend run dev --host 127.0.0.1',
     url: 'http://127.0.0.1:9245',
     reuseExistingServer: false,
     timeout: 180 * 1000,
