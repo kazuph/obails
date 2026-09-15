@@ -751,7 +751,7 @@ func (s *FileService) SearchFileContents(query string, limit int, caseSensitive 
 			}
 			return nil
 		}
-		if strings.HasPrefix(info.Name(), ".") {
+		if info.Mode()&os.ModeSymlink != 0 || strings.HasPrefix(info.Name(), ".") {
 			return nil
 		}
 		if !strings.HasSuffix(info.Name(), ".md") {
@@ -1216,6 +1216,9 @@ func (s *FileService) ImportExternalFolder(sourceAbsolutePath string, targetFold
 	err = filepath.WalkDir(sourceAbsolutePath, func(sourcePath string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
+		}
+		if entry.Type()&os.ModeSymlink != 0 {
+			return fmt.Errorf("folder import does not follow symbolic links: %w", ErrInvalidPath)
 		}
 		if sourcePath == sourceAbsolutePath {
 			return nil

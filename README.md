@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.1.3-blue" alt="Version">
+  <img src="https://img.shields.io/badge/version-1.1.4-blue" alt="Version">
   <img src="https://img.shields.io/badge/platform-macOS-blue" alt="Platform">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
   <img src="https://img.shields.io/badge/wails-v3.0.0--alpha.60-orange" alt="Wails">
@@ -105,7 +105,7 @@ brew upgrade --cask obails
 
 This Cask installs `obails.app` in `/Applications`. Notes and settings remain in
 place when updating or uninstalling. The bundled speech helper requires macOS 26.
-Release 1.1.3 and later are signed with Developer ID and notarized by Apple.
+Release 1.1.4 and later are signed with Developer ID and notarized by Apple.
 
 If you already installed Obails manually, quit it and move only
 `/Applications/obails.app` to the Trash before running the install command.
@@ -216,7 +216,7 @@ The capture script used by the frontend contract tests is tracked at
 
 ## Changelog
 
-See [CHANGELOG.md](CHANGELOG.md) for the latest `v1.1.3` signed and notarized Homebrew distribution and earlier release notes.
+See [CHANGELOG.md](CHANGELOG.md) for the latest `v1.1.4` signed and notarized Homebrew distribution and earlier release notes.
 
 ## Roadmap
 
@@ -246,8 +246,11 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ## Signed macOS releases
 
-The `Release macOS` GitHub Actions workflow builds, tests, signs, notarizes, and
-staples the Apple Silicon app before publishing a versioned ZIP. The workflow
+Merging into `main` starts the `Release macOS` GitHub Actions workflow. When
+the version in `package.json` has not been published, it builds, tests, signs,
+notarizes, and staples the Apple Silicon app before publishing a versioned ZIP
+and a tag pointing to that exact merge commit. An already published version
+is left unchanged; bump the version in a release PR to publish another version. The workflow
 uses the following **kazuph/obails repository secrets**:
 
 - `OBAILS_SIGNING_CERTIFICATE_BASE64`: Developer ID Application identity exported as PKCS#12, then base64 encoded
@@ -258,5 +261,6 @@ uses the following **kazuph/obails repository secrets**:
 CI imports the signing identity into a temporary keychain and removes the
 keychain and decoded credentials after the job. Secrets are never embedded in
 the app or uploaded as release assets. Sagasu's repository and secrets are not
-used. Release tags must match the version in `package.json`; update the Homebrew
-Cask version and SHA256 only after the notarized ZIP has been published.
+used. The workflow creates the release tag only after all checks succeed;
+update the Homebrew Cask version and SHA256 only after the notarized ZIP has
+been published.

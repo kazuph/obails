@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.1.3 - 2026-09-15
+## 1.1.4 - 2026-09-15
 
 - macOS 配布を Developer ID 署名・Apple 公証付きに変更し、Homebrew 導入後に Gatekeeper に拒否される問題を解消。
 - Obails 自身の GitHub Secrets を使用するリリース CI を追加。署名・公証・検証が成功した ZIP だけを公開。

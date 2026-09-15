@@ -258,7 +258,9 @@ describe("Obsidian callouts", () => {
 
   it("renders [!x]+ as an expanded details element", () => {
     const result = parseMarkdown("> [!warning]+ 開いてる\n> 中身");
-    expect(result).toContain('data-callout="warning" open>');
+    const container = document.createElement("div");
+    container.innerHTML = result;
+    expect(container.querySelector('details[data-callout="warning"]')?.hasAttribute("open")).toBe(true);
   });
 
   it("uses capitalized type as fallback title", () => {
@@ -362,5 +364,17 @@ describe("unicode math symbols (KaTeX)", () => {
     expect(result).toContain("math-inline");
     expect(result).toContain("katex");
     expect(result).not.toContain("math-error");
+  });
+});
+
+
+describe("Markdown preview security", () => {
+  it("removes executable HTML while preserving note formatting", () => {
+    const html = parseMarkdown('<img src="missing" onerror="window.compromised=true"><a href="javascript:alert(1)">unsafe</a><iframe src="https://example.com"></iframe><style>body{display:none}</style>\n\n**Safe text**');
+    const container = document.createElement("div");
+    container.innerHTML = html;
+    expect(container.querySelector("[onerror],script,iframe,style,object,embed")).toBeNull();
+    expect(container.querySelector('a[href^="javascript:"]')).toBeNull();
+    expect(container.querySelector("strong")?.textContent).toBe("Safe text");
   });
 });

@@ -103,3 +103,10 @@ export function resolveGraphEdgeNavigation(
   const adjacent = key === "ArrowLeft" ? direction.incoming[0] : direction.outgoing[0];
   return adjacent?.id ?? null;
 }
+
+
+export function createGraphTooltip(label: string): HTMLElement {
+  const element = document.createElement("span");
+  element.textContent = label;
+  return element;
+}

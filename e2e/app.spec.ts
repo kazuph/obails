@@ -680,7 +680,7 @@ test.describe('Obails App', () => {
   test('should expand parent folder when opening a nested note from outside the tree', async ({ page }) => {
     await setupMockBindings(page);
     await page.goto('/');
-    await page.waitForLoadState('domcontentloaded');
+    await page.locator("html[data-app-ready='true']").waitFor();
 
     const folder = page.locator('.file-item.folder[data-path="dailynotes"]');
     await expect(folder).toBeVisible();

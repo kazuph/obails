@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile, rm } from "node:fs/promises";
 
 test("select all stays inside the active note and preserves input selection", async ({ page }, testInfo) => {
   await page.goto("/");
@@ -85,4 +85,23 @@ test("real backend rejects requests from a different origin or host", async ({ r
   const missingOriginPost = await request.post("/wails/runtime", { data: { object: 0, method: 0, args: JSON.parse(args) } });
   expect(missingOriginPost.status()).toBe(403);
   expect(await readFile(fixture, "utf8")).toBe(before);
+});
+
+
+test("untrusted Markdown cannot execute in the app preview", async ({ page }) => {
+  const fixture = new URL("./fixtures/test-vault/Security Regression.md", import.meta.url);
+  await writeFile(fixture, '<img src="missing-image" onerror="document.documentElement.dataset.compromised=\'yes\'">\n\n<a href="javascript:alert(1)">unsafe link</a>\n\n<iframe src="about:blank"></iframe>\n\n**Safe formatting**', "utf8");
+  try {
+    await page.goto("/");
+    await page.locator("html[data-app-ready='true']").waitFor();
+    await page.locator('.file-item[data-path="Security Regression.md"]').click();
+    const preview = page.locator('.workspace-pane-slot[data-active="true"] .preview-content');
+    await expect(preview).toContainText("Safe formatting");
+    await expect(preview.locator("strong")).toHaveText("Safe formatting");
+    await expect(preview.locator("[onerror],script,iframe,object,embed")).toHaveCount(0);
+    await expect(preview.locator('a[href^="javascript:"]')).toHaveCount(0);
+    await expect(page.locator("html")).not.toHaveAttribute("data-compromised", "yes");
+  } finally {
+    await rm(fixture, { force: true });
+  }
 });

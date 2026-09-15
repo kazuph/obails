@@ -1,3 +1,4 @@
+import DOMPurify from "dompurify";
 import { toHtml } from "@mizchi/markdown";
 import katex from "katex";
 import { renderIcon } from "./icons";
@@ -497,7 +498,9 @@ export function parseMarkdown(content: string): string {
 
   // 数式・wiki・callout の HTML を復元
   // （旧 convertWikiLinks の後段適用はコードブロック内まで変換してしまうため廃止）
-  return `${restoreTokens(html, store)}${renderFootnotes(footnotes)}`;
+  return DOMPurify.sanitize(`${restoreTokens(html, store)}${renderFootnotes(footnotes)}`, {
+    FORBID_TAGS: ["script", "style", "iframe", "object", "embed"],
+  });
 }
 
 function restoreTokensOfKind(src: string, store: TokenStore, kind: string): string {
