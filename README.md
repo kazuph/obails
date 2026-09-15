@@ -96,7 +96,7 @@
 brew install --cask kazuph/tap/obails
 ```
 
-Update an installed copy:
+Quit Obails before updating an installed copy:
 
 ```bash
 brew update
@@ -112,7 +112,7 @@ If you already installed Obails manually, quit it and move only
 `/Applications/obails.app` to the Trash before running the install command.
 Do not remove your vault or `~/.config/obails`.
 
-### Option 2: Download Pre-built Binary (macOS)
+### Option 2: Download Pre-built Binary (Apple Silicon, macOS 26 or later)
 
 1. Download the latest release from [GitHub Releases](https://github.com/kazuph/obails/releases)
 2. Unzip the macOS archive from the release
