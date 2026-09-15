@@ -66,6 +66,7 @@ jobs:
       - name: Build a fresh production bundle
         run: |
           rm -rf frontend/dist
+          wails3 generate bindings -f '-tags production' -clean=true
           pnpm --dir frontend run build
           wails3 task darwin:package
       - name: Test backend, CLI, frontend, and real browser
