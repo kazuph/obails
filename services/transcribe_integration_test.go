@@ -14,17 +14,17 @@ import (
 // runs the actual obails-transcribe Swift helper through TranscribeService, and
 // verifies a sibling .md note is created containing the transcription.
 //
-// Skipped automatically when not on macOS, when the helper has not been built,
-// or when the Japanese TTS voice (Kyoko) is unavailable.
+// Required by the pre-push hook on a supported Mac. Hosted CI excludes only this
+// test because SpeechTranscriber reports unavailable on its virtual machine.
 func TestTranscribeService_Transcribe_RealPipeline(t *testing.T) {
 	if runtime.GOOS != "darwin" {
-		t.Skip("requires macOS (Apple Speech)")
+		t.Fatal("requires macOS (Apple Speech)")
 	}
 	if _, err := transcriberHelperPath(); err != nil {
-		t.Skip("obails-transcribe helper not built; run: wails3 task darwin:build:transcriber")
+		t.Fatal("obails-transcribe helper not built; run: wails3 task darwin:build:transcriber")
 	}
 	if !japaneseSayVoiceAvailable() {
-		t.Skip("Japanese TTS voice (Kyoko) not available")
+		t.Fatal("Japanese TTS voice (Kyoko) not available")
 	}
 
 	ts, tmpDir := newTestTranscribeService(t)
@@ -38,7 +38,7 @@ func TestTranscribeService_Transcribe_RealPipeline(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := exec.Command("say", "-v", "Kyoko", "-o", audioFull, phrase).Run(); err != nil {
-		t.Skipf("failed to synthesize speech with say: %v", err)
+		t.Fatalf("failed to synthesize speech with say: %v", err)
 	}
 
 	mdRel, err := ts.Transcribe(audioRel)

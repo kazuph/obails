@@ -4,6 +4,7 @@
   "version": "1.1.4",
   "type": "module",
   "scripts": {
+    "prepare": "git config --local core.hooksPath .githooks",
     "build:frontend": "pnpm --dir frontend run build",
     "test": "node e2e/run-tests.mjs",
     "test:real": "playwright test --config playwright.real.config.ts",
