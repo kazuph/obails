@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
-const CAPTURE = path.join(REPO, ".artifacts/obails-major-features-review/scripts/capture-major-features-v2.ts");
+const CAPTURE = path.join(REPO, "e2e/capture-major-features.ts");
 const AX_SWIFT = path.join(REPO, "e2e/helpers/wails-ax.swift");
 
 describe("major-feature capture path contracts (offline)", () => {

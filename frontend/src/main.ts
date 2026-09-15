@@ -17,6 +17,7 @@ import { codeBlockLanguage, copyCodeImage, copyPngToClipboard, imageElementToPng
 import "katex/dist/katex.min.css";
 import ForceGraph from "force-graph";
 import { clampEditorViewState } from "./lib/editor-view-state";
+import { selectNoteText } from "./lib/note-selection";
 import {
   DEFAULT_DELETE_MODE,
   describeDeleteMode,
@@ -2332,6 +2333,10 @@ function setupEventListeners() {
             e.preventDefault();
             toggleShortcutsHelp();
             return;
+        }
+        if (isModKey(e) && primaryDocumentRuntime.activeEditableDocument?.kind === "markdown") {
+            const notePreview = activeRichSurface()?.preview || preview;
+            if (selectNoteText(e, notePreview)) return;
         }
         const command = !(suppressPrintableHotkeyInEditableTarget(e, e.target) || (e.key === "Escape" && fileTreeFocused))
             ? resolveHotkeyCommand(commandSnapshot, e, isMac, isNoteSearchContext(e.target))
@@ -4891,6 +4896,15 @@ function setupThemeMenu() {
     });
     window.addEventListener("obails:new-note", () => {
         showNewNoteForm();
+    });
+    window.addEventListener("obails:select-all", () => {
+        if (document.activeElement instanceof HTMLIFrameElement && document.activeElement.contentDocument) {
+            document.activeElement.contentDocument.execCommand("selectAll");
+            return;
+        }
+        const event = new KeyboardEvent("keydown", { key: "a", metaKey: isMac, ctrlKey: !isMac, bubbles: true, cancelable: true });
+        (document.activeElement || document.body).dispatchEvent(event);
+        if (!event.defaultPrevented) document.execCommand("selectAll");
     });
     const runWorkspaceMenuCommand = (action: NamedWorkspaceAction) => {
         void runNamedWorkspaceAction(action);

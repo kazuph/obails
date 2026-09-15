@@ -173,6 +173,20 @@ pnpm test
 wails3 task darwin:package
 ```
 
+`pnpm test` runs the existing browser suite against Vite, then runs the
+note-selection and HTTP boundary tests against the real Wails backend.
+Use `pnpm test --grep "Graph View"` to filter the existing browser suite, or
+`pnpm test:real` to run the real-backend suite alone. Its evidence is saved under
+`test-results/real-backend` and `playwright-report/real-backend`, preserving the
+browser suite's results.
+The second suite builds and starts Wails with the `e2e` build tag and
+`e2e/fixtures/config.e2e.toml`. Its HTTP endpoint listens only on `127.0.0.1:9245`
+and is excluded from development and production builds. Stop other servers on
+that port before running the suite. The note-selection test uses real file and
+binding requests; older tests still have their existing browser test helpers.
+The capture script used by the frontend contract tests is tracked at
+`e2e/capture-major-features.ts`.
+
 ## Tech Stack
 
 - **Backend**: Go + [Wails v3](https://v3.wails.io/)
