@@ -338,7 +338,13 @@ test.describe.serial("workspace last visible pane clones active note", () => {
       await expect(child.locator(`.rich-surface[data-pane-id="${poppedPaneId}"]`)).toBeVisible();
       await expect(child.locator(`.rich-surface[data-pane-id="${poppedPaneId}"] textarea`).first()).toHaveValue(/still in popout/);
 
+      const rejoined = child.waitForResponse(response => {
+        const request = response.request();
+        return request.method() === "POST" && request.url().endsWith("/wails/runtime")
+          && request.postDataJSON()?.args?.methodID === 1428287752;
+      });
       await child.locator("#rejoin-popout-btn").click();
+      expect((await rejoined).ok()).toBe(true);
       await child.close();
     } finally {
       if (!child.isClosed()) await child.close();

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.2 - 2026-09-15
+
+- Add Homebrew Cask distribution through `kazuph/tap/obails` for Apple Silicon and macOS 26 or later.
+- Include the note-only select-all fix, including restored split panes and immediate selection after switching panes.
+- Document installation, updates, and migration from a manually installed app.
+
 ## 1.1.1 - 2026-08-23
 
 Obails v1.1の実vaultレビューで見つかった、分割ペイン、タブ配置、サイドバー境界、Explorer表示の回帰を修正したパッチです。Claude Code plugin `ob` の版は `0.1.2` のままです。
