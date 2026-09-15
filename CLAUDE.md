@@ -5,6 +5,12 @@
 ### Testing Requirements
 このリポジトリでは、以下のテストポリシーを**厳守**する。実装だけでは完了ではない。
 
+2026-09-15ユーザー承認: `TestTranscribeService_Transcribe_RealPipeline` は
+Apple Speech非対応のGitHub-hosted CIでは実行対象外とし、対応Macでの
+プッシュ前必須検査とする。ルートで `pnpm install` を実行して追跡済み
+pre-pushフックを有効化する。プッシュ対象コミットの実音声テストが成功しない
+限りプッシュしない。他のCIテスト・署名・公証・自動公開条件は維持する。
+
 | レイヤー | テスト種別 | 場所 | 実行コマンド |
 |---------|----------|------|------------|
 | バックエンド (Go) | 結合テスト | `services/*_test.go` | `go test ./... -v` |
