@@ -4,8 +4,8 @@ set -e
 # Build configuration
 APP_NAME="obails"
 BUNDLE_ID="com.example.obails"
-VERSION="1.1.3"
-BUILD_NUMBER="1.1.3"
+VERSION="1.1.4"
+BUILD_NUMBER="1.1.4"
 BUILD_DIR="build/ios"
 TARGET="simulator"
 
