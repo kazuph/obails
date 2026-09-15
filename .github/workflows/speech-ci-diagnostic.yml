@@ -19,7 +19,8 @@ jobs:
           import os
           from pathlib import Path
           source = Path('build/darwin/transcribe/main.swift').read_text()
-          source = source.replace('try await AssetInventory.reserve(locale: locale)', r'''stderr("reserved before: \(await AssetInventory.reservedLocales)")
+          source = source.replace('try await AssetInventory.reserve(locale: locale)', r'''stderr("hardware available: \(SpeechTranscriber.isAvailable)")
+              stderr("reserved before: \(await AssetInventory.reservedLocales)")
               let newlyReserved = try await AssetInventory.reserve(locale: locale)
               stderr("new reservation: \(newlyReserved)")
               stderr("reserved after: \(await AssetInventory.reservedLocales)")
