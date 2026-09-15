@@ -58,6 +58,7 @@ test("select all stays inside the active note and preserves input selection", as
     }
   });
   await expect(page.locator(".workspace-pane-slot").last()).toHaveAttribute("data-active", "true");
+  await pane.hover();
   await pane.getByRole("button", { name: "Toggle Source" }).click();
   const editor = pane.locator("textarea[aria-label^='Editor in pane']");
   await editor.focus();
