@@ -15,6 +15,11 @@ import {
 } from "../../lib/workspace-pane-identity";
 
 describe("workspace pane identity", () => {
+  it("binds the startup surface to the restored active pane so inactive restoration cannot replace it", () => {
+    const legacy = bindLegacyPaneId({ assigned: false, currentLegacyPaneId: "main", paneIds: ["main", "right"], snapshotActivePaneId: "right" });
+    expect(legacy).toBe("right");
+    expect(factorySurfacePaneIds(["main", "right"], legacy)).toEqual(["main"]);
+  });
   it("binds the legacy surface once and never steals it when the active pane changes", () => {
     expect(bindLegacyPaneId({
       assigned: false,

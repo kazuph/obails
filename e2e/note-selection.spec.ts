@@ -18,6 +18,22 @@ test("select all stays inside the active note and preserves input selection", as
       && range.endContainer === element && range.endOffset === element.childNodes.length;
   })).toBe(true);
   await page.screenshot({ path: testInfo.outputPath("note-selection.png") });
+  await pane.getByRole("button", { name: "Split pane right" }).click();
+  await expect(page.locator(".workspace-pane-slot")).toHaveCount(2);
+  await page.reload();
+  await page.locator("html[data-app-ready='true']").waitFor();
+  await expect(page.locator("#timeline-submit")).toHaveCount(1);
+  const left = page.locator(".workspace-pane-slot").first();
+  await left.locator(".preview-content").click();
+  await page.keyboard.press(selectAll);
+  await expect(left).toHaveAttribute("data-active", "true");
+  await expect.poll(() => left.locator(".preview-content").evaluate((element) => {
+    const selection = window.getSelection();
+    if (selection?.rangeCount !== 1) return false;
+    const range = selection.getRangeAt(0);
+    return range.startContainer === element && range.startOffset === 0
+      && range.endContainer === element && range.endOffset === element.childNodes.length;
+  })).toBe(true);
   await pane.getByRole("button", { name: "Toggle Source" }).click();
   const editor = pane.locator("textarea[aria-label^='Editor in pane']");
   await editor.focus();

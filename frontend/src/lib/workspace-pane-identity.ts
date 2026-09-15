@@ -33,8 +33,8 @@ export function bindLegacyPaneId(options: {
   snapshotActivePaneId: string;
 }): string {
   if (options.assigned) return options.currentLegacyPaneId;
-  if (options.paneIds.includes(options.currentLegacyPaneId)) return options.currentLegacyPaneId;
   if (options.paneIds.includes(options.snapshotActivePaneId)) return options.snapshotActivePaneId;
+  if (options.paneIds.includes(options.currentLegacyPaneId)) return options.currentLegacyPaneId;
   return options.paneIds[0] || options.currentLegacyPaneId;
 }
 

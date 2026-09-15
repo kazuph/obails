@@ -17,7 +17,7 @@ import { codeBlockLanguage, copyCodeImage, copyPngToClipboard, imageElementToPng
 import "katex/dist/katex.min.css";
 import ForceGraph from "force-graph";
 import { clampEditorViewState } from "./lib/editor-view-state";
-import { selectNoteText } from "./lib/note-selection";
+import { selectNoteContents, selectNoteText } from "./lib/note-selection";
 import {
   DEFAULT_DELETE_MODE,
   describeDeleteMode,
@@ -219,6 +219,7 @@ function isModKey(e: KeyboardEvent): boolean {
 // State
 let currentNote: Note | null = null;
 let activePaneId = "main";
+const pendingPaneActivations = new Map<string, Promise<void>>();
 const documentRuntimeFactory = new DocumentRuntimeFactory(saveCapturedIntent);
 let primaryDocumentRuntime = documentRuntimeFactory.forPane(activePaneId);
 let documentHistory: DocumentHistory = primaryDocumentRuntime.history;
@@ -1120,9 +1121,18 @@ async function activateWorkspacePaneFromUi(paneId: string) {
     if (popoutRoute && paneId !== popoutRoute.paneId) return;
     document.documentElement.dataset.activePaneId = paneId;
     if (paneId === activePaneId) return;
-    const snapshot = await workspaceController.activatePane(paneId);
-    if (!snapshot) return;
-    await openActiveWorkspaceTab(snapshot);
+    const pending = pendingPaneActivations.get(paneId);
+    if (pending) return pending;
+    const activation = (async () => {
+        const snapshot = await workspaceController.activatePane(paneId);
+        if (snapshot) await openActiveWorkspaceTab(snapshot);
+    })();
+    pendingPaneActivations.set(paneId, activation);
+    try {
+        await activation;
+    } finally {
+        pendingPaneActivations.delete(paneId);
+    }
 }
 
 async function activateWorkspaceTabFromUi(paneId: string, path: string) {
@@ -2334,9 +2344,16 @@ function setupEventListeners() {
             toggleShortcutsHelp();
             return;
         }
-        if (isModKey(e) && primaryDocumentRuntime.activeEditableDocument?.kind === "markdown") {
-            const notePreview = activeRichSurface()?.preview || preview;
-            if (selectNoteText(e, notePreview)) return;
+        const requestedPaneId = document.documentElement.dataset.activePaneId || activePaneId;
+        if (isModKey(e) && documentRuntimeFactory.forPane(requestedPaneId).activeEditableDocument?.kind === "markdown") {
+            const notePreview = richSurfaceForPane(requestedPaneId)?.preview || preview;
+            if (selectNoteText(e, notePreview)) {
+                const activation = pendingPaneActivations.get(requestedPaneId);
+                if (activation) void activation.then(() => {
+                    if (activePaneId === requestedPaneId) selectNoteContents(activeRichSurface()?.preview || preview);
+                }).catch(console.error);
+                return;
+            }
         }
         const command = !(suppressPrintableHotkeyInEditableTarget(e, e.target) || (e.key === "Escape" && fileTreeFocused))
             ? resolveHotkeyCommand(commandSnapshot, e, isMac, isNoteSearchContext(e.target))
