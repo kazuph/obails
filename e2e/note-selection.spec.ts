@@ -96,6 +96,7 @@ test("untrusted Markdown cannot execute in the app preview", async ({ page }) =>
     await page.locator("html[data-app-ready='true']").waitFor();
     await page.locator('.file-item[data-path="Security Regression.md"]').click();
     const preview = page.locator('.workspace-pane-slot[data-active="true"] .preview-content');
+    await expect(preview).toContainText("Safe formatting");
     await expect(preview.locator("strong")).toHaveText("Safe formatting");
     await expect(preview.locator("[onerror],script,iframe,object,embed")).toHaveCount(0);
     await expect(preview.locator('a[href^="javascript:"]')).toHaveCount(0);
