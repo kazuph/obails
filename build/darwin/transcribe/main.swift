@@ -39,6 +39,7 @@ func transcribe(audioPath: String, localeId: String) async throws -> String {
     }
 
     let transcriber = SpeechTranscriber(locale: locale, preset: .transcription)
+    try await AssetInventory.reserve(locale: locale)
 
     // 言語モデルが未インストールなら自動ダウンロード（初回のみ・要ネットワーク）。
     let installed = await Set(SpeechTranscriber.installedLocales.map { $0.identifier(.bcp47) })
