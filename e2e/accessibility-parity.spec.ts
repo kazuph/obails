@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 test.describe("P-082 to P-091 accessibility parity", () => {
   test("exposes live recovery status, a labeled empty-vault action, and keyboard semantics", async ({ page }) => {
     await page.goto("/");
-    await page.waitForLoadState("networkidle");
+    await page.locator("html[data-app-ready='true']").waitFor();
 
     await expect(page.locator("#file-tree-status")).toHaveAttribute("role", "status");
     await expect(page.getByRole("button", { name: "Retry loading files" })).toBeHidden();
@@ -20,7 +20,7 @@ test.describe("P-082 to P-091 accessibility parity", () => {
 
   test("names Mermaid controls and keeps context-menu items keyboard reachable", async ({ page }) => {
     await page.goto("/");
-    await page.waitForLoadState("networkidle");
+    await page.locator("html[data-app-ready='true']").waitFor();
 
     await expect(page.getByRole("button", { name: "Zoom out Mermaid diagram", includeHidden: true })).toHaveCount(1);
     await expect(page.getByRole("button", { name: "Close Mermaid diagram", includeHidden: true })).toHaveCount(1);

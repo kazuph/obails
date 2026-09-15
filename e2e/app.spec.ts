@@ -185,7 +185,7 @@ function createLargeGraphFixture(nodeCount: number) {
 test.describe('Obails App', () => {
   test('should close the context menu when clicking elsewhere', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.locator("html[data-app-ready='true']").waitFor();
 
     const fileTree = page.locator('.file-tree');
     await expect(fileTree).toBeVisible();
@@ -200,7 +200,7 @@ test.describe('Obails App', () => {
 
   test('should close the context menu when pressing Escape', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.locator("html[data-app-ready='true']").waitFor();
 
     const fileTree = page.locator('.file-tree');
     await expect(fileTree).toBeVisible();
@@ -217,7 +217,7 @@ test.describe('Obails App', () => {
     test.skip(browserName !== 'chromium', 'Ctrl+click behavior is only verified in Chromium here');
 
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.locator("html[data-app-ready='true']").waitFor();
 
     const fileTree = page.locator('.file-tree');
     await expect(fileTree).toBeVisible();
@@ -258,7 +258,7 @@ test.describe('Obails App', () => {
 
   test('should load the app', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.locator("html[data-app-ready='true']").waitFor();
 
     await expect(page.locator('#settings-btn')).toBeVisible();
     await expect(page.locator('.sidebar-header h2')).toHaveCount(0);
@@ -266,7 +266,7 @@ test.describe('Obails App', () => {
 
   test('should display sidebar with file tree', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.locator("html[data-app-ready='true']").waitFor();
 
     // Sidebar should be visible
     await expect(page.locator('.sidebar')).toBeVisible();
@@ -605,7 +605,7 @@ test.describe('Obails App', () => {
 
   test('should have toolbar buttons', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.locator("html[data-app-ready='true']").waitFor();
 
     await expect(page.locator('#daily-note-btn')).toBeVisible();
     await expect(page.locator('#timeline-btn')).toBeVisible();
@@ -1110,7 +1110,7 @@ test.describe('Obails App', () => {
 
   test('should hide toolbar theme selector and accept menu theme events', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.locator("html[data-app-ready='true']").waitFor();
 
     await expect(page.locator('#theme-select')).toHaveCount(0);
     await selectThemeFromMenu(page, 'rosepine-dawn');
@@ -1119,7 +1119,7 @@ test.describe('Obails App', () => {
 
   test('should switch to light theme', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.locator("html[data-app-ready='true']").waitFor();
 
     await selectThemeFromMenu(page, 'github-light');
 
@@ -1135,7 +1135,7 @@ test.describe('Obails App', () => {
 
   test('should switch to dark theme', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.locator("html[data-app-ready='true']").waitFor();
 
     await selectThemeFromMenu(page, 'dracula');
 
@@ -1151,20 +1151,20 @@ test.describe('Obails App', () => {
 
   test('should preserve the selected theme after reload', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.locator("html[data-app-ready='true']").waitFor();
 
     await selectThemeFromMenu(page, 'dracula');
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dracula');
 
     await page.reload();
-    await page.waitForLoadState('networkidle');
+    await page.locator("html[data-app-ready='true']").waitFor();
 
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dracula');
   });
 
   test('should toggle Timeline panel', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.locator("html[data-app-ready='true']").waitFor();
 
     const timelinePanel = page.locator('#timeline-panel');
 
@@ -1335,7 +1335,7 @@ test.describe('Editor', () => {
 test.describe('Mermaid', () => {
   test('should have mermaid fullscreen overlay (hidden by default)', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.locator("html[data-app-ready='true']").waitFor();
 
     const overlay = page.locator('#mermaid-fullscreen');
     await expect(overlay).toBeHidden();
@@ -1343,7 +1343,7 @@ test.describe('Mermaid', () => {
 
   test('mermaid controls should exist', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.locator("html[data-app-ready='true']").waitFor();
 
     // Controls exist in DOM (even if hidden)
     await expect(page.locator('#mermaid-zoom-in')).toBeAttached();
@@ -1388,7 +1388,7 @@ test.describe('Mermaid', () => {
 test.describe('Graph View', () => {
   test('should have graph button in toolbar', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.locator("html[data-app-ready='true']").waitFor();
 
     const graphBtn = page.locator('#graph-btn');
     await expect(graphBtn).toBeVisible();
@@ -1398,7 +1398,7 @@ test.describe('Graph View', () => {
 
   test('should have graph overlay (hidden by default)', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.locator("html[data-app-ready='true']").waitFor();
 
     const overlay = page.locator('#graph-overlay');
     await expect(overlay).toBeAttached();
@@ -1408,7 +1408,7 @@ test.describe('Graph View', () => {
 
   test('should show graph overlay when clicking Graph button', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.locator("html[data-app-ready='true']").waitFor();
 
     // Click Graph button
     await page.click('#graph-btn');
@@ -1420,7 +1420,7 @@ test.describe('Graph View', () => {
 
   test('should have graph header with title and close button', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.locator("html[data-app-ready='true']").waitFor();
 
     // Open graph view
     await page.click('#graph-btn');
@@ -1437,7 +1437,7 @@ test.describe('Graph View', () => {
 
   test('should close graph overlay when clicking close button', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.locator("html[data-app-ready='true']").waitFor();
 
     // Open graph view
     await page.click('#graph-btn');
@@ -1454,7 +1454,7 @@ test.describe('Graph View', () => {
 
   test('should close graph overlay when pressing ESC', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.locator("html[data-app-ready='true']").waitFor();
 
     // Open graph view
     await page.click('#graph-btn');
@@ -1492,7 +1492,7 @@ test.describe('Graph View', () => {
 
   test('should render graph with content', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.locator("html[data-app-ready='true']").waitFor();
 
     // Open graph view
     await page.click('#graph-btn');
@@ -1851,7 +1851,7 @@ test.describe('Graph View', () => {
 
   test('graph overlay styling responds to theme', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.locator("html[data-app-ready='true']").waitFor();
 
     // Switch to dark theme first
     await selectThemeFromMenu(page, 'dracula');
@@ -2088,7 +2088,7 @@ More text.
 test.describe('Keyboard Navigation', () => {
   test('should focus file tree with Shift+Tab from editor', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.locator("html[data-app-ready='true']").waitFor();
     await showSourceEditor(page);
 
     // First focus the editor
@@ -2107,7 +2107,7 @@ test.describe('Keyboard Navigation', () => {
 
   test('should focus editor with Shift+Tab from file tree', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.locator("html[data-app-ready='true']").waitFor();
     await showSourceEditor(page);
 
     const editor = page.locator('#editor');
@@ -2131,7 +2131,7 @@ test.describe('Keyboard Navigation', () => {
 
   test('should blur file tree with Escape key', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.locator("html[data-app-ready='true']").waitFor();
 
     const editor = page.locator('#editor');
     const fileTree = page.locator('#file-tree');
@@ -2152,7 +2152,7 @@ test.describe('Keyboard Navigation', () => {
 
   test('should not interfere with Shift+Tab when in search input', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.locator("html[data-app-ready='true']").waitFor();
 
     const searchInput = page.locator('#file-search-input');
     const fileTree = page.locator('#file-tree');
@@ -2171,7 +2171,7 @@ test.describe('Keyboard Navigation', () => {
 
   test('keyboard navigation state should be isolated per focus cycle', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.locator("html[data-app-ready='true']").waitFor();
     await showSourceEditor(page);
 
     const editor = page.locator('#editor');
@@ -2196,7 +2196,7 @@ test.describe('Keyboard Navigation', () => {
 
   test('should reset cursor and scroll when editor value changes', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.locator("html[data-app-ready='true']").waitFor();
     await showSourceEditor(page);
 
     const editor = page.locator('#editor');
@@ -2341,7 +2341,7 @@ test.describe('File Search Navigation', () => {
 
   test('should navigate with Ctrl+N/P when search input is focused', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.locator("html[data-app-ready='true']").waitFor();
 
     // Inject test file items into file tree for testing
     await page.evaluate(() => {
@@ -2394,7 +2394,7 @@ test.describe('File Search Navigation', () => {
 
   test('should clear selection with Escape in search input', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.locator("html[data-app-ready='true']").waitFor();
 
     // Inject test file items
     await page.evaluate(() => {
@@ -2427,7 +2427,7 @@ test.describe('File Search Navigation', () => {
 
   test('should wrap around when navigating past the end', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.locator("html[data-app-ready='true']").waitFor();
 
     // Inject test file items
     await page.evaluate(() => {
@@ -2466,7 +2466,7 @@ test.describe('File Search Navigation', () => {
 
   test('should reset selection when search query changes', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.locator("html[data-app-ready='true']").waitFor();
 
     // Inject test file items
     await page.evaluate(() => {
@@ -2500,7 +2500,7 @@ test.describe('File Search Navigation', () => {
 
   test('should clear keyboard-selected when entering search mode', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.locator("html[data-app-ready='true']").waitFor();
 
     // Inject test file items
     await page.evaluate(() => {
@@ -2539,7 +2539,7 @@ test.describe('File Search Navigation', () => {
 
   test('should not have both keyboard-selected and search-selected at the same time', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.locator("html[data-app-ready='true']").waitFor();
 
     // Inject test file items
     await page.evaluate(() => {
@@ -2568,7 +2568,7 @@ test.describe('File Search Navigation', () => {
 
   test('should not activate keyboard mode when pressing j/k in search input', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.locator("html[data-app-ready='true']").waitFor();
 
     // Inject test file items
     await page.evaluate(() => {
@@ -2602,7 +2602,7 @@ test.describe('File Search Navigation', () => {
 
   test('should navigate through folders and files as flat list', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.locator("html[data-app-ready='true']").waitFor();
 
     // Inject test file items with a mix of folders and files
     await page.evaluate(() => {
@@ -2650,7 +2650,7 @@ test.describe('File Search Navigation', () => {
 
   test('should not open folder when pressing Enter on folder', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.locator("html[data-app-ready='true']").waitFor();
 
     // Inject test folder
     await page.evaluate(() => {
@@ -2689,7 +2689,7 @@ test.describe('File Search Navigation', () => {
 test.describe('Title Editing', () => {
   test('should not allow editing when no file is open', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.locator("html[data-app-ready='true']").waitFor();
     await showSourceEditor(page);
 
     const editorTitle = page.locator('#editor-title');
@@ -2718,7 +2718,7 @@ test.describe('Title Editing', () => {
 test.describe('Refresh Button', () => {
   test('should have refresh button visible and clickable', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.locator("html[data-app-ready='true']").waitFor();
 
     // Verify refresh button exists and is visible
     const refreshBtn = page.locator('#refresh-btn');
@@ -2738,7 +2738,7 @@ test.describe('Refresh Button', () => {
 test.describe('Timeline Features', () => {
   test('should have ⌘+Enter shortcut registered for timeline input', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.locator("html[data-app-ready='true']").waitFor();
 
     // Open Timeline panel
     await page.click('#timeline-btn');
@@ -2767,7 +2767,7 @@ test.describe('Timeline Features', () => {
 
   test('should have date separator CSS class defined', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.locator("html[data-app-ready='true']").waitFor();
 
     // Open Timeline panel
     await page.click('#timeline-btn');
@@ -2792,7 +2792,7 @@ test.describe('Timeline Features', () => {
 
   test('should display Post button in Timeline panel', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.locator("html[data-app-ready='true']").waitFor();
 
     // Open Timeline panel
     await page.click('#timeline-btn');
@@ -2808,7 +2808,7 @@ test.describe('Timeline Features', () => {
 test.describe('HTML Preview', () => {
   test('should keep inline-styled code readable in the preview iframe', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.locator("html[data-app-ready='true']").waitFor();
 
     await page.locator('#html-editor-container').evaluate((element) => {
       (element as HTMLElement).style.display = 'flex';
@@ -2893,7 +2893,7 @@ test.describe('HTML Preview', () => {
 test.describe('Design Polish', () => {
   test('should switch to Liquid Glass Dark and let the window backdrop show through', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.locator("html[data-app-ready='true']").waitFor();
 
     await selectThemeFromMenu(page, 'liquid-glass-dark');
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'liquid-glass-dark');
@@ -2935,7 +2935,7 @@ test.describe('Design Polish', () => {
 
   test('should switch to Liquid Glass Light via theme menu', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.locator("html[data-app-ready='true']").waitFor();
 
     await selectThemeFromMenu(page, 'liquid-glass-light');
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'liquid-glass-light');
@@ -2948,7 +2948,7 @@ test.describe('Design Polish', () => {
 
   test('should resolve the liquid-glass alias to the dark glass theme', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.locator("html[data-app-ready='true']").waitFor();
 
     await selectThemeFromMenu(page, 'liquid-glass');
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'liquid-glass');
@@ -2956,20 +2956,20 @@ test.describe('Design Polish', () => {
 
   test('should preserve a glass theme after reload', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.locator("html[data-app-ready='true']").waitFor();
 
     await selectThemeFromMenu(page, 'liquid-glass-dark');
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'liquid-glass-dark');
 
     await page.reload();
-    await page.waitForLoadState('networkidle');
+    await page.locator("html[data-app-ready='true']").waitFor();
 
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'liquid-glass-dark');
   });
 
   test('should render context menu icons as SVG instead of emoji', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.locator("html[data-app-ready='true']").waitFor();
 
     for (const id of ['ctx-new-file', 'ctx-new-folder', 'ctx-rename', 'ctx-delete']) {
       const iconSvgCount = await page.locator(`#${id} .ctx-icon svg`).count();
@@ -2981,7 +2981,7 @@ test.describe('Design Polish', () => {
 
   test('should keep toolbar buttons borderless until hovered', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.locator("html[data-app-ready='true']").waitFor();
 
     const refreshBtn = page.locator('#refresh-btn');
     await expect(refreshBtn).toBeVisible();
@@ -2999,7 +2999,7 @@ test.describe('Design Polish', () => {
 
   test('should expose a save pulse dot that is invisible by default', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.locator("html[data-app-ready='true']").waitFor();
 
     const pulse = page.locator('#save-pulse');
     await expect(pulse).toHaveCount(1);
@@ -3009,7 +3009,7 @@ test.describe('Design Polish', () => {
 
   test('should dim chrome when the window loses focus', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.locator("html[data-app-ready='true']").waitFor();
 
     await page.evaluate(() => window.dispatchEvent(new Event('blur')));
     await expect(page.locator('body')).toHaveClass(/window-inactive/);

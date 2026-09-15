@@ -40,7 +40,7 @@ test.describe('Visual Regression - README Screenshots', () => {
   test.beforeEach(async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.locator("html[data-app-ready='true']").waitFor();
 
     // Wailsバインディングが動作しないブラウザ環境用にモックデータを注入
     await injectMockFileTree(page);
@@ -446,7 +446,7 @@ test.describe('Visual Regression - Feature Tests', () => {
   test.beforeEach(async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.locator("html[data-app-ready='true']").waitFor();
 
     // モックファイルツリーを注入
     await injectMockFileTree(page);

@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 test.describe("Link navigation UI semantics", () => {
   test("exposes keyboard-selectable wiki-link suggestions and a confirmed create dialog", async ({ page }) => {
     await page.goto("/");
-    await page.waitForLoadState("networkidle");
+    await page.locator("html[data-app-ready='true']").waitFor();
 
     const suggestions = page.locator("#link-suggestions");
     await expect(suggestions).toHaveAttribute("role", "listbox");

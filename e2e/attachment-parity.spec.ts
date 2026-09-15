@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 test.describe("Attachment drop and destination settings", () => {
   test("exposes the native Markdown drop target and every configured destination", async ({ page }) => {
     await page.goto("/");
-    await page.waitForLoadState("networkidle");
+    await page.locator("html[data-app-ready='true']").waitFor();
 
     await expect(page.locator("#editor")).toHaveAttribute("data-file-drop-target", "");
     await expect(page.locator("#editor")).toHaveAttribute("data-drop-kind", "markdown-editor");
