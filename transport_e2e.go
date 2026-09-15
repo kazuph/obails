@@ -33,6 +33,10 @@ func (t *browserTestTransport) ServeAssets(handler http.Handler) error {
 		return err
 	}
 	t.server = &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/wails/runtime" && (r.Method != http.MethodPost || r.Header.Get("Origin") != "http://"+r.Host) {
+			http.Error(w, "E2E bindings require a same-origin POST", http.StatusForbidden)
+			return
+		}
 		if r.Host != listener.Addr().String() || (r.Header.Get("Origin") != "" && r.Header.Get("Origin") != "http://"+r.Host) {
 			http.Error(w, "E2E server accepts same-origin loopback requests only", http.StatusForbidden)
 			return

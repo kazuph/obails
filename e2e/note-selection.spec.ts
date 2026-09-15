@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { readFile } from "node:fs/promises";
 
 test("select all stays inside the active note and preserves input selection", async ({ page }, testInfo) => {
   await page.goto("/");
@@ -32,4 +33,13 @@ test("real backend rejects requests from a different origin or host", async ({ r
   expect(foreignOrigin.status()).toBe(403);
   const foreignHost = await request.get("/", { headers: { Host: "example.com" } });
   expect(foreignHost.status()).toBe(403);
+  const fixture = new URL("./fixtures/test-vault/Welcome.md", import.meta.url);
+  const before = await readFile(fixture, "utf8");
+  // Wails Call object and CallBinding method are both 0 in the installed runtime.
+  const args = JSON.stringify({ "call-id": "foreign-write", methodID: 1639997475, args: ["Welcome.md", "unexpected write"] });
+  const missingOriginGet = await request.get("/wails/runtime", { params: { object: "0", method: "0", args } });
+  expect(missingOriginGet.status()).toBe(403);
+  const missingOriginPost = await request.post("/wails/runtime", { data: { object: 0, method: 0, args: JSON.parse(args) } });
+  expect(missingOriginPost.status()).toBe(403);
+  expect(await readFile(fixture, "utf8")).toBe(before);
 });
