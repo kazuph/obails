@@ -181,6 +181,16 @@ Switch themes from the dropdown in the toolbar. Your selection is saved automati
 
 ## Development
 
+Run `pnpm install` at the repository root to install dependencies and enable the
+tracked Git pre-push hook. Pushing requires a Mac with Apple Speech support,
+Xcode/Swift, Go, Python 3, and the Japanese Kyoko voice. The hook builds the speech
+helper and runs the real Japanese transcription test against a temporary copy of
+each pushed commit; a failed, missing, or skipped test blocks the push.
+It does not play audio through the speakers. GitHub's hosted Mac reports Apple
+Speech unavailable, so release CI excludes only this test and runs all other
+checks before signing, notarizing, and publishing. Git hooks are a local
+contributor requirement, not server-enforced proof for GitHub web edits.
+
 ```bash
 # Run in development mode (hot reload)
 wails3 dev

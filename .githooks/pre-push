@@ -1,0 +1,14 @@
+#!/bin/bash
+set -euo pipefail
+
+while read -r local_ref local_oid remote_ref remote_oid; do
+  [[ "$local_oid" =~ ^0+$ ]] && continue
+  commit="$(git rev-parse "$local_oid^{commit}")"
+  snapshot="$(mktemp -d "${TMPDIR:-/tmp}/obails-pre-push.XXXXXX")"
+  trap 'rm -rf "$snapshot"' EXIT
+  git archive "$commit" | tar -x -C "$snapshot"
+  echo "Checking real Japanese transcription before pushing $local_ref ($commit)"
+  python3 "$snapshot/scripts/check-local-speech.py" "$snapshot"
+  rm -rf "$snapshot"
+  trap - EXIT
+done

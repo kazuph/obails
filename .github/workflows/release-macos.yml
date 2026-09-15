@@ -73,7 +73,8 @@ jobs:
         env:
           PLAYWRIGHT_HTML_OPEN: never
         run: |
-          go test ./... -v
+          # Apple Speech is unavailable on this hosted runner; pre-push tests it on a Mac.
+          go test ./... -v -skip '^TestTranscribeService_Transcribe_RealPipeline$'
           go test -tags cli ./cmd/cli/... -v
           pnpm --dir frontend test
           pnpm exec playwright test --retries=0
