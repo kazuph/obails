@@ -26,6 +26,7 @@ test("select all stays inside the active note and preserves input selection", as
   await pane.getByRole("button", { name: "Split pane right" }).click();
   await expect(page.locator(".workspace-pane-slot")).toHaveCount(2);
   await page.locator('.file-item[data-path="Welcome.md"]').click();
+  await expect(pane.locator(".preview-content")).toContainText("Welcome to Obails");
   const restoredPaneId = await pane.getAttribute("data-pane-id");
   await page.reload();
   await page.locator("html[data-app-ready='true']").waitFor();
