@@ -219,7 +219,7 @@ function isModKey(e: KeyboardEvent): boolean {
 // State
 let currentNote: Note | null = null;
 let activePaneId = "main";
-const pendingPaneActivations = new Map<string, Promise<void>>();
+let pendingPaneActivation: { paneId: string; completion: Promise<void> } | null = null;
 const documentRuntimeFactory = new DocumentRuntimeFactory(saveCapturedIntent);
 let primaryDocumentRuntime = documentRuntimeFactory.forPane(activePaneId);
 let documentHistory: DocumentHistory = primaryDocumentRuntime.history;
@@ -1120,18 +1120,18 @@ function renderWorkspacePaneTabs(snapshot: WorkspaceStateSnapshot, visiblePaneCo
 async function activateWorkspacePaneFromUi(paneId: string) {
     if (popoutRoute && paneId !== popoutRoute.paneId) return;
     document.documentElement.dataset.activePaneId = paneId;
-    if (paneId === activePaneId) return;
-    const pending = pendingPaneActivations.get(paneId);
-    if (pending) return pending;
-    const activation = (async () => {
+    if (pendingPaneActivation?.paneId === paneId) return pendingPaneActivation.completion;
+    if (!pendingPaneActivation && paneId === activePaneId) return;
+    const completion = (async () => {
         const snapshot = await workspaceController.activatePane(paneId);
         if (snapshot) await openActiveWorkspaceTab(snapshot);
     })();
-    pendingPaneActivations.set(paneId, activation);
+    const activation = { paneId, completion };
+    pendingPaneActivation = activation;
     try {
-        await activation;
+        await completion;
     } finally {
-        pendingPaneActivations.delete(paneId);
+        if (pendingPaneActivation === activation) pendingPaneActivation = null;
     }
 }
 
@@ -2344,12 +2344,12 @@ function setupEventListeners() {
             toggleShortcutsHelp();
             return;
         }
-        const requestedPaneId = document.documentElement.dataset.activePaneId || activePaneId;
+        const requestedPaneId = pendingPaneActivation?.paneId || activePaneId;
         if (isModKey(e) && documentRuntimeFactory.forPane(requestedPaneId).activeEditableDocument?.kind === "markdown") {
             const notePreview = richSurfaceForPane(requestedPaneId)?.preview || preview;
             if (selectNoteText(e, notePreview)) {
-                const activation = pendingPaneActivations.get(requestedPaneId);
-                if (activation) void activation.then(() => {
+                const activation = pendingPaneActivation;
+                if (activation) void activation.completion.then(() => {
                     if (activePaneId === requestedPaneId) selectNoteContents(activeRichSurface()?.preview || preview);
                 }).catch(console.error);
                 return;
