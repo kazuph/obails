@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { selectNoteText } from "../../lib/note-selection";
+import { selectNoteContents, selectNoteText } from "../../lib/note-selection";
 
 afterEach(() => {
   document.body.replaceWith(document.createElement("body"));
@@ -7,6 +7,15 @@ afterEach(() => {
 });
 
 describe("note selection", () => {
+  it("selects the replacement note DOM after a pane render", () => {
+    const preview = document.createElement("article");
+    document.body.append(preview);
+    preview.textContent = "Before render";
+    selectNoteContents(preview);
+    preview.replaceChildren(document.createTextNode("After render"));
+    selectNoteContents(preview);
+    expect(document.getSelection()?.toString()).toBe("After render");
+  });
   function setup(target: HTMLElement = document.body) {
     const sidebar = document.createElement("aside");
     sidebar.textContent = "Other UI";

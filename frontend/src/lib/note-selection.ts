@@ -5,9 +5,15 @@ export function selectNoteText(event: KeyboardEvent, preview: HTMLElement): bool
   const selection = preview.ownerDocument.getSelection();
   if (!selection) return false;
   event.preventDefault();
+  selectNoteContents(preview);
+  return true;
+}
+
+export function selectNoteContents(preview: HTMLElement): void {
+  const selection = preview.ownerDocument.getSelection();
+  if (!selection) return;
   const range = preview.ownerDocument.createRange();
   range.selectNodeContents(preview);
   selection.removeAllRanges();
   selection.addRange(range);
-  return true;
 }
