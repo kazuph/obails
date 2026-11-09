@@ -23,7 +23,9 @@ test('HTML preview executes scripts while isolating the parent application', asy
     </script></body></html>`);
   const frame = page.frameLocator('#html-preview');
   await expect(page.locator('#html-preview')).toHaveAttribute('sandbox', 'allow-scripts');
-  await frame.locator('#button').click();
+  // With the Chrome channel used on CI, Playwright's pointer click does not reach this sandboxed frame.
+  // Fire the click inside the frame so the test still checks the page's own event handler.
+  await frame.locator('#button').dispatchEvent('click');
   await expect(frame.locator('#result')).toHaveText('{"parentBlocked":true,"topBlocked":true,"runtimeBlocked":true,"serviceBlocked":true,"pixel":255}');
 });
 
