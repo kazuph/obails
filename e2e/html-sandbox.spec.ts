@@ -3,6 +3,7 @@ import { test, expect } from '@playwright/test';
 test('HTML preview executes scripts while isolating the parent application', async ({ page }) => {
   await page.goto('/');
   await page.locator('#html-editor-container').evaluate((element) => { (element as HTMLElement).style.display = 'flex'; });
+  await page.locator('#html-editor-container').evaluate((element) => element.classList.remove('source-hidden'));
   await page.locator('#html-editor').fill(`<!doctype html><html><body>
     <button id="button">click</button><canvas id="canvas" width="10" height="10"></canvas>
     <div id="result"></div><script>
@@ -29,6 +30,7 @@ test('HTML preview executes scripts while isolating the parent application', asy
 test('HTML preview scrolls to both edges of oversized content', async ({ page }) => {
   await page.goto('/');
   await page.locator('#html-editor-container').evaluate((element) => { (element as HTMLElement).style.display = 'flex'; });
+  await page.locator('#html-editor-container').evaluate((element) => element.classList.remove('source-hidden'));
   await page.locator('#html-editor').fill('<!doctype html><html><body style="margin:0"><div style="width:4000px;height:4000px"></div></body></html>');
   const body = page.frameLocator('#html-preview').locator('body');
   await expect.poll(() => body.evaluate(() => document.documentElement.scrollWidth)).toBe(4000);

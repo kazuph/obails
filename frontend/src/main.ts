@@ -18,6 +18,7 @@ import "katex/dist/katex.min.css";
 import ForceGraph from "force-graph";
 import { clampEditorViewState } from "./lib/editor-view-state";
 import { selectNoteContents, selectNoteText } from "./lib/note-selection";
+import { mediaUrl } from "./lib/media-url";
 import {
   DEFAULT_DELETE_MODE,
   describeDeleteMode,
@@ -758,7 +759,9 @@ async function openRichSurfaceFile(path: string, resolvedType: string, paneId = 
     if (resolvedType === "audio") {
         runtime.setNonEditablePath(path);
         if (!canPublishRichBinary(surface, runtime, generation)) return;
-        surface.audioPlayer.src = `/media/audio?path=${encodeURIComponent(path)}`;
+        const url = mediaUrl(path, mediaToken);
+        if (!url) return;
+        surface.audioPlayer.src = url;
         surface.audioTitle.textContent = path.split("/").pop() || "Audio";
         surface.audioViewer.style.display = "flex";
         if (canPublishShared()) {
@@ -1796,7 +1799,14 @@ function closeTopOverlay() {
 }
 
 // Initialize
+let mediaToken = "";
+
 async function init() {
+    try {
+        mediaToken = await FileService.MediaToken();
+    } catch (error) {
+        console.error("Could not obtain media token:", error);
+    }
     try {
         await StateService.Load();
         popoutRoute = getPopoutRoute();
@@ -2136,9 +2146,12 @@ function toggleSourceEditorForPane(paneId: string) {
     const container = editorContainerForPane(paneId);
     if (!container) return;
     const hidden = container.classList.toggle("source-hidden");
+    const surface = paneId === legacySurfacePaneId ? null : paneSurfaces.get(paneId);
+    const htmlContainer = surface?.htmlEditorContainer || (paneId === legacySurfacePaneId ? htmlEditorContainer : null);
+    htmlContainer?.classList.toggle("source-hidden", hidden);
     syncPaneSourceToggleButton(paneId);
     if (!hidden) {
-        editorElementForPane(paneId)?.focus();
+        (htmlContainer && htmlContainer.style.display !== "none" ? (surface?.htmlEditor || htmlEditor) : editorElementForPane(paneId))?.focus();
     }
 }
 
@@ -5277,10 +5290,12 @@ function syncAudioLoopButton() {
 
 async function openAudio(path: string): Promise<void> {
     try {
+        const url = mediaUrl(path, mediaToken);
+        if (!url) return;
         currentAudioPath = path;
         const fileName = path.split('/').pop() || 'Audio';
 
-        miniAudioPlayer.src = `/media/audio?path=${encodeURIComponent(path)}`;
+        miniAudioPlayer.src = url;
         miniPlayerTitle.textContent = fileName;
         miniPlayer.style.display = "flex";
         // 新しいソースを読み込むと playbackRate が 1 にリセットされるため、選択中の速度を再適用
@@ -7265,7 +7280,8 @@ function renderInlineAudioEmbed(link: Link): HTMLElement {
     audio.className = "preview-embed-audio";
     audio.controls = true;
     audio.preload = "metadata";
-    audio.src = `/media/audio?path=${encodeURIComponent(link.targetPath)}`;
+    const url = mediaUrl(link.targetPath, mediaToken);
+    if (url) audio.src = url;
     audio.addEventListener("error", () => {
         audio.replaceWith(createPreviewEmbedFailure("Audio embed could not be loaded."));
     }, { once: true });

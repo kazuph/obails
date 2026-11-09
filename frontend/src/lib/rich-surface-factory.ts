@@ -276,10 +276,11 @@ export function createRichSurface(documentRef: Document, paneId: string): RichSu
   pdfWrapper.append(pdfContainerA, pdfContainerB);
   pdfViewer.append(pdfHeader.root, pdfWrapper);
 
-  const htmlEditorContainer = element(documentRef, "section", "html-editor-container");
+  const htmlEditorContainer = element(documentRef, "section", "html-editor-container source-hidden");
   htmlEditorContainer.style.display = "none";
   const htmlEditorPane = element(documentRef, "div", "editor-pane");
   const htmlHeader = header(documentRef, "HTML");
+  htmlHeader.root.classList.add("editor-pane-header");
   const htmlSaveConflict = saveConflictControls(documentRef, "html-save-status");
   htmlHeader.controls.append(htmlSaveConflict.status);
   const htmlInputShell = element(documentRef, "div", "editor-input-shell");
@@ -293,7 +294,10 @@ export function createRichSurface(documentRef: Document, paneId: string): RichSu
   const htmlEditorResizeHandle = resizeHandle(documentRef, "vertical", "Resize HTML editor");
   const htmlPreviewPane = element(documentRef, "div", "preview-pane");
   const htmlPreviewHeader = header(documentRef, "Preview");
+  hideStandaloneWorkspaceNoteTitles(htmlHeader.title, htmlPreviewHeader.title);
+  htmlPreviewHeader.root.hidden = true;
   const htmlPreview = element(documentRef, "iframe");
+  htmlPreview.classList.add("preview-content");
   htmlPreview.title = "HTML Preview";
   htmlPreview.setAttribute("sandbox", "allow-scripts");
   htmlPreviewPane.append(htmlPreviewHeader.root, htmlPreview);

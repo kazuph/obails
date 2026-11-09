@@ -35,7 +35,7 @@ Examples:
 		var relativePath string
 		if file != "" || path != "" {
 			var err error
-			relativePath, err = resolveFilePath(file, path)
+			relativePath, err = resolveOpenFilePath(file, path)
 			if err != nil {
 				outputError(err)
 				return nil
@@ -81,6 +81,19 @@ Examples:
 
 		return nil
 	},
+}
+
+func resolveOpenFilePath(file, path string) (string, error) {
+	if path == "" {
+		return resolveFilePath(file, path)
+	}
+	if filepath.Ext(path) == "" {
+		path += ".md"
+	}
+	if !fileService.FileExists(path) {
+		return "", fmt.Errorf("file not found: %s", path)
+	}
+	return path, nil
 }
 
 func init() {

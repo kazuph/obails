@@ -1331,7 +1331,8 @@ body {
     display: none;
 }
 
-#editor-header {
+#editor-header,
+#html-editor-header {
     display: flex;
     align-items: center;
     gap: 6px;
@@ -1353,7 +1354,8 @@ body {
 /* The source title also lives in the tab strip. Keep this header only when a
    save conflict needs an inline recovery message. */
 #editor-header:not(:has(#save-status:not([hidden]))),
-.editor-pane-header:not(:has(.save-status:not([hidden]))) {
+#html-editor-header:not(:has(#html-save-status:not([hidden]))),
+.editor-pane-header:not(:has(.save-status:not([hidden]))):not(:has(.html-save-status:not([hidden]))) {
     position: relative;
     height: 0;
     padding: 0;
@@ -2580,7 +2582,9 @@ button.outline-item {
 
 /* Source editor toggle: デフォルトはプレビューのみ表示 */
 .editor-container.source-hidden .editor-pane,
-.editor-container.source-hidden .resize-handle.vertical {
+.editor-container.source-hidden .resize-handle.vertical,
+.html-editor-container.source-hidden .editor-pane,
+.html-editor-container.source-hidden .resize-handle.vertical {
     display: none;
 }
 
@@ -3755,8 +3759,8 @@ details.callout:not([open]) .callout-fold {
 .html-editor-container {
     flex: 1;
     display: flex;
-    gap: 1px;
-    background: var(--border);
+    min-width: 0;
+    min-height: 0;
     overflow: hidden;
 }
 
@@ -3764,7 +3768,6 @@ details.callout:not([open]) .callout-fold {
     flex: 1;
     display: flex;
     flex-direction: column;
-    background: var(--bg-secondary);
 }
 
 .html-editor-container .preview-pane {
@@ -3774,26 +3777,10 @@ details.callout:not([open]) .callout-fold {
     background: var(--bg-secondary);
 }
 
-#html-editor {
-    flex: 1;
-    padding: 1rem;
-    border: none;
-    resize: none;
-    background: var(--bg-primary);
-    color: var(--text-primary);
-    font-family: 'Fira Code', 'SF Mono', Consolas, monospace;
-    font-size: 0.9rem;
-    line-height: 1.5;
-}
-
-#html-editor:focus {
-    outline: none;
-}
-
-#html-preview {
+iframe.preview-content {
     flex: 1;
     border: none;
-    background: var(--bg-primary);
+    background: transparent;
 }
 
 /* ========== CONTEXT MENU / FORM ICONS ========== */

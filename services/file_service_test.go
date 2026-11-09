@@ -102,9 +102,31 @@ func TestFileService_ServeMedia(t *testing.T) {
 	if err := os.WriteFile(wavPath, content, 0644); err != nil {
 		t.Fatalf("setup wav: %v", err)
 	}
+	for _, token := range []string{"", "incorrect"} {
+		t.Run("rejects token "+token, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/media/audio?path=missing.wav&token="+token, nil)
+			rec := httptest.NewRecorder()
+			if !fs.ServeMedia(rec, req) || rec.Code != http.StatusForbidden {
+				t.Fatalf("status = %d, want 403", rec.Code)
+			}
+		})
+	}
+	for _, method := range []string{http.MethodGet, http.MethodHead} {
+		t.Run(method+" with token", func(t *testing.T) {
+			req := httptest.NewRequest(method, "/media/audio?path=podcast%2Fepisode.wav&token="+fs.MediaToken(), nil)
+			rec := httptest.NewRecorder()
+			fs.ServeMedia(rec, req)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d, want 200", rec.Code)
+			}
+			if method == http.MethodGet && rec.Body.String() != string(content) {
+				t.Fatalf("body = %q", rec.Body.String())
+			}
+		})
+	}
 
 	t.Run("serves audio with range support", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/media/audio?path=podcast%2Fepisode.wav", nil)
+		req := httptest.NewRequest(http.MethodGet, "/media/audio?path=podcast%2Fepisode.wav&token="+fs.MediaToken(), nil)
 		req.Header.Set("Range", "bytes=2-5")
 		rec := httptest.NewRecorder()
 
@@ -130,7 +152,7 @@ func TestFileService_ServeMedia(t *testing.T) {
 	})
 
 	t.Run("rejects non-audio paths", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/media/audio?path=note.md", nil)
+		req := httptest.NewRequest(http.MethodGet, "/media/audio?path=note.md&token="+fs.MediaToken(), nil)
 		rec := httptest.NewRecorder()
 
 		if handled := fs.ServeMedia(rec, req); !handled {

@@ -1,6 +1,59 @@
 import { expect, test } from "@playwright/test";
 import { readFile, writeFile, rm } from "node:fs/promises";
 
+test("HTML and Markdown share editor chrome and source toggle", async ({ page }) => {
+  const fixture = new URL("./fixtures/test-vault/Tone Test.html", import.meta.url);
+  await writeFile(fixture, "<!doctype html><p>HTML tone test</p>", "utf8");
+  try {
+    await page.goto("/");
+    await page.locator("html[data-app-ready='true']").waitFor();
+    const pane = page.locator('.workspace-pane-slot[data-active="true"]').first();
+    const toggle = pane.getByRole("button", { name: "Toggle Source" });
+    await page.locator('.file-item[data-path="Welcome.md"]').click();
+    await pane.hover();
+    if (await toggle.getAttribute("aria-pressed") === "false") await toggle.click();
+    const markdownEditor = pane.locator('.editor-container textarea');
+    const markdownPreview = pane.locator('.editor-container .preview-content');
+    await expect(markdownEditor).toBeVisible();
+    const styles = (selector: string) => pane.locator(selector).evaluate((el) => {
+      const s = getComputedStyle(el);
+      return { fontFamily: s.fontFamily, fontSize: s.fontSize, padding: s.padding, backgroundColor: s.backgroundColor };
+    });
+    const mdEditorStyle = await styles('.editor-container textarea');
+    const mdPreviewStyle = await styles('.editor-container .preview-content');
+    await expect(pane.locator('.editor-container .pane-header').first()).toHaveCSS('height', '0px');
+    await expect(pane.locator('.editor-container .preview-pane .pane-header')).toBeHidden();
+    await page.locator('.file-item[data-path="Tone Test.html"]').click();
+    const htmlEditor = pane.locator('.html-editor-container textarea');
+    const htmlPreview = pane.locator('.html-editor-container iframe');
+    await expect(htmlEditor).toBeVisible();
+    await expect(htmlPreview).toBeVisible();
+    expect(await styles('.html-editor-container textarea')).toEqual(mdEditorStyle);
+    expect(await styles('.html-editor-container iframe')).toEqual(mdPreviewStyle);
+    await expect(pane.locator('.html-editor-container .pane-header').first()).toHaveCSS('height', '0px');
+    await expect(pane.locator('.html-editor-container .preview-pane .pane-header')).toBeHidden();
+    await pane.hover();
+    await toggle.click();
+    await expect(htmlEditor).toBeHidden();
+    await expect(htmlPreview).toBeVisible();
+    await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    await pane.hover();
+    await toggle.click();
+    await expect(htmlEditor).toBeVisible();
+    await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    await htmlEditor.fill('<!doctype html><p>Local change</p>');
+    await writeFile(fixture, '<!doctype html><p>External change</p>', 'utf8');
+    const status = pane.locator('#html-save-status, .html-save-status');
+    await expect(status).toBeVisible();
+    await expect(status).toContainText('ディスク上の内容が変更されています');
+    await expect(pane.locator('.html-editor-container .pane-header').first()).toBeVisible();
+    await expect(htmlEditor).toHaveValue(/Local change/);
+    expect(await readFile(fixture, 'utf8')).toContain('External change');
+  } finally {
+    await rm(fixture, { force: true });
+  }
+});
+
 test("select all stays inside the active note and preserves input selection", async ({ page }, testInfo) => {
   await page.goto("/");
   const selectAll = await page.evaluate(() => navigator.platform.toUpperCase().includes("MAC") ? "Meta+a" : "Control+a");

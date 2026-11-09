@@ -1,8 +1,11 @@
 package services
 
 import (
+	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -53,6 +56,7 @@ func GetFileType(filename string) string {
 // FileService handles file system operations
 type FileService struct {
 	configService    *ConfigService
+	mediaToken       string
 	writeMu          sync.Mutex
 	afterDeleteStage func()
 }
@@ -65,10 +69,17 @@ type deleteTargetStage struct {
 
 // NewFileService creates a new FileService
 func NewFileService(configService *ConfigService) *FileService {
+	var token [32]byte
+	if _, err := rand.Read(token[:]); err != nil {
+		panic(fmt.Errorf("generate media token: %w", err))
+	}
 	return &FileService{
 		configService: configService,
+		mediaToken:    hex.EncodeToString(token[:]),
 	}
 }
+
+func (s *FileService) MediaToken() string { return s.mediaToken }
 
 // ReadFile reads the content of a file
 func (s *FileService) ReadFile(relativePath string) (string, error) {
@@ -899,6 +910,10 @@ func (s *FileService) ReadBinaryFile(relativePath string) (string, error) {
 func (s *FileService) ServeMedia(w http.ResponseWriter, r *http.Request) bool {
 	if r.URL.Path != "/media/audio" {
 		return false
+	}
+	if s.mediaToken == "" || subtle.ConstantTimeCompare([]byte(r.URL.Query().Get("token")), []byte(s.mediaToken)) != 1 {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return true
 	}
 
 	relativePath := r.URL.Query().Get("path")

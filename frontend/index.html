@@ -163,10 +163,10 @@
             </div>
 
             <!-- HTML Editor -->
-            <div class="html-editor-container" id="html-editor-container" style="display: none;">
+            <div class="html-editor-container source-hidden" id="html-editor-container" style="display: none;">
                 <div class="editor-pane" id="html-editor-pane">
-                    <div class="pane-header">
-                        <span class="pane-title" id="html-editor-title">HTML</span>
+                    <div class="pane-header" id="html-editor-header">
+                        <span class="pane-title standalone-note-title" id="html-editor-title" hidden>HTML</span>
                         <span id="html-save-status" role="status" hidden>
                             <span id="html-save-status-message"></span>
                             <button id="html-save-status-retry" type="button" hidden>Retry save</button>
@@ -181,10 +181,10 @@
                 </div>
                 <div class="resize-handle vertical" id="html-editor-resize"></div>
                 <div class="preview-pane" id="html-preview-pane">
-                    <div class="pane-header">
+                    <div class="pane-header" hidden>
                         <span class="pane-title">Preview</span>
                     </div>
-                    <iframe id="html-preview" sandbox="allow-scripts" title="HTML Preview"></iframe>
+                    <iframe id="html-preview" class="preview-content" sandbox="allow-scripts" title="HTML Preview"></iframe>
                 </div>
             </div>
         </div>

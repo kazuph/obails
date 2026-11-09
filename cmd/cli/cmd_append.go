@@ -4,7 +4,6 @@ package main
 
 import (
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -123,8 +122,8 @@ func resolveFilePath(file, path string) (string, error) {
 	}
 
 	if path != "" {
-		// Direct path - add .md only when no extension was supplied.
-		if filepath.Ext(path) == "" {
+		// Write and note commands resolve paths as Markdown notes.
+		if !strings.HasSuffix(path, ".md") {
 			path = path + ".md"
 		}
 		if !fileService.FileExists(path) {
