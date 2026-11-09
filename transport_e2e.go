@@ -1,4 +1,4 @@
-//go:build e2e
+//go:build e2e && !production
 
 package main
 
@@ -17,6 +17,10 @@ import (
 type browserTestTransport struct {
 	*application.HTTPTransport
 	server *http.Server
+}
+
+func runtimeAllowedOrigins() []string {
+	return []string{"wails://localhost", "wails://localhost:9245", "http://127.0.0.1:" + os.Getenv("OBAILS_E2E_PORT")}
 }
 
 func applicationTransport() application.Transport {

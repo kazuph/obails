@@ -2838,11 +2838,8 @@ test.describe('HTML Preview', () => {
     const iframe = page.frameLocator('#html-preview');
     await expect(iframe.locator('pre code')).toBeVisible();
 
-    const lowContrastTokens = await page.locator('#html-preview').evaluate((iframeElement) => {
-      const doc = (iframeElement as HTMLIFrameElement).contentDocument;
-      if (!doc) {
-        throw new Error('HTML preview document is not available');
-      }
+    const lowContrastTokens = await iframe.locator('body').evaluate(() => {
+      const doc = document;
 
       function parseRgb(color: string): [number, number, number] {
         const match = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);

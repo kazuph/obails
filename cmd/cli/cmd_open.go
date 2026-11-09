@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -30,9 +32,10 @@ Examples:
 		file, _ := cmd.Flags().GetString("file")
 		path, _ := cmd.Flags().GetString("path")
 
-		// If file or path specified, update state
+		var relativePath string
 		if file != "" || path != "" {
-			relativePath, err := resolveFilePath(file, path)
+			var err error
+			relativePath, err = resolveFilePath(file, path)
 			if err != nil {
 				outputError(err)
 				return nil
@@ -46,14 +49,24 @@ Examples:
 		if _, err := os.Stat(appPath); err == nil {
 			openArgs = []string{"-a", appPath}
 		}
+		if strings.EqualFold(os.Getenv("OBAILS_USE_DEV_CONFIG"), "true") {
+			if executable, err := os.Executable(); err == nil {
+				devApp := filepath.Join(filepath.Dir(executable), "obails.dev.app")
+				if _, err := os.Stat(devApp); err == nil {
+					openArgs = []string{"-a", devApp}
+				}
+			}
+		}
+		if relativePath != "" {
+			openArgs = append(openArgs, filepath.Join(configService.GetVaultPath(), relativePath))
+		}
 
-		if err := exec.Command("open", openArgs...).Start(); err != nil {
+		if err := exec.Command("open", openArgs...).Run(); err != nil {
 			outputError(fmt.Errorf("failed to launch obails app: %w", err))
 			return nil
 		}
 
 		if file != "" || path != "" {
-			relativePath, _ := resolveFilePath(file, path)
 			result := map[string]any{
 				"opened": true,
 				"path":   relativePath,

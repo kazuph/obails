@@ -295,7 +295,7 @@ export function createRichSurface(documentRef: Document, paneId: string): RichSu
   const htmlPreviewHeader = header(documentRef, "Preview");
   const htmlPreview = element(documentRef, "iframe");
   htmlPreview.title = "HTML Preview";
-  htmlPreview.setAttribute("sandbox", "allow-same-origin");
+  htmlPreview.setAttribute("sandbox", "allow-scripts");
   htmlPreviewPane.append(htmlPreviewHeader.root, htmlPreview);
   htmlEditorContainer.append(htmlEditorPane, htmlEditorResizeHandle, htmlPreviewPane);
 

@@ -4912,6 +4912,10 @@ function setupThemeMenu() {
     Events.On("obails:new-note", () => {
         showNewNoteForm();
     });
+    Events.On("obails:open-file", (event) => {
+        const data = event.data as { path: string; fileType: string };
+        void openFile(data.path, data.fileType);
+    });
     window.addEventListener("obails:new-note", () => {
         showNewNoteForm();
     });
@@ -6129,20 +6133,10 @@ function updateHtmlPreview() {
         return;
     }
     syncLineNumberGutters();
-    const content = htmlEditor.value;
-    const doc = htmlPreview.contentDocument || htmlPreview.contentWindow?.document;
-    if (doc) {
-        doc.open();
-        doc.write(content);
-        doc.close();
-        injectHtmlPreviewReadabilityStyles(doc);
-    }
+    htmlPreview.srcdoc = htmlEditor.value + htmlPreviewReadabilityStyles;
 }
 
-function injectHtmlPreviewReadabilityStyles(doc: Document) {
-    const style = doc.createElement("style");
-    style.id = "obails-html-preview-readability";
-    style.textContent = `
+const htmlPreviewReadabilityStyles = `<style id="obails-html-preview-readability">
 pre code,
 pre code span,
 pre code .line {
@@ -6198,11 +6192,7 @@ pre code .token.boolean,
 pre code .token.constant {
     color: #1d4ed8 !important;
 }
-`;
-
-    const head = doc.head || doc.documentElement;
-    head.appendChild(style);
-}
+</style>`;
 
 const EDITOR_SAVE_DELAY_MS = 500;
 let saveScheduler = primaryDocumentRuntime.saveScheduler;

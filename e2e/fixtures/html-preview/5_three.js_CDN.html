@@ -1,0 +1,12 @@
+<!doctype html><meta charset=utf-8><title>three</title>
+<body style="margin:0;font:20px sans-serif">
+<p id=r style="position:absolute;margin:16px;color:#c00">✖ three.js は読み込まれていない</p>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const r=document.getElementById('r');
+if(window.THREE){r.textContent='✔ three.js r'+THREE.REVISION+' を CDN から読めた';r.style.color='#080';
+const s=new THREE.Scene(),c=new THREE.PerspectiveCamera(70,innerWidth/innerHeight,.1,10);c.position.z=2;
+const g=new THREE.WebGLRenderer({antialias:true});g.setSize(innerWidth,innerHeight);document.body.appendChild(g.domElement);
+const m=new THREE.Mesh(new THREE.BoxGeometry(),new THREE.MeshNormalMaterial());s.add(m);
+(function a(){m.rotation.x+=.01;m.rotation.y+=.02;g.render(s,c);requestAnimationFrame(a)})();}
+</script></body>

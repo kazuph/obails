@@ -2,8 +2,11 @@ package main
 
 import (
 	"embed"
+	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 
@@ -15,7 +18,7 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
-const applicationVersion = "1.1.4"
+const applicationVersion = "1.1.5"
 
 // applicationMenuMainThreadFixMarker stays reachable so production binaries
 // contain a strings-searchable proof of the v1.0.1 setMainMenu thread fix.
@@ -212,6 +215,29 @@ func emitApplicationEvent(app *application.App, name string, data any) {
 	app.Event.Emit(name, data)
 }
 
+func vaultRelativeOpenedFile(vault, filename string) (string, error) {
+	if vault == "" || !filepath.IsAbs(filename) {
+		return "", fmt.Errorf("invalid vault or file path %q", filename)
+	}
+	root, err := filepath.EvalSymlinks(vault)
+	if err != nil {
+		return "", err
+	}
+	resolved, err := filepath.EvalSymlinks(filename)
+	if err != nil {
+		return "", err
+	}
+	relative, err := filepath.Rel(root, resolved)
+	if err != nil || relative == "." || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("file outside vault: %q", filename)
+	}
+	info, err := os.Stat(resolved)
+	if err != nil || !info.Mode().IsRegular() {
+		return "", fmt.Errorf("not a regular file: %q", filename)
+	}
+	return filepath.ToSlash(relative), nil
+}
+
 func main() {
 	// Initialize services
 	configService := services.NewConfigService()
@@ -268,6 +294,10 @@ func main() {
 			Handler: application.AssetFileServerFS(assets),
 			Middleware: func(next http.Handler) http.Handler {
 				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					if strings.HasPrefix(r.URL.Path, "/wails/") && !runtimeRequestAllowed(r) {
+						http.Error(w, "forbidden", http.StatusForbidden)
+						return
+					}
 					if fileService.ServeMedia(w, r) {
 						return
 					}
@@ -334,6 +364,14 @@ func main() {
 		// Wails otherwise waits for WebViewDidFinishNavigation before showing the
 		// first window; a failed navigation must not leave a windowless app process.
 		mainWindow.Show().Focus()
+	})
+	app.Event.OnApplicationEvent(events.Common.ApplicationOpenedWithFile, func(event *application.ApplicationEvent) {
+		path, err := vaultRelativeOpenedFile(configService.GetVaultPath(), event.Context().Filename())
+		if err != nil {
+			log.Printf("Ignoring opened file: %v", err)
+			return
+		}
+		app.Event.Emit("obails:open-file", map[string]string{"path": path, "fileType": services.GetFileType(path)})
 	})
 
 	mainWindow.OnWindowEvent(events.Common.WindowFilesDropped, func(event *application.WindowEvent) {
