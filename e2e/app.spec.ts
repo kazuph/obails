@@ -370,7 +370,7 @@ test.describe('Obails App', () => {
 
     await expect(page.locator('#mini-player')).toBeVisible();
     await expect(page.locator('#mini-player-title')).toHaveText('test-tone.wav');
-    await expect(page.locator('#mini-audio-player')).toHaveAttribute('src', /\/media\/audio\?path=audio%2Ftest-tone\.wav$/);
+    await expect(page.locator('#mini-audio-player')).toHaveAttribute('src', '/media/audio?path=audio%2Ftest-tone.wav&token=browser-e2e-media-token');
 
     await expect(page.locator('.editor-container')).toBeVisible();
     await expect(page.locator('#editor-title')).toHaveText('Welcome');
@@ -520,7 +520,7 @@ test.describe('Obails App', () => {
     });
 
     await expect(page.locator('#mini-player-title')).toHaveText('test-tone.wav');
-    await expect(page.locator('#mini-audio-player')).toHaveAttribute('src', /\/media\/audio\?path=audio%2Ftest-tone\.wav$/);
+    await expect(page.locator('#mini-audio-player')).toHaveAttribute('src', '/media/audio?path=audio%2Ftest-tone.wav&token=browser-e2e-media-token');
 
     if (process.env.OBAILS_AUDIO_EVIDENCE_SCREENSHOT) {
       await page.screenshot({ path: process.env.OBAILS_AUDIO_EVIDENCE_SCREENSHOT, fullPage: true });
@@ -2812,6 +2812,7 @@ test.describe('HTML Preview', () => {
 
     await page.locator('#html-editor-container').evaluate((element) => {
       (element as HTMLElement).style.display = 'flex';
+      element.classList.remove('source-hidden');
     });
 
     const html = `<!doctype html>

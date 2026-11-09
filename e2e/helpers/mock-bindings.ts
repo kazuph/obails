@@ -422,6 +422,10 @@ export async function setupMockBindings(page: Page, options: MockBindingOptions 
 
     let value: any = null;
     switch (methodID) {
+      // FileService.MediaToken
+      case 4001480415:
+        value = 'browser-e2e-media-token';
+        break;
       // ImageClipboardService.SetCodePNG
       case 2281804645:
         codeCards.push({ code: String(args[0] || ''), language: String(args[1] || '') });
@@ -994,6 +998,8 @@ export async function setupMockBindings(page: Page, options: MockBindingOptions 
 
           // 各メソッドIDに対応するモックを返す
           switch (id) {
+            case 4001480415:
+              return createMockPromise('browser-e2e-media-token');
             // ConfigService.GetConfig
             case 1692681084:
               return createMockPromise({

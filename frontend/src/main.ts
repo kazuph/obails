@@ -932,6 +932,7 @@ const noteSearchClose = document.getElementById("note-search-close") as HTMLButt
 const timelinePanel = document.getElementById("timeline-panel")!;
 const editorContainer = document.querySelector(".editor-container") as HTMLElement;
 const timelineInput = document.getElementById("timeline-input") as HTMLTextAreaElement;
+const timelineSubmit = document.getElementById("timeline-submit") as HTMLButtonElement;
 const timelineTimeline = document.getElementById("timeline-list")!;
 const backlinksList = document.getElementById("backlinks-list")!;
 const outgoingLinksList = document.getElementById("outgoing-links-list")!;
@@ -2166,6 +2167,7 @@ async function splitWorkspacePaneFromUi(paneId: string, direction: "horizontal" 
 
 // Event Listeners
 function setupEventListeners() {
+    const legacyRoot: ParentNode = legacyRichSurfaceRoot ?? document;
     setupSettingsDialog();
     fileTreeRetry.addEventListener("click", () => void loadFileTree());
     document.getElementById("empty-vault-create")!.addEventListener("click", showNewNoteForm);
@@ -2200,7 +2202,7 @@ function setupEventListeners() {
     window.addEventListener("obails:graph-magnify", (event) => {
         handleGraphNativeMagnify({ data: (event as CustomEvent).detail });
     });
-    document.getElementById("timeline-submit")!.addEventListener("click", submitTimeline);
+    timelineSubmit.addEventListener("click", submitTimeline);
     miniPlayerClose.addEventListener("click", stopAudioPlayback);
     audioLoopBtn.addEventListener("click", toggleAudioLoopMode);
     syncAudioLoopButton();
@@ -2289,12 +2291,12 @@ function setupEventListeners() {
     htmlSaveStatusReload.addEventListener("click", () => void reloadExternalVersion());
 
     // PDF Viewer controls
-    document.getElementById("pdf-prev")!.addEventListener("click", pdfPrevPage);
-    document.getElementById("pdf-next")!.addEventListener("click", pdfNextPage);
-    document.getElementById("pdf-zoom-in")!.addEventListener("click", pdfZoomIn);
-    document.getElementById("pdf-zoom-out")!.addEventListener("click", pdfZoomOut);
-    document.getElementById("pdf-view-mode")!.addEventListener("click", togglePdfViewMode);
-    document.getElementById("pdf-fullscreen")!.addEventListener("click", openPdfFullscreen);
+    legacyRoot.querySelector("#pdf-prev")!.addEventListener("click", pdfPrevPage);
+    legacyRoot.querySelector("#pdf-next")!.addEventListener("click", pdfNextPage);
+    legacyRoot.querySelector("#pdf-zoom-in")!.addEventListener("click", pdfZoomIn);
+    legacyRoot.querySelector("#pdf-zoom-out")!.addEventListener("click", pdfZoomOut);
+    legacyRoot.querySelector("#pdf-view-mode")!.addEventListener("click", togglePdfViewMode);
+    legacyRoot.querySelector("#pdf-fullscreen")!.addEventListener("click", openPdfFullscreen);
 
     // PDF Fullscreen controls
     document.getElementById("pdf-fs-prev")!.addEventListener("click", pdfPrevPage);
@@ -2305,11 +2307,11 @@ function setupEventListeners() {
     document.getElementById("pdf-fs-close")!.addEventListener("click", closePdfFullscreen);
 
     // Image Viewer controls
-    document.getElementById("image-fullscreen")!.addEventListener("click", openImageFullscreen);
+    legacyRoot.querySelector("#image-fullscreen")!.addEventListener("click", openImageFullscreen);
     document.getElementById("image-fs-close")!.addEventListener("click", closeImageFullscreen);
 
     // Title editing (click to rename file)
-    const editorTitle = document.getElementById("editor-title")!;
+    const editorTitle = legacyRoot.querySelector<HTMLElement>("#editor-title")!;
     const renameCurrentNote = () => {
         if (primaryDocumentRuntime.currentFilePath) {
             showRenameForm(primaryDocumentRuntime.currentFilePath, false);
@@ -8455,8 +8457,9 @@ function setupResizeHandles() {
     const sidebar = document.getElementById("sidebar")!;
     const sidebarResize = document.getElementById("sidebar-resize")!;
     const rightSidebar = document.getElementById("right-sidebar")!;
-    const editorPane = document.getElementById("editor-pane")!;
-    const editorResize = document.getElementById("editor-resize")!;
+    const legacyRoot: ParentNode = legacyRichSurfaceRoot ?? document;
+    const editorPane = legacyRoot.querySelector<HTMLElement>("#editor-pane")!;
+    const editorResize = legacyRoot.querySelector<HTMLElement>("#editor-resize")!;
 
     // Sidebar resize
     let isResizingSidebar = false;
