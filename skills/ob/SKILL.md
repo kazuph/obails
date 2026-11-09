@@ -57,12 +57,14 @@ Both standard flags (`--file MyNote`) and Obsidian-compatible `key=value` syntax
 
 ### App Control
 
-#### `open` - Open a note in the Obails app
+#### `open` - Open a vault file in the Obails app
 ```bash
 ob open file=<name>              # Open app with specific note
-ob open path=<relative_path>     # Open app with specific path
+ob open path=<relative_path>     # Open an existing file, including HTML, PDF, or images
 ob open                          # Just launch the app
 ```
+
+An extensionless path gets `.md` appended. An explicit extension is kept. If Obails is already running, it switches to the requested file.
 
 ### Read Operations
 

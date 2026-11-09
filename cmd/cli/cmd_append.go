@@ -122,7 +122,7 @@ func resolveFilePath(file, path string) (string, error) {
 	}
 
 	if path != "" {
-		// Direct path - ensure .md extension
+		// Write and note commands resolve paths as Markdown notes.
 		if !strings.HasSuffix(path, ".md") {
 			path = path + ".md"
 		}

@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.1.4-blue" alt="Version">
+  <img src="https://img.shields.io/badge/version-1.1.5-blue" alt="Version">
   <img src="https://img.shields.io/badge/platform-macOS-blue" alt="Platform">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
   <img src="https://img.shields.io/badge/wails-v3.0.0--alpha.60-orange" alt="Wails">
@@ -226,7 +226,7 @@ The capture script used by the frontend contract tests is tracked at
 
 ## Changelog
 
-See [CHANGELOG.md](CHANGELOG.md) for the latest `v1.1.4` signed and notarized Homebrew distribution and earlier release notes.
+See [CHANGELOG.md](CHANGELOG.md) for the latest `v1.1.5` signed and notarized Homebrew distribution and earlier release notes.
 
 ## Roadmap
 

@@ -18,6 +18,7 @@ import "katex/dist/katex.min.css";
 import ForceGraph from "force-graph";
 import { clampEditorViewState } from "./lib/editor-view-state";
 import { selectNoteContents, selectNoteText } from "./lib/note-selection";
+import { mediaUrl } from "./lib/media-url";
 import {
   DEFAULT_DELETE_MODE,
   describeDeleteMode,
@@ -758,7 +759,9 @@ async function openRichSurfaceFile(path: string, resolvedType: string, paneId = 
     if (resolvedType === "audio") {
         runtime.setNonEditablePath(path);
         if (!canPublishRichBinary(surface, runtime, generation)) return;
-        surface.audioPlayer.src = `/media/audio?path=${encodeURIComponent(path)}`;
+        const url = mediaUrl(path, mediaToken);
+        if (!url) return;
+        surface.audioPlayer.src = url;
         surface.audioTitle.textContent = path.split("/").pop() || "Audio";
         surface.audioViewer.style.display = "flex";
         if (canPublishShared()) {
@@ -929,6 +932,7 @@ const noteSearchClose = document.getElementById("note-search-close") as HTMLButt
 const timelinePanel = document.getElementById("timeline-panel")!;
 const editorContainer = document.querySelector(".editor-container") as HTMLElement;
 const timelineInput = document.getElementById("timeline-input") as HTMLTextAreaElement;
+const timelineSubmit = document.getElementById("timeline-submit") as HTMLButtonElement;
 const timelineTimeline = document.getElementById("timeline-list")!;
 const backlinksList = document.getElementById("backlinks-list")!;
 const outgoingLinksList = document.getElementById("outgoing-links-list")!;
@@ -1796,7 +1800,14 @@ function closeTopOverlay() {
 }
 
 // Initialize
+let mediaToken = "";
+
 async function init() {
+    try {
+        mediaToken = await FileService.MediaToken();
+    } catch (error) {
+        console.error("Could not obtain media token:", error);
+    }
     try {
         await StateService.Load();
         popoutRoute = getPopoutRoute();
@@ -2136,9 +2147,12 @@ function toggleSourceEditorForPane(paneId: string) {
     const container = editorContainerForPane(paneId);
     if (!container) return;
     const hidden = container.classList.toggle("source-hidden");
+    const surface = paneId === legacySurfacePaneId ? null : paneSurfaces.get(paneId);
+    const htmlContainer = surface?.htmlEditorContainer || (paneId === legacySurfacePaneId ? htmlEditorContainer : null);
+    htmlContainer?.classList.toggle("source-hidden", hidden);
     syncPaneSourceToggleButton(paneId);
     if (!hidden) {
-        editorElementForPane(paneId)?.focus();
+        (htmlContainer && htmlContainer.style.display !== "none" ? (surface?.htmlEditor || htmlEditor) : editorElementForPane(paneId))?.focus();
     }
 }
 
@@ -2153,6 +2167,7 @@ async function splitWorkspacePaneFromUi(paneId: string, direction: "horizontal" 
 
 // Event Listeners
 function setupEventListeners() {
+    const legacyRoot: ParentNode = legacyRichSurfaceRoot ?? document;
     setupSettingsDialog();
     fileTreeRetry.addEventListener("click", () => void loadFileTree());
     document.getElementById("empty-vault-create")!.addEventListener("click", showNewNoteForm);
@@ -2187,7 +2202,7 @@ function setupEventListeners() {
     window.addEventListener("obails:graph-magnify", (event) => {
         handleGraphNativeMagnify({ data: (event as CustomEvent).detail });
     });
-    document.getElementById("timeline-submit")!.addEventListener("click", submitTimeline);
+    timelineSubmit.addEventListener("click", submitTimeline);
     miniPlayerClose.addEventListener("click", stopAudioPlayback);
     audioLoopBtn.addEventListener("click", toggleAudioLoopMode);
     syncAudioLoopButton();
@@ -2276,12 +2291,12 @@ function setupEventListeners() {
     htmlSaveStatusReload.addEventListener("click", () => void reloadExternalVersion());
 
     // PDF Viewer controls
-    document.getElementById("pdf-prev")!.addEventListener("click", pdfPrevPage);
-    document.getElementById("pdf-next")!.addEventListener("click", pdfNextPage);
-    document.getElementById("pdf-zoom-in")!.addEventListener("click", pdfZoomIn);
-    document.getElementById("pdf-zoom-out")!.addEventListener("click", pdfZoomOut);
-    document.getElementById("pdf-view-mode")!.addEventListener("click", togglePdfViewMode);
-    document.getElementById("pdf-fullscreen")!.addEventListener("click", openPdfFullscreen);
+    legacyRoot.querySelector("#pdf-prev")!.addEventListener("click", pdfPrevPage);
+    legacyRoot.querySelector("#pdf-next")!.addEventListener("click", pdfNextPage);
+    legacyRoot.querySelector("#pdf-zoom-in")!.addEventListener("click", pdfZoomIn);
+    legacyRoot.querySelector("#pdf-zoom-out")!.addEventListener("click", pdfZoomOut);
+    legacyRoot.querySelector("#pdf-view-mode")!.addEventListener("click", togglePdfViewMode);
+    legacyRoot.querySelector("#pdf-fullscreen")!.addEventListener("click", openPdfFullscreen);
 
     // PDF Fullscreen controls
     document.getElementById("pdf-fs-prev")!.addEventListener("click", pdfPrevPage);
@@ -2292,11 +2307,11 @@ function setupEventListeners() {
     document.getElementById("pdf-fs-close")!.addEventListener("click", closePdfFullscreen);
 
     // Image Viewer controls
-    document.getElementById("image-fullscreen")!.addEventListener("click", openImageFullscreen);
+    legacyRoot.querySelector("#image-fullscreen")!.addEventListener("click", openImageFullscreen);
     document.getElementById("image-fs-close")!.addEventListener("click", closeImageFullscreen);
 
     // Title editing (click to rename file)
-    const editorTitle = document.getElementById("editor-title")!;
+    const editorTitle = legacyRoot.querySelector<HTMLElement>("#editor-title")!;
     const renameCurrentNote = () => {
         if (primaryDocumentRuntime.currentFilePath) {
             showRenameForm(primaryDocumentRuntime.currentFilePath, false);
@@ -4912,6 +4927,10 @@ function setupThemeMenu() {
     Events.On("obails:new-note", () => {
         showNewNoteForm();
     });
+    Events.On("obails:open-file", (event) => {
+        const data = event.data as { path: string; fileType: string };
+        void openFile(data.path, data.fileType);
+    });
     window.addEventListener("obails:new-note", () => {
         showNewNoteForm();
     });
@@ -5273,10 +5292,12 @@ function syncAudioLoopButton() {
 
 async function openAudio(path: string): Promise<void> {
     try {
+        const url = mediaUrl(path, mediaToken);
+        if (!url) return;
         currentAudioPath = path;
         const fileName = path.split('/').pop() || 'Audio';
 
-        miniAudioPlayer.src = `/media/audio?path=${encodeURIComponent(path)}`;
+        miniAudioPlayer.src = url;
         miniPlayerTitle.textContent = fileName;
         miniPlayer.style.display = "flex";
         // 新しいソースを読み込むと playbackRate が 1 にリセットされるため、選択中の速度を再適用
@@ -6129,20 +6150,10 @@ function updateHtmlPreview() {
         return;
     }
     syncLineNumberGutters();
-    const content = htmlEditor.value;
-    const doc = htmlPreview.contentDocument || htmlPreview.contentWindow?.document;
-    if (doc) {
-        doc.open();
-        doc.write(content);
-        doc.close();
-        injectHtmlPreviewReadabilityStyles(doc);
-    }
+    htmlPreview.srcdoc = htmlEditor.value + htmlPreviewReadabilityStyles;
 }
 
-function injectHtmlPreviewReadabilityStyles(doc: Document) {
-    const style = doc.createElement("style");
-    style.id = "obails-html-preview-readability";
-    style.textContent = `
+const htmlPreviewReadabilityStyles = `<style id="obails-html-preview-readability">
 pre code,
 pre code span,
 pre code .line {
@@ -6198,11 +6209,7 @@ pre code .token.boolean,
 pre code .token.constant {
     color: #1d4ed8 !important;
 }
-`;
-
-    const head = doc.head || doc.documentElement;
-    head.appendChild(style);
-}
+</style>`;
 
 const EDITOR_SAVE_DELAY_MS = 500;
 let saveScheduler = primaryDocumentRuntime.saveScheduler;
@@ -7275,7 +7282,8 @@ function renderInlineAudioEmbed(link: Link): HTMLElement {
     audio.className = "preview-embed-audio";
     audio.controls = true;
     audio.preload = "metadata";
-    audio.src = `/media/audio?path=${encodeURIComponent(link.targetPath)}`;
+    const url = mediaUrl(link.targetPath, mediaToken);
+    if (url) audio.src = url;
     audio.addEventListener("error", () => {
         audio.replaceWith(createPreviewEmbedFailure("Audio embed could not be loaded."));
     }, { once: true });
@@ -8449,8 +8457,9 @@ function setupResizeHandles() {
     const sidebar = document.getElementById("sidebar")!;
     const sidebarResize = document.getElementById("sidebar-resize")!;
     const rightSidebar = document.getElementById("right-sidebar")!;
-    const editorPane = document.getElementById("editor-pane")!;
-    const editorResize = document.getElementById("editor-resize")!;
+    const legacyRoot: ParentNode = legacyRichSurfaceRoot ?? document;
+    const editorPane = legacyRoot.querySelector<HTMLElement>("#editor-pane")!;
+    const editorResize = legacyRoot.querySelector<HTMLElement>("#editor-resize")!;
 
     // Sidebar resize
     let isResizingSidebar = false;

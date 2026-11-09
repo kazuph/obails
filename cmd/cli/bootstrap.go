@@ -55,7 +55,7 @@ func initServices() error {
 // updateLastOpenedFile updates the vault state so the app opens this file on next launch.
 func updateLastOpenedFile(relativePath string) {
 	if stateService != nil {
-		_ = stateService.SetLastOpenedFile(relativePath, "markdown")
+		_ = stateService.SetLastOpenedFile(relativePath, services.GetFileType(relativePath))
 	}
 }
 

@@ -60,7 +60,10 @@ describe("createRichSurface", () => {
     expect(surface.noteSearchInput.classList.contains("note-search-input")).toBe(true);
     expect(surface.pdfPageInfo.classList.contains("pdf-page-info")).toBe(true);
     expect(surface.pdfZoomInfo.classList.contains("pdf-zoom-info")).toBe(true);
-    expect(surface.htmlPreview.getAttribute("sandbox")).toBe("allow-same-origin");
+    expect(surface.htmlPreview.getAttribute("sandbox")).toBe("allow-scripts");
+    expect(surface.htmlEditorContainer.classList.contains("source-hidden")).toBe(true);
+    expect(surface.htmlEditorTitle.hidden).toBe(true);
+    expect(surface.htmlPreview.closest(".preview-pane")?.querySelector(".pane-header")?.hasAttribute("hidden")).toBe(true);
     expect(surface.root.querySelectorAll('[role="separator"]')).toHaveLength(5);
 
     const controls = [...surface.root.querySelectorAll<HTMLButtonElement>('button[type="button"]')];

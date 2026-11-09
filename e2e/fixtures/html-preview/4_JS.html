@@ -1,0 +1,9 @@
+<!doctype html><meta charset=utf-8><title>JS</title>
+<body style="font:24px sans-serif;padding:16px">
+<p id=r style="color:#c00">✖ JS は動いていない</p>
+<p id=t></p>
+<script>
+document.getElementById('r').textContent='✔ JS が動いた';
+document.getElementById('r').style.color='#080';
+setInterval(()=>{document.getElementById('t').textContent='時計: '+new Date().toLocaleTimeString()},500);
+</script></body>
