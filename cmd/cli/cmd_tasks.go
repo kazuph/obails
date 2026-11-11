@@ -76,7 +76,10 @@ func resolveTaskFilePath(cmd *cobra.Command) (string, error) {
 	}
 	if fileName != "" {
 		// Resolve wiki-link style name to path
-		resolved, found := linkService.ResolveLink(fileName)
+		resolved, found, err := resolveNoteName(fileName)
+		if err != nil {
+			return "", err
+		}
 		if !found {
 			return "", fmt.Errorf("file not found: %s", fileName)
 		}

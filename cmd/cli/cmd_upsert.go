@@ -64,7 +64,11 @@ func runUpsert(cmd *cobra.Command, args []string) error {
 	}
 
 	// Try to resolve the file
-	resolvedPath, found := linkService.ResolveLink(file)
+	resolvedPath, found, resolveErr := resolveNoteName(file)
+	if resolveErr != nil {
+		outputError(resolveErr)
+		return nil
+	}
 
 	created := false
 	appended := false

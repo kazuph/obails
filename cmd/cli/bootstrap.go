@@ -59,6 +59,19 @@ func updateLastOpenedFile(relativePath string) {
 	}
 }
 
+// resolveNoteName resolves a wiki-link style note name (file=<name>) to a vault-relative path.
+// LinkService.ResolveLink answers only from a published index, and most commands start with
+// initServices(), which builds none. Build it here on first use, so path= lookups stay index-free.
+func resolveNoteName(name string) (string, bool, error) {
+	if !linkService.GetIndexState().Ready {
+		if err := linkService.RebuildIndex(); err != nil {
+			return "", false, fmt.Errorf("failed to build link index: %w", err)
+		}
+	}
+	resolved, found := linkService.ResolveLink(name)
+	return resolved, found, nil
+}
+
 // initServicesWithIndex initializes all services and rebuilds the link index.
 // This is required for commands that need backlink/graph data
 // (e.g., backlinks, links, orphans, deadends, unresolved).

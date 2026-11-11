@@ -133,7 +133,10 @@ func resolveFilePath(file, path string) (string, error) {
 	}
 
 	// Resolve via wiki-link
-	resolved, found := linkService.ResolveLink(file)
+	resolved, found, err := resolveNoteName(file)
+	if err != nil {
+		return "", err
+	}
 	if !found {
 		return "", fmt.Errorf("note not found: %s", file)
 	}
