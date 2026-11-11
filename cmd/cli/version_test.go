@@ -5,10 +5,10 @@ package main
 import "testing"
 
 func TestRootCommandVersion(t *testing.T) {
-	if version != "1.1.5" {
-		t.Fatalf("version = %q, want 1.1.5", version)
+	if version != "1.1.6" {
+		t.Fatalf("version = %q, want 1.1.6", version)
 	}
-	if rootCmd.Version != "1.1.5" {
-		t.Fatalf("rootCmd.Version = %q, want 1.1.5", rootCmd.Version)
+	if rootCmd.Version != "1.1.6" {
+		t.Fatalf("rootCmd.Version = %q, want 1.1.6", rootCmd.Version)
 	}
 }

@@ -168,8 +168,8 @@ func TestBuildApplicationMenuIncludesWorkspaceAndSelectedTheme(t *testing.T) {
 }
 
 func TestApplicationVersionIs110(t *testing.T) {
-	if applicationVersion != "1.1.5" {
-		t.Fatalf("applicationVersion = %q, want 1.1.5", applicationVersion)
+	if applicationVersion != "1.1.6" {
+		t.Fatalf("applicationVersion = %q, want 1.1.6", applicationVersion)
 	}
 	if applicationMenuMainThreadFixMarker != "obails-v1.0.1-setApplicationMenu-main-thread" {
 		t.Fatalf("crash-fix marker = %q", applicationMenuMainThreadFixMarker)

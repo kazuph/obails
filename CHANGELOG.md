@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.6 - 2026-11-11
+
+- `ob` の `file=<ノート名>` で、サブフォルダーのノートも名前で指定できるように修正。`read`・`append`・`prepend`・`outline`・`properties`・`open`・`move`・`delete`・`tasks`・`task` が `note not found` で失敗していた。
+- `ob upsert file=<ノート名>` が既存ノートを見つけられず、Vault の直下に同じ名前のノートを新しく作っていた問題を修正。
+
 ## 1.1.5 - 2026-11-09
 
 - HTML プレビューでスクリプトと埋め込みメディアを表示し、親アプリから隔離。
